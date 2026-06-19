@@ -26,6 +26,16 @@ import { requireSession, getSession } from "../lib/session";
 const router = Router();
 router.use(requireSession);
 
+function buildWorkDescription(workStream: string, noticeType: string): string {
+  if (noticeType === "retainage_claim") {
+    return `Retainage for fire-protection ${workStream} work`;
+  }
+  if (noticeType === "early_warning") {
+    return `Fire-protection ${workStream} services — courtesy notice`;
+  }
+  return `Labor and materials furnished for fire-protection ${workStream} work`;
+}
+
 // ---------------------------------------------------------------------------
 // POST /notices — create a draft notice
 // ---------------------------------------------------------------------------
@@ -113,6 +123,7 @@ router.post("/notices", async (req, res) => {
       noticeType: noticeType as "early_warning" | "statutory_claim" | "retainage_claim",
       status: "draft",
       claimAmount,
+      workDescription: buildWorkDescription(stream.workStream, noticeType),
       monthListed,
     })
     .returning();

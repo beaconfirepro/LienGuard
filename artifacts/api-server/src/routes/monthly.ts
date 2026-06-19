@@ -45,6 +45,16 @@ function fmtMonth(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function buildWorkDescription(workStream: string, noticeType: string): string {
+  if (noticeType === "retainage_claim") {
+    return `Retainage for fire-protection ${workStream} work`;
+  }
+  if (noticeType === "early_warning") {
+    return `Fire-protection ${workStream} services — courtesy notice`;
+  }
+  return `Labor and materials furnished for fire-protection ${workStream} work`;
+}
+
 // ---------------------------------------------------------------------------
 // POST /monthly/run
 // ---------------------------------------------------------------------------
@@ -192,6 +202,7 @@ router.post("/run", async (req, res) => {
       noticeType,
       status: "draft",
       claimAmount,
+      workDescription: buildWorkDescription(stream.workStream, noticeType),
       monthListed: wm.month,
     });
 
@@ -211,59 +222,55 @@ router.post("/run", async (req, res) => {
     created++;
   }
 
-  // 8. Flag supplier notice risks: supplier deadline before Beacon's notice deadline same month.
+  // 8. Flag supplier notice risks: for each at-risk work month, check supplier invoices
+  //    for the same project whose invoiceDate falls in the same work month. If the
+  //    supplier's dueDate ≤ Beacon's notice deadline for that work month, flag it.
   let supplierRisksFlagged = 0;
-  if (projectIds.length) {
-    const supplierInvoices = await db
+  for (const wm of workMonths) {
+    if (!atRiskWorkMonthIds.has(wm.id)) continue;
+    const stream = streamMap.get(wm.lienStreamId);
+    if (!stream) continue;
+
+    // Notice deadline for this specific work month.
+    const dl = deadlines.find((d) => d.workMonthId === wm.id);
+    if (!dl) continue;
+
+    // Work month date range for matching supplier invoice dates.
+    const wmStart = new Date(wm.month);
+    const wmEnd = new Date(wmStart.getFullYear(), wmStart.getMonth() + 1, 1);
+
+    const supplierInvsForMonth = await db
       .select()
       .from(invoiceLinksTable)
       .where(
         and(
           eq(invoiceLinksTable.orgId, orgId),
           eq(invoiceLinksTable.isSupplierInvoice, true),
-          inArray(invoiceLinksTable.lienProjectId, projectIds),
+          eq(invoiceLinksTable.lienProjectId, stream.lienProjectId),
+          gte(invoiceLinksTable.invoiceDate, wmStart),
+          lt(invoiceLinksTable.invoiceDate, wmEnd),
         ),
       );
 
-    for (const inv of supplierInvoices) {
-      if (!inv.lienProjectId) continue;
-      // Find the beacon deadline for the same project/month.
-      const beaconStream = streams.find((s) => s.lienProjectId === inv.lienProjectId);
-      if (!beaconStream) continue;
-
-      // Find the notice deadline for the stream in target month.
-      const dl = deadlines.find((d) => {
-        const wm = workMonths.find((w) => w.id === d.workMonthId);
-        return wm?.lienStreamId === beaconStream.id;
-      });
-      if (!dl) continue;
-
+    for (const inv of supplierInvsForMonth) {
       const supplierDue = new Date(inv.dueDate);
-      const beaconDue = dl.adjustedDate;
-
-      if (supplierDue <= beaconDue) {
-        // Check if risk already exists.
+      if (supplierDue <= dl.adjustedDate) {
         const [existing] = await db
           .select({ id: supplierNoticeRisksTable.id })
           .from(supplierNoticeRisksTable)
-          .where(
-            and(
-              eq(supplierNoticeRisksTable.orgId, orgId),
-              eq(supplierNoticeRisksTable.invoiceLinkId, inv.id),
-            ),
-          )
+          .where(and(eq(supplierNoticeRisksTable.orgId, orgId), eq(supplierNoticeRisksTable.invoiceLinkId, inv.id)))
           .limit(1);
 
         if (!existing) {
           await db.insert(supplierNoticeRisksTable).values({
             id: randomUUID(),
             orgId,
-            lienProjectId: inv.lienProjectId,
+            lienProjectId: stream.lienProjectId,
             invoiceLinkId: inv.id,
             status: "flagged",
             supplierDeadline: supplierDue,
-            beaconDeadline: beaconDue,
-            monthAffected: start,
+            beaconDeadline: dl.adjustedDate,
+            monthAffected: wmStart,
           });
           supplierRisksFlagged++;
         }
