@@ -99,7 +99,7 @@ const TITLES: [RegExp, string][] = [
   [/^\/settings$/, "Company Settings"],
   [/^\/liens$/, "Projects"],
   [/^\/send-queue$/, "Ready-to-Send Queue"],
-  [/^\/projects\//, "Project Lien Detail"],
+  [/^\/projects\//, "Project Workspace"],
   [/^\/waivers$/, "Waiver Workspace"],
   [/^\/filing$/, "Filings"],
   [/^\/filing\//, "Filing Workspace"],

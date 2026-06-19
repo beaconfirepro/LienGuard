@@ -1,8 +1,9 @@
 import * as React from "react";
-import { useParams, useLocation } from "wouter";
+import { useParams, useLocation, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Landmark, Clock, Phone, Mail, ChevronLeft, RefreshCw, Plus, Check, Trash2 } from "lucide-react";
 import { Panel, useRightPanel, useLeftPanel } from "@/components/nav/AppShell";
+import { WorkspaceHeader } from "@/components/nav/WorkspaceLayout";
 import { QueueList } from "@/components/ui/queue-list";
 import { AgingBuckets } from "@/components/ui/aging-buckets";
 import { ActivityTimeline } from "@/components/ui/activity-timeline";
@@ -293,43 +294,43 @@ export default function AccountDetailPage() {
       )}
 
       {/* Account header */}
-      <div
-        className="flex flex-wrap items-start justify-between gap-3 rounded-lg border p-5"
-        style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
-      >
-        <div>
-          <div className="text-[18px] font-bold tracking-tight" style={{ color: "var(--text-base)" }}>
-            {client?.cachedName ?? account.id}
-          </div>
-          <div className="mt-0.5 text-[12.5px]" style={{ color: "var(--text-dim)" }}>
-            {STAGE_LABELS[account.escalationStage] ?? account.escalationStage}
-            {account.riskScore != null && ` · risk ${account.riskScore}`}
-            {` · ${account.oldestOverdueDays}d oldest`}
-          </div>
-          {client?.cachedEmail && (
-            <div className="mt-1 flex items-center gap-1 text-[11.5px]" style={{ color: "var(--text-dim)" }}>
-              <Mail className="h-3 w-3" />{client.cachedEmail}
+      <WorkspaceHeader
+        title={client?.cachedName ?? account.id}
+        subtitle={
+          <>
+            <div>
+              {STAGE_LABELS[account.escalationStage] ?? account.escalationStage}
+              {account.riskScore != null && ` · risk ${account.riskScore}`}
+              {` · ${account.oldestOverdueDays}d oldest`}
             </div>
-          )}
-        </div>
-        <div className="text-right">
-          <div className="font-mono text-[22px] font-bold text-[#eb143f]">
-            {money(Number(account.totalOverdue))}
+            {client?.cachedEmail && (
+              <div className="mt-1 flex items-center gap-1 text-[11.5px]">
+                <Mail className="h-3 w-3" />
+                {client.cachedEmail}
+              </div>
+            )}
+          </>
+        }
+        right={
+          <div className="text-right">
+            <div className="font-mono text-[22px] font-bold text-[#eb143f]">
+              {money(Number(account.totalOverdue))}
+            </div>
+            <div className="text-[11.5px]" style={{ color: "var(--text-muted-color)" }}>
+              {account.oldestOverdueDays} days oldest
+            </div>
+            <div className="mt-1 flex items-center justify-end gap-1">
+              <span className="font-mono text-[9.5px]" style={{ color: "var(--text-muted-color)" }}>RISK</span>
+              <span
+                className="rounded-sm px-1.5 py-0.5 font-mono text-[11px] font-bold"
+                style={{ color: rc, background: alpha(rc, 0.15) }}
+              >
+                {account.riskScore ?? "—"}
+              </span>
+            </div>
           </div>
-          <div className="text-[11.5px]" style={{ color: "var(--text-muted-color)" }}>
-            {account.oldestOverdueDays} days oldest
-          </div>
-          <div className="mt-1 flex items-center justify-end gap-1">
-            <span className="font-mono text-[9.5px]" style={{ color: "var(--text-muted-color)" }}>RISK</span>
-            <span
-              className="rounded-sm px-1.5 py-0.5 font-mono text-[11px] font-bold"
-              style={{ color: rc, background: alpha(rc, 0.15) }}
-            >
-              {account.riskScore ?? "—"}
-            </span>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* Aging */}
       <div className="rounded-lg border p-[18px]" style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}>
@@ -412,23 +413,25 @@ export default function AccountDetailPage() {
       {/* Lien backstop — only shown when stage is pre_lien_notice or higher */}
       {["pre_lien_notice", "lien_filing", "agency_attorney", "write_off"].includes(account.escalationStage) && (
         lienBackstop ? (
-          <div
-            className="flex items-center gap-2.5 rounded-lg border px-[18px] py-3.5"
-            style={{ background: alpha("#f59f0a", 0.06), borderColor: alpha("#f59f0a", 0.35) }}
-          >
-            <Landmark className="h-4 w-4 shrink-0 text-[#f59f0a]" />
-            <div className="text-[12.5px]" style={{ color: "var(--text-dim)" }}>
-              Lien backstop —{" "}
-              <span className="font-semibold" style={{ color: "var(--text-base)" }}>
-                {lienBackstop.deadlineType.replace(/_/g, " ")} due{" "}
-                {new Date(lienBackstop.deadlineDate).toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}
-              </span>
+          <Link href={`/filing/${lienBackstop.streamId}`}>
+            <div
+              className="flex cursor-pointer items-center gap-2.5 rounded-lg border px-[18px] py-3.5 transition-opacity hover:opacity-80"
+              style={{ background: alpha("#f59f0a", 0.06), borderColor: alpha("#f59f0a", 0.35) }}
+            >
+              <Landmark className="h-4 w-4 shrink-0 text-[#f59f0a]" />
+              <div className="text-[12.5px]" style={{ color: "var(--text-dim)" }}>
+                Lien backstop —{" "}
+                <span className="font-semibold" style={{ color: "var(--text-base)" }}>
+                  {lienBackstop.deadlineType.replace(/_/g, " ")} due{" "}
+                  {new Date(lienBackstop.deadlineDate).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </span>
+              </div>
             </div>
-          </div>
+          </Link>
         ) : (
           <div
             className="flex items-center gap-2.5 rounded-lg border px-[18px] py-3.5"

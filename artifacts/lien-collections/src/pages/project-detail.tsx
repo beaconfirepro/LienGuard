@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useParams, useLocation } from "wouter";
+import { useParams, useLocation, useSearch } from "wouter";
 import { Screen } from "@/components/primitives/Screen";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertTriangle,
-  ArrowLeft,
   Calendar,
   CheckCircle2,
   Clock,
@@ -48,10 +47,13 @@ import {
   Link as LinkIcon,
   Bell,
   Send,
+  Gavel,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DeadlineCountdown } from "@/components/ui/deadline-countdown";
 import { Panel, useLeftPanel } from "@/components/nav/AppShell";
+import { WorkspaceHeader, WorkspaceTabs } from "@/components/nav/WorkspaceLayout";
+import FilingWorkspace from "@/components/filing/FilingWorkspace";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1118,27 +1120,24 @@ function LastTimeOnJobPanel({ projectId }: { projectId: string }) {
 // Main page
 // ---------------------------------------------------------------------------
 
-export default function ProjectDetailPage() {
-  const { id } = useParams<{ id: string }>();
+interface HoldsData {
+  holds: { id: string; holdType: string; reason: string; setAt: string }[];
+}
+
+function DeadlinesTab({
+  id,
+  data,
+  holdsData,
+  onOpenFiling,
+}: {
+  id: string;
+  data: ProjectDetailResponse;
+  holdsData?: HoldsData;
+  onOpenFiling: (streamId: string) => void;
+}) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
-
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["project", id],
-    queryFn: () => apiFetch<ProjectDetailResponse>(`/projects/${id}`),
-    retry: false,
-    enabled: !!id,
-  });
-
-  const { data: holdsData } = useQuery({
-    queryKey: ["project-holds", id],
-    queryFn: () =>
-      apiFetch<{ holds: { id: string; holdType: string; reason: string; setAt: string }[] }>(
-        `/holds?projectId=${id}`,
-      ),
-    enabled: !!id,
-  });
 
   // Lien setup form state
   const [setupForm, setSetupForm] = React.useState<{
@@ -1254,7 +1253,7 @@ export default function ProjectDetailPage() {
                 {data.streams.map((s) => (
                   <button
                     key={s.id}
-                    onClick={() => setLocation(`/filing/${s.id}`)}
+                    onClick={() => onOpenFiling(s.id)}
                     className="flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left hover:opacity-80"
                     style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)" }}
                   >
@@ -1282,28 +1281,6 @@ export default function ProjectDetailPage() {
     [data],
   );
 
-  if (isLoading) {
-    return (
-      <Screen>
-        <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
-          Loading project…
-        </div>
-      </Screen>
-    );
-  }
-
-  if (isError || !data) {
-    return (
-      <Screen>
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center text-sm text-destructive">
-          {(error as Error)?.message?.includes("401")
-            ? "Not authenticated — visit /api/dev/session to establish a dev session."
-            : `Failed to load project: ${(error as Error)?.message}`}
-        </div>
-      </Screen>
-    );
-  }
-
   const { project, parties, streams, subSystemType, checklist } = data;
   const form = setupForm ?? {
     contractorTier: project.contractorTier,
@@ -1326,69 +1303,7 @@ export default function ProjectDetailPage() {
   const existingStreamTypes = new Set(streams.map((s) => s.workStream));
 
   return (
-    <Screen>
       <div className="space-y-6 max-w-3xl">
-        {/* Back nav */}
-        <button
-          type="button"
-          onClick={() => setLocation("/")}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Projects
-        </button>
-
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight">
-              {project.cachedProjectName ?? project.hubspotProjectId}
-            </h1>
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span
-                className={cn(
-                  "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-                  WORKFLOW_COLORS[project.lienWorkflowType] ?? "bg-gray-100 text-gray-600",
-                )}
-              >
-                {WORKFLOW_LABELS[project.lienWorkflowType] ?? project.lienWorkflowType}
-              </span>
-              {project.contractorTier === "second_tier" && (
-                <Badge variant="outline" className="text-xs">2nd Tier</Badge>
-              )}
-              {project.cachedHubspotStatus && (
-                <span className="text-xs text-muted-foreground capitalize">
-                  HubSpot: {project.cachedHubspotStatus}
-                </span>
-              )}
-              {subSystemType && (
-                <span className="text-xs text-muted-foreground">
-                  {subSystemType.name}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {activeHolds.length > 0 && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 text-red-700 px-3 py-1 text-xs font-medium">
-                <Shield className="h-3.5 w-3.5" />
-                {activeHolds.length} Hold{activeHolds.length !== 1 ? "s" : ""}
-              </span>
-            )}
-            {project.completionChecklistComplete ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 text-green-700 px-3 py-1 text-xs font-medium">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Setup Complete
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 text-amber-700 px-3 py-1 text-xs font-medium">
-                <XCircle className="h-3.5 w-3.5" />
-                Incomplete Setup
-              </span>
-            )}
-          </div>
-        </div>
-
         {/* Active holds banner */}
         {activeHolds.length > 0 && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-3 space-y-1.5">
@@ -1707,6 +1622,233 @@ export default function ProjectDetailPage() {
             </Button>
           </div>
         </div>
+      </div>
+  );
+}
+
+export default function ProjectDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const [, setLocation] = useLocation();
+  const search = useSearch();
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["project", id],
+    queryFn: () => apiFetch<ProjectDetailResponse>(`/projects/${id}`),
+    retry: false,
+    enabled: !!id,
+  });
+
+  const { data: holdsData } = useQuery({
+    queryKey: ["project-holds", id],
+    queryFn: () =>
+      apiFetch<HoldsData>(`/holds?projectId=${id}`),
+    enabled: !!id,
+  });
+
+  const [tab, setTab] = React.useState<"deadlines" | "filing">(() =>
+    new URLSearchParams(search).get("tab") === "filing" ? "filing" : "deadlines",
+  );
+  const [selectedStreamId, setSelectedStreamId] = React.useState<string>(
+    () => new URLSearchParams(search).get("stream") ?? "",
+  );
+
+  const streams = data?.streams ?? [];
+  const streamIds = streams.map((s) => s.id).join(",");
+
+  // Re-sync tab + stream from the URL whenever the query string changes. This
+  // matters when navigating between /projects/:id?tab=...&stream=... URLs while
+  // this page is already mounted (e.g. compliance links, Filings rows), since
+  // wouter reuses the component instead of remounting it.
+  React.useEffect(() => {
+    const params = new URLSearchParams(search);
+    setTab(params.get("tab") === "filing" ? "filing" : "deadlines");
+    const s = params.get("stream");
+    if (s) setSelectedStreamId(s);
+  }, [search]);
+
+  // Default the selected stream to the first one once data arrives.
+  React.useEffect(() => {
+    if (streams.length === 0) return;
+    setSelectedStreamId((cur) =>
+      cur && streams.some((s) => s.id === cur) ? cur : streams[0].id,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamIds]);
+
+  function syncUrl(nextTab: "deadlines" | "filing", nextStream: string) {
+    const params = new URLSearchParams();
+    params.set("tab", nextTab);
+    if (nextTab === "filing" && nextStream) params.set("stream", nextStream);
+    setLocation(`/projects/${id}?${params.toString()}`, { replace: true });
+  }
+
+  function changeTab(next: string) {
+    const t = next === "filing" ? "filing" : "deadlines";
+    setTab(t);
+    syncUrl(t, selectedStreamId);
+  }
+
+  function openFiling(streamId: string) {
+    setSelectedStreamId(streamId);
+    setTab("filing");
+    syncUrl("filing", streamId);
+  }
+
+  function selectStream(streamId: string) {
+    setSelectedStreamId(streamId);
+    syncUrl("filing", streamId);
+  }
+
+  if (isLoading) {
+    return (
+      <Screen>
+        <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
+          Loading project…
+        </div>
+      </Screen>
+    );
+  }
+
+  if (isError || !data) {
+    return (
+      <Screen>
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center text-sm text-destructive">
+          {(error as Error)?.message?.includes("401")
+            ? "Not authenticated — visit /api/dev/session to establish a dev session."
+            : `Failed to load project: ${(error as Error)?.message}`}
+        </div>
+      </Screen>
+    );
+  }
+
+  const { project, subSystemType } = data;
+  const activeHolds = holdsData?.holds ?? [];
+  const activeStreamId =
+    selectedStreamId && streams.some((s) => s.id === selectedStreamId)
+      ? selectedStreamId
+      : streams[0]?.id ?? "";
+
+  return (
+    <Screen>
+      <div className="flex flex-col gap-4">
+        <WorkspaceHeader
+          back={{ label: "Back to Projects", onClick: () => setLocation("/liens") }}
+          title={project.cachedProjectName ?? project.hubspotProjectId}
+          subtitle={
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className={cn(
+                  "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+                  WORKFLOW_COLORS[project.lienWorkflowType] ?? "bg-gray-100 text-gray-600",
+                )}
+              >
+                {WORKFLOW_LABELS[project.lienWorkflowType] ?? project.lienWorkflowType}
+              </span>
+              {project.contractorTier === "second_tier" && (
+                <Badge variant="outline" className="text-xs">2nd Tier</Badge>
+              )}
+              {project.cachedHubspotStatus && (
+                <span className="text-xs capitalize" style={{ color: "var(--text-muted-color)" }}>
+                  HubSpot: {project.cachedHubspotStatus}
+                </span>
+              )}
+              {subSystemType && (
+                <span className="text-xs" style={{ color: "var(--text-muted-color)" }}>
+                  {subSystemType.name}
+                </span>
+              )}
+            </div>
+          }
+          right={
+            <div className="flex items-center gap-2 flex-wrap">
+              {activeHolds.length > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 text-red-700 px-3 py-1 text-xs font-medium">
+                  <Shield className="h-3.5 w-3.5" />
+                  {activeHolds.length} Hold{activeHolds.length !== 1 ? "s" : ""}
+                </span>
+              )}
+              {project.completionChecklistComplete ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 text-green-700 px-3 py-1 text-xs font-medium">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Setup Complete
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 text-amber-700 px-3 py-1 text-xs font-medium">
+                  <XCircle className="h-3.5 w-3.5" />
+                  Incomplete Setup
+                </span>
+              )}
+            </div>
+          }
+        />
+
+        <WorkspaceTabs
+          tabs={[
+            { key: "deadlines", label: "Deadlines", Icon: Calendar },
+            { key: "filing", label: "Filing", Icon: Gavel },
+          ]}
+          active={tab}
+          onChange={changeTab}
+        />
+
+        {tab === "deadlines" ? (
+          <DeadlinesTab
+            id={id!}
+            data={data}
+            holdsData={holdsData}
+            onOpenFiling={openFiling}
+          />
+        ) : streams.length === 0 ? (
+          <div
+            className="rounded-lg border p-6 text-center text-[13px]"
+            style={{
+              background: "var(--surface)",
+              borderColor: "var(--helm-border)",
+              color: "var(--text-dim)",
+            }}
+          >
+            No lien streams yet. Open a stream on the Deadlines tab to start a filing.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {streams.length > 1 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className="text-[11.5px] font-semibold uppercase tracking-wide"
+                  style={{ color: "var(--text-muted-color)" }}
+                >
+                  Stream
+                </span>
+                {streams.map((s) => {
+                  const isActive = s.id === activeStreamId;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => selectStream(s.id)}
+                      className="rounded-md border px-3 py-1.5 text-[12px] font-semibold capitalize transition-colors"
+                      style={
+                        isActive
+                          ? {
+                              background: "var(--surface-3)",
+                              borderColor: "var(--helm-accent)",
+                              color: "var(--text-base)",
+                            }
+                          : {
+                              background: "var(--surface-2)",
+                              borderColor: "var(--helm-border)",
+                              color: "var(--text-dim)",
+                            }
+                      }
+                    >
+                      {s.workStream.replace(/_/g, " ")}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <FilingWorkspace key={activeStreamId} streamId={activeStreamId} />
+          </div>
+        )}
       </div>
     </Screen>
   );

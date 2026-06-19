@@ -1,7 +1,7 @@
 /**
- * filing.tsx — Filing Workspace (Phase 6, P7).
- *
- * Route: /filing/:streamId
+ * FilingWorkspace — the per-stream filing execution UI, extracted from the old
+ * standalone /filing/:streamId page so it can live inside the merged Project
+ * workspace "Filing" tab. Takes a `streamId` prop instead of reading the route.
  *
  * Steps:
  *  1. Compliance Check (POST /filing/:streamId/escalate)
@@ -13,18 +13,16 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { useRoute, Link } from "wouter";
+import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Panel, useRightPanel, useLeftPanel } from "@/components/nav/AppShell";
 import { QueueList } from "@/components/ui/queue-list";
-import { StatusBadge } from "@/components/ui/status-badge";
 import {
   AlertTriangle,
   CheckCircle2,
   Scale,
   Send,
   Download,
-  MapPin,
   Plus,
   FileText,
 } from "lucide-react";
@@ -241,11 +239,9 @@ function FieldGrid({ items }: { items: Array<{ label: string; value: string }> }
   );
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────────────────
 
-export default function FilingPage() {
-  const [, params] = useRoute("/filing/:streamId");
-  const streamId = params?.streamId ?? "";
+export default function FilingWorkspace({ streamId }: { streamId: string }) {
   const qc = useQueryClient();
 
   const [county, setCounty] = useState("");
@@ -472,7 +468,10 @@ export default function FilingPage() {
                 ? `Net exposure ${money(row.netExposure)}`
                 : "On track";
             return (
-              <Link key={row.streamId} href={`/filing/${row.streamId}`}>
+              <Link
+                key={row.streamId}
+                href={`/projects/${row.lienProjectId}?tab=filing&stream=${row.streamId}`}
+              >
                 <div
                   className="cursor-pointer rounded-md border px-3 py-2 transition-colors"
                   style={{
@@ -529,7 +528,7 @@ export default function FilingPage() {
     );
   }
 
-  const { stream, project, workMonths, notices } = data;
+  const { stream, workMonths, notices } = data;
   const overdueMonths = workMonths.filter((wm) => wm.derivedOverdue && !wm.clearedFlag);
   const filingStep = filing ? filingStatusStep(filing.status) : -1;
   const totalClaim = notices
@@ -538,30 +537,6 @@ export default function FilingPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── Project header ─────────────────────────────────────────────── */}
-      <div
-        className="flex flex-wrap items-start justify-between gap-3 rounded-lg border p-4"
-        style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
-      >
-        <div>
-          <div className="text-[15px] font-semibold" style={{ color: "var(--text-base)" }}>
-            {project?.cachedProjectName ?? "Unknown Project"}
-          </div>
-          <div
-            className="mt-0.5 flex items-center gap-1.5 text-[12px]"
-            style={{ color: "var(--text-dim)" }}
-          >
-            <MapPin className="h-[13px] w-[13px]" />
-            {project?.legalPropertyAddress ?? "—"}
-            {project?.county ? ` · ${project.county} County` : ""}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <StatusBadge status={stream.workStream} />
-          <StatusBadge status={filing?.status ?? stream.status} />
-        </div>
-      </div>
-
       {/* ── Stats strip ────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[

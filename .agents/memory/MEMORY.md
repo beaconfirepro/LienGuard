@@ -12,4 +12,5 @@
 - [Auth gate architecture](auth-gate-architecture.md) — login gate is server-driven via GET /api/auth/user; AUTH_BYPASS=1 (dev only) injects synthetic admin to bypass it.
 - [Authenticated screenshots](screenshot-dev-session.md) — web app now uses real Replit Auth; dev-session priming is gone, screenshots always show the login gate. Roles live in users.role.
 - [Seed drift vs recompute](seed-drift-recompute.md) — collections/stream status & escalationStage are recomputed at runtime; seeds using onConflictDoNothing can't reset drifted rows, so re-assert canonical states with explicit UPDATEs.
+- [wouter component reuse](wouter-component-reuse.md) — wouter reuses (not remounts) a route component on param/query change; URL-derived state needs a useEffect to resync, not just mount-time init.
 - [NotaryLive v3](notarylive-v3.md) — real v3 API contract + sandbox behavior; no webhook, completion is polled; never reintroduce a webhook completion path.
