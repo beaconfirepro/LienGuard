@@ -24,11 +24,20 @@ import {
   lienDeadlinesTable,
   mailingRecordsTable,
   projectPartyLinksTable,
+  documentTemplatesTable,
 } from "@workspace/db";
 import { eq, and, inArray, lt } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { createCertifiedMailLabel } from "../lib/shippo";
 import { addBusinessDays } from "../lib/deadlineEngine";
+import {
+  resolveDocument,
+  formatCurrency,
+  formatLongDate,
+  DEFAULT_CLAIMANT_NAME,
+  type RegionContent,
+} from "../lib/documentTemplates";
+import { renderRichText } from "../lib/pdfRichText";
 
 const router = Router();
 
@@ -343,6 +352,45 @@ router.get("/filing/:id/affidavit", requireSession, async (req, res) => {
     .from(noticesTable)
     .where(and(eq(noticesTable.lienStreamId, filing.lienStreamId), eq(noticesTable.orgId, orgId)));
 
+  // Load any saved document template (region overrides) for the affidavit.
+  const [tmplRow] = await db
+    .select()
+    .from(documentTemplatesTable)
+    .where(
+      and(
+        eq(documentTemplatesTable.orgId, orgId),
+        eq(documentTemplatesTable.documentType, "lien_affidavit"),
+      ),
+    )
+    .limit(1);
+  const savedRegions: RegionContent | null = tmplRow
+    ? {
+        branding: tmplRow.branding,
+        intro: tmplRow.intro,
+        closing: tmplRow.closing,
+        signature: tmplRow.signature,
+        footer: tmplRow.footer,
+      }
+    : null;
+
+  const totalClaim = overdueMonths.reduce((sum, wm) => {
+    const rel = notices.find((n) => n.workMonthId === wm.id);
+    return sum + (rel ? Number(rel.claimAmount) : 0);
+  }, 0);
+
+  const mergeData: Record<string, string> = {
+    claimantName: DEFAULT_CLAIMANT_NAME,
+    projectName: project?.cachedProjectName ?? "",
+    propertyAddress: project?.legalPropertyAddress ?? "",
+    county: project?.county ?? filing.county ?? "",
+    claimAmount: formatCurrency(totalClaim),
+    filingDate: filing.filingDate ? formatLongDate(filing.filingDate) : "",
+    recordingRef: filing.recordingRef ?? "",
+    todayDate: formatLongDate(new Date()),
+  };
+
+  const resolved = resolveDocument("lien_affidavit", savedRegions, mergeData);
+
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader(
     "Content-Disposition",
@@ -351,6 +399,16 @@ router.get("/filing/:id/affidavit", requireSession, async (req, res) => {
 
   const doc = new PDFDocument({ margin: 72 });
   doc.pipe(res);
+
+  // Branding / Letterhead (customizable).
+  if (resolved.branding.trim()) {
+    renderRichText(doc, resolved.branding, {
+      fontSize: 10,
+      color: "#000000",
+      textOptions: { align: "center" },
+    });
+    doc.moveDown(0.6);
+  }
 
   // Title
   doc
@@ -407,21 +465,37 @@ router.get("/filing/:id/affidavit", requireSession, async (req, res) => {
     doc.moveDown(1);
   }
 
-  // Notarization block
+  // Intro (customizable).
+  if (resolved.intro.trim()) {
+    renderRichText(doc, resolved.intro, { fontSize: 10, color: "#000000" });
+    doc.moveDown(1);
+  }
+
+  // Notarization block (locked statutory body).
   doc.moveDown(2);
   doc.font("Helvetica-Bold").text("NOTARIZATION BLOCK").font("Helvetica");
   doc.moveDown(1);
-  doc.text("STATE OF TEXAS  §");
-  doc.text("COUNTY OF ________________  §");
-  doc.moveDown(1);
-  doc.text(
-    "Before me, the undersigned authority, personally appeared the affiant, " +
-      "who, being by me duly sworn, deposed as stated herein.",
-  );
+  doc.font("Helvetica").fontSize(10).text(resolved.lockedBody);
   doc.moveDown(2);
-  doc.text("Signature: _________________________________    Date: _______________");
-  doc.moveDown(0.5);
-  doc.text("Notary Public: _____________________________    My commission expires: _______________");
+
+  // Signature block (customizable).
+  renderRichText(doc, resolved.signature, { fontSize: 10, color: "#000000" });
+
+  // Closing (customizable).
+  if (resolved.closing.trim()) {
+    doc.moveDown(1.5);
+    renderRichText(doc, resolved.closing, { fontSize: 10, color: "#000000" });
+  }
+
+  // Footer (customizable).
+  if (resolved.footer.trim()) {
+    doc.moveDown(2);
+    renderRichText(doc, resolved.footer, {
+      fontSize: 8,
+      color: "#999999",
+      textOptions: { align: "center" },
+    });
+  }
 
   doc.end();
 });

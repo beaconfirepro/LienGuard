@@ -8,10 +8,26 @@ import {
   jurisdictionsTable,
   lienRuleSetsTable,
   lienRulesTable,
+  documentTemplatesTable,
+  lienProjectsTable,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { requireAdmin } from "../lib/admin";
+import {
+  DOCUMENT_SCHEMAS,
+  DOCUMENT_TYPES,
+  FIELD_CATALOG,
+  REGION_ORDER,
+  REGION_META,
+  getSchema,
+  findInvalidTokens,
+  resolveDocument,
+  sampleData,
+  sanitizeRegionContent,
+  type RegionContent,
+  type RegionKey,
+} from "../lib/documentTemplates";
 
 const router: IRouter = Router();
 
@@ -796,6 +812,237 @@ router.get("/notarylive-status", (_req, res) => {
     process.env.NOTARYLIVE_API_USER && process.env.NOTARYLIVE_API_KEY
   );
   res.json({ connected });
+});
+
+// ---------------------------------------------------------------------------
+// Document Templates
+//
+// Admins customize the branding/intro/closing/signature/footer regions of each
+// client-facing document type. Statutory body text is locked in code and merged
+// with real data only at PDF generation. A null saved region falls back to the
+// hard-coded default (no regression when nothing is saved).
+// ---------------------------------------------------------------------------
+
+function regionOverridesFromRow(
+  row: typeof documentTemplatesTable.$inferSelect | undefined,
+): RegionContent {
+  const out: RegionContent = {};
+  for (const key of REGION_ORDER) {
+    out[key] = (row?.[key] ?? null) as string | null;
+  }
+  return out;
+}
+
+/**
+ * GET /config/document-templates
+ * Lists every customizable document type with category, label, and whether a
+ * saved template exists for this org.
+ */
+router.get("/document-templates", async (req, res) => {
+  const { orgId, role } = getSession(req);
+
+  const rows = await db
+    .select()
+    .from(documentTemplatesTable)
+    .where(eq(documentTemplatesTable.orgId, orgId));
+
+  const savedByType = new Map(rows.map((r) => [r.documentType, r]));
+
+  const templates = DOCUMENT_TYPES.map((type) => {
+    const schema = DOCUMENT_SCHEMAS[type]!;
+    const row = savedByType.get(type);
+    return {
+      type,
+      category: schema.category,
+      label: schema.label,
+      statuteRef: schema.statuteRef,
+      customized: !!row,
+      updatedAt: row?.updatedAt ?? null,
+    };
+  });
+
+  res.json({ templates, canEdit: role === "admin" });
+});
+
+/**
+ * GET /config/document-templates/:type
+ * Returns the schema (region defaults, locked body, available fields) plus any
+ * saved region overrides for this org.
+ */
+router.get("/document-templates/:type", async (req, res) => {
+  const { orgId, role } = getSession(req);
+  const type = req.params["type"] as string;
+
+  const schema = getSchema(type);
+  if (!schema) {
+    res.status(404).json({ error: "Unknown document type" });
+    return;
+  }
+
+  const [row] = await db
+    .select()
+    .from(documentTemplatesTable)
+    .where(
+      and(
+        eq(documentTemplatesTable.orgId, orgId),
+        eq(documentTemplatesTable.documentType, type),
+      ),
+    )
+    .limit(1);
+
+  res.json({
+    type,
+    category: schema.category,
+    label: schema.label,
+    statuteRef: schema.statuteRef,
+    lockedBody: schema.lockedBody,
+    regions: REGION_ORDER.map((key) => ({
+      key,
+      label: REGION_META[key].label,
+      description: REGION_META[key].description,
+      default: schema.defaults[key],
+    })),
+    fields: schema.fields.map((key) => ({ key, label: FIELD_CATALOG[key].label })),
+    saved: regionOverridesFromRow(row),
+    customized: !!row,
+    updatedAt: row?.updatedAt ?? null,
+    canEdit: role === "admin",
+  });
+});
+
+/**
+ * PUT /config/document-templates/:type
+ * Upserts the saved region overrides for a document type. Admin only.
+ * Body: { branding, intro, closing, signature, footer } — each string|null.
+ * A null region resets that region to its hard-coded default.
+ */
+router.put("/document-templates/:type", requireAdmin, async (req, res) => {
+  const { orgId, userId } = getSession(req);
+  const type = req.params["type"] as string;
+
+  if (!getSchema(type)) {
+    res.status(404).json({ error: "Unknown document type" });
+    return;
+  }
+
+  const regions = sanitizeRegionContent(req.body);
+
+  // Reject any merge token not in this document type's allowed field set, so
+  // unsupported tokens (e.g. typed by hand) never reach PDF generation.
+  const invalidTokens = findInvalidTokens(type, regions);
+  if (invalidTokens.length > 0) {
+    res.status(400).json({
+      error: `Unknown merge field(s) for this document: ${invalidTokens
+        .map((t) => `{{${t}}}`)
+        .join(", ")}`,
+    });
+    return;
+  }
+
+  const values = {
+    branding: regions.branding ?? null,
+    intro: regions.intro ?? null,
+    closing: regions.closing ?? null,
+    signature: regions.signature ?? null,
+    footer: regions.footer ?? null,
+  };
+
+  const [existing] = await db
+    .select({ id: documentTemplatesTable.id })
+    .from(documentTemplatesTable)
+    .where(
+      and(
+        eq(documentTemplatesTable.orgId, orgId),
+        eq(documentTemplatesTable.documentType, type),
+      ),
+    )
+    .limit(1);
+
+  let row;
+  if (existing) {
+    [row] = await db
+      .update(documentTemplatesTable)
+      .set({ ...values, updatedByUserId: userId ?? null, updatedAt: new Date() })
+      .where(eq(documentTemplatesTable.id, existing.id))
+      .returning();
+  } else {
+    [row] = await db
+      .insert(documentTemplatesTable)
+      .values({
+        orgId,
+        documentType: type,
+        ...values,
+        updatedByUserId: userId ?? null,
+      })
+      .returning();
+  }
+
+  res.json({
+    type,
+    saved: regionOverridesFromRow(row),
+    customized: true,
+    updatedAt: row?.updatedAt ?? null,
+  });
+});
+
+/**
+ * POST /config/document-templates/:type/preview
+ * Resolves the document with the supplied (unsaved) region content against
+ * sample data. An optional projectId splices a real project's name/address/
+ * county into the sample baseline. Admin or not — read-only preview.
+ * Body: { regions?: RegionContent, projectId?: string }
+ */
+router.post("/document-templates/:type/preview", async (req, res) => {
+  const { orgId } = getSession(req);
+  const type = req.params["type"] as string;
+
+  const schema = getSchema(type);
+  if (!schema) {
+    res.status(404).json({ error: "Unknown document type" });
+    return;
+  }
+
+  const { regions, projectId } = req.body as {
+    regions?: unknown;
+    projectId?: string;
+  };
+
+  const overrides: Partial<Record<string, string>> = {};
+  let projectName: string | null = null;
+  if (projectId) {
+    const [project] = await db
+      .select()
+      .from(lienProjectsTable)
+      .where(
+        and(
+          eq(lienProjectsTable.id, projectId),
+          eq(lienProjectsTable.orgId, orgId),
+        ),
+      )
+      .limit(1);
+    if (project) {
+      projectName = project.cachedProjectName ?? null;
+      if (project.cachedProjectName) overrides.projectName = project.cachedProjectName;
+      if (project.legalPropertyAddress)
+        overrides.propertyAddress = project.legalPropertyAddress;
+      if (project.county) overrides.county = project.county;
+    }
+  }
+
+  const data = sampleData(overrides);
+  const resolved = resolveDocument(
+    type,
+    sanitizeRegionContent(regions),
+    data,
+  );
+
+  res.json({
+    type,
+    label: schema.label,
+    statuteRef: schema.statuteRef,
+    resolved,
+    source: projectName ? { kind: "project", projectName } : { kind: "sample" },
+  });
 });
 
 export default router;

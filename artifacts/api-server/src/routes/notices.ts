@@ -24,10 +24,20 @@ import {
   invoiceLinksTable,
   mailingRecordsTable,
   lienDeadlinesTable,
+  documentTemplatesTable,
 } from "@workspace/db";
 import { eq, and, inArray, isNull } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { createCertifiedMailLabel } from "../lib/shippo";
+import {
+  resolveDocument,
+  formatCurrency,
+  formatMonthYear,
+  formatLongDate,
+  DEFAULT_CLAIMANT_NAME,
+  type RegionContent,
+} from "../lib/documentTemplates";
+import { renderRichText } from "../lib/pdfRichText";
 
 const router = Router();
 router.use(requireSession);
@@ -402,6 +412,68 @@ router.get("/notices/:id/pdf", async (req, res) => {
       )[0]
     : undefined;
 
+  // Load any saved document template (region overrides) for this notice type.
+  const [tmplRow] = await db
+    .select()
+    .from(documentTemplatesTable)
+    .where(
+      and(
+        eq(documentTemplatesTable.orgId, orgId),
+        eq(documentTemplatesTable.documentType, notice.noticeType),
+      ),
+    )
+    .limit(1);
+  const savedRegions: RegionContent | null = tmplRow
+    ? {
+        branding: tmplRow.branding,
+        intro: tmplRow.intro,
+        closing: tmplRow.closing,
+        signature: tmplRow.signature,
+        footer: tmplRow.footer,
+      }
+    : null;
+
+  const owner = recipients.find((r) => r.recipientType === "owner");
+  const gc = recipients.find((r) => r.recipientType === "original_contractor");
+
+  const monthStr = formatMonthYear(notice.monthListed);
+  const claimFormatted = formatCurrency(notice.claimAmount);
+  const today = formatLongDate(new Date());
+
+  // Best-effort deadline lookup for the {{deadlineDate}} merge field.
+  let deadlineDateStr = "";
+  if (notice.workMonthId) {
+    const [dl] = await db
+      .select()
+      .from(lienDeadlinesTable)
+      .where(
+        and(
+          eq(lienDeadlinesTable.orgId, orgId),
+          eq(lienDeadlinesTable.workMonthId, notice.workMonthId),
+          inArray(lienDeadlinesTable.ruleKind, ["notice", "retainage"]),
+        ),
+      )
+      .limit(1);
+    if (dl?.computedDate) deadlineDateStr = formatLongDate(dl.computedDate);
+  }
+
+  const mergeData: Record<string, string> = {
+    claimantName: DEFAULT_CLAIMANT_NAME,
+    projectName: project?.cachedProjectName ?? "",
+    propertyAddress: project?.legalPropertyAddress ?? "",
+    county: project?.county ?? "",
+    claimAmount: claimFormatted,
+    monthListed: monthStr,
+    deadlineDate: deadlineDateStr,
+    ownerName: owner?.legalName ?? "",
+    ownerAddress: owner?.mailingAddress ?? "",
+    gcName: gc?.legalName ?? "",
+    gcAddress: gc?.mailingAddress ?? "",
+    todayDate: today,
+  };
+
+  const resolved = resolveDocument(notice.noticeType, savedRegions, mergeData);
+
   // Build PDF.
   const doc = new PDFDocument({ margin: 72, size: "letter" });
 
@@ -426,6 +498,16 @@ router.get("/notices/:id/pdf", async (req, res) => {
       .stroke();
     doc.moveDown(0.5);
   };
+
+  // ── Branding / Letterhead (customizable) ────────────────────────────────────
+  if (resolved.branding.trim()) {
+    renderRichText(doc, resolved.branding, {
+      fontSize: 9,
+      color: GRAY,
+      textOptions: { align: "center" },
+    });
+    doc.moveDown(0.6);
+  }
 
   // ── Header ─────────────────────────────────────────────────────────────────
   doc
@@ -459,9 +541,6 @@ router.get("/notices/:id/pdf", async (req, res) => {
   // ── Recipients ─────────────────────────────────────────────────────────────
   doc.font("Helvetica-Bold").fontSize(9).fillColor(BLUE).text("NOTICE TO:");
   doc.moveDown(0.4);
-
-  const owner = recipients.find((r) => r.recipientType === "owner");
-  const gc = recipients.find((r) => r.recipientType === "original_contractor");
 
   if (owner) {
     doc.font("Helvetica-Bold").fontSize(9).fillColor(GRAY).text("OWNER:");
@@ -500,16 +579,6 @@ router.get("/notices/:id/pdf", async (req, res) => {
   divider();
 
   // ── Work + Claim ───────────────────────────────────────────────────────────
-  const monthStr = new Date(notice.monthListed).toLocaleDateString("en-US", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-  const claimFormatted = Number(notice.claimAmount).toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-  });
-
   doc.font("Helvetica-Bold").fontSize(9).fillColor(BLUE).text("CLAIM DETAILS:");
   doc.moveDown(0.4);
   doc.font("Helvetica").fontSize(9).fillColor("#333333");
@@ -522,67 +591,56 @@ router.get("/notices/:id/pdf", async (req, res) => {
   doc.moveDown(1);
   divider();
 
-  // ── Statutory Notice Text ──────────────────────────────────────────────────
+  // ── Intro (customizable) ────────────────────────────────────────────────────
+  if (resolved.intro.trim()) {
+    renderRichText(doc, resolved.intro, {
+      fontSize: 9,
+      color: "#333333",
+      textOptions: { lineGap: 3 },
+    });
+    doc.moveDown(1);
+    divider();
+  }
+
+  // ── Statutory Notice Text (locked) ──────────────────────────────────────────
   doc.font("Helvetica-Bold").fontSize(9).fillColor(BLUE).text("STATUTORY NOTICE:");
   doc.moveDown(0.6);
-  doc.font("Helvetica").fontSize(8.5).fillColor("#333333");
-
-  if (isRetainage) {
-    doc.text(
-      `TO THE ABOVE NAMED OWNER AND ORIGINAL CONTRACTOR: This is to notify you that Beacon Fire Protection ` +
-        `("Claimant") has furnished labor and/or materials for the construction, ` +
-        `alteration, or repair of the above-described property and claims a lien on the property ` +
-        `for unpaid RETAINAGE in the amount of ${claimFormatted} for work performed through ${monthStr}. ` +
-        `Pursuant to Texas Property Code § 53.057, you are hereby notified that if said amount ` +
-        `is not paid, the Claimant intends to perfect and enforce a lien claim against the property.`,
-      { lineGap: 3 },
-    );
-  } else if (notice.noticeType === "early_warning") {
-    doc.text(
-      `TO THE ABOVE NAMED OWNER AND ORIGINAL CONTRACTOR: This is a courtesy notice from ` +
-        `Beacon Fire Protection ("Claimant") to advise you that Claimant has furnished ` +
-        `labor and/or materials for improvements to the above-described property in the amount of ` +
-        `${claimFormatted} for work performed in ${monthStr}. ` +
-        `This notice is provided as a professional courtesy prior to the statutory notice deadline. ` +
-        `Payment within ten (10) days will avoid the issuance of a formal statutory notice.`,
-      { lineGap: 3 },
-    );
-  } else {
-    doc.text(
-      `TO THE ABOVE NAMED OWNER AND ORIGINAL CONTRACTOR: This is to notify you that Beacon Fire Protection ` +
-        `("Claimant"), subcontractor, has provided labor and materials for fire-protection work ` +
-        `at the above-described property. The unpaid balance for work performed in ${monthStr} ` +
-        `is ${claimFormatted}. Pursuant to Texas Property Code § 53.056, you are hereby notified ` +
-        `that if payment of said amount is not made, the property described above may be subject ` +
-        `to a mechanic's and materialman's lien. ` +
-        `If you have paid the original contractor in full, you may have a defense to this claim.`,
-      { lineGap: 3 },
-    );
-  }
+  doc
+    .font("Helvetica")
+    .fontSize(8.5)
+    .fillColor("#333333")
+    .text(resolved.lockedBody, { lineGap: 3 });
 
   doc.moveDown(1.5);
   divider();
 
-  // ── Signature Block ────────────────────────────────────────────────────────
-  const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  // ── Closing (customizable) ──────────────────────────────────────────────────
+  if (resolved.closing.trim()) {
+    renderRichText(doc, resolved.closing, {
+      fontSize: 9,
+      color: "#333333",
+      textOptions: { lineGap: 3 },
+    });
+    doc.moveDown(1.5);
+    divider();
+  }
 
-  doc.font("Helvetica").fontSize(9).fillColor(GRAY);
-  doc.text(`Date: ${today}`);
-  doc.moveDown(2);
-  doc.text("By: ___________________________________");
-  doc.moveDown(0.3);
-  doc.text("   Authorized Representative, Beacon Fire Protection");
+  // ── Signature Block (customizable) ──────────────────────────────────────────
+  renderRichText(doc, resolved.signature, {
+    fontSize: 9,
+    color: GRAY,
+    textOptions: { lineGap: 2 },
+  });
   doc.moveDown(2);
 
-  // ── Footer ─────────────────────────────────────────────────────────────────
-  doc
-    .fontSize(7.5)
-    .fillColor(LIGHT_GRAY)
-    .text(
-      "This notice is prepared pursuant to Texas Property Code Chapter 53. This document is not legal advice. " +
-        "Consult a licensed attorney before taking action based on this notice.",
-      { align: "center" },
-    );
+  // ── Footer (customizable) ───────────────────────────────────────────────────
+  if (resolved.footer.trim()) {
+    renderRichText(doc, resolved.footer, {
+      fontSize: 7.5,
+      color: LIGHT_GRAY,
+      textOptions: { align: "center" },
+    });
+  }
 
   doc.end();
 });

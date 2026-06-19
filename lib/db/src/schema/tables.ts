@@ -679,6 +679,36 @@ export const paymentPlanInstallmentsTable = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// 2.5b Document Templates (client-facing document customization)
+// ---------------------------------------------------------------------------
+
+// Admin-customizable branding/intro/closing/signature/footer regions for each
+// client-facing document type (statutory notices, lien waivers, lien affidavit).
+// Statutory body text is NOT stored here — it is locked in code. A null region
+// column means "use the hard-coded default" so that an org with no saved template
+// renders exactly as before (no regression).
+export const documentTemplatesTable = pgTable(
+  "document_templates",
+  {
+    id: id(),
+    orgId: orgId(),
+    documentType: text("document_type").notNull(),
+    branding: text("branding"),
+    intro: text("intro"),
+    closing: text("closing"),
+    signature: text("signature"),
+    footer: text("footer"),
+    updatedByUserId: text("updated_by_user_id"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("document_templates_org_id_idx").on(t.orgId),
+    uniqueIndex("document_templates_org_type_uq").on(t.orgId, t.documentType),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // 2.6 Cross-Cutting Models
 // ---------------------------------------------------------------------------
 

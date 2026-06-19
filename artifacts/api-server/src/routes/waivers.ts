@@ -28,10 +28,20 @@ import {
   mailingRecordsTable,
   linkedClientsTable,
   noticeRecipientsTable,
+  documentTemplatesTable,
 } from "@workspace/db";
 import { eq, and, inArray, isNull, not } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { createNotarySession, getNotaryOrderStatus } from "../lib/notarylive";
+import {
+  resolveDocument,
+  formatCurrency,
+  formatMonthYear,
+  formatLongDate,
+  DEFAULT_CLAIMANT_NAME,
+  type RegionContent,
+} from "../lib/documentTemplates";
+import { renderRichText } from "../lib/pdfRichText";
 
 const router = Router();
 
@@ -603,8 +613,52 @@ router.get("/waivers/:id/pdf", requireSession, async (req, res) => {
   };
 
   const meta = WAIVER_META[waiver.waiverType] ?? WAIVER_META.conditional_progress;
-  const amountFormatted = Number(waiver.paymentAmount).toLocaleString("en-US", { style: "currency", currency: "USD" });
-  const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const amountFormatted = formatCurrency(waiver.paymentAmount);
+  const today = formatLongDate(new Date());
+
+  // Load any saved document template (region overrides) for this waiver type.
+  const [tmplRow] = await db
+    .select()
+    .from(documentTemplatesTable)
+    .where(
+      and(
+        eq(documentTemplatesTable.orgId, orgId),
+        eq(documentTemplatesTable.documentType, waiver.waiverType),
+      ),
+    )
+    .limit(1);
+  const savedRegions: RegionContent | null = tmplRow
+    ? {
+        branding: tmplRow.branding,
+        intro: tmplRow.intro,
+        closing: tmplRow.closing,
+        signature: tmplRow.signature,
+        footer: tmplRow.footer,
+      }
+    : null;
+
+  const mergeData: Record<string, string> = {
+    claimantName: DEFAULT_CLAIMANT_NAME,
+    projectName: project?.cachedProjectName ?? "",
+    propertyAddress: project?.legalPropertyAddress ?? "",
+    county: project?.county ?? "",
+    paymentAmount: amountFormatted,
+    workStream: waiver.workStream,
+    throughDate: waiver.signedDate ? formatLongDate(waiver.signedDate) : "",
+    todayDate: today,
+  };
+
+  const resolved = resolveDocument(waiver.waiverType, savedRegions, mergeData);
+
+  // ── Branding / Letterhead (customizable) ────────────────────────────────────
+  if (resolved.branding.trim()) {
+    renderRichText(doc, resolved.branding, {
+      fontSize: 9,
+      color: GRAY,
+      textOptions: { align: "center" },
+    });
+    doc.moveDown(0.6);
+  }
 
   // Header.
   doc.fontSize(9).fillColor(LIGHT_GRAY).text("STATE OF TEXAS — LIEN WAIVER", { align: "center" });
@@ -644,22 +698,34 @@ router.get("/waivers/:id/pdf", requireSession, async (req, res) => {
   doc.moveDown(1);
   divider();
 
-  // Statutory text.
+  // Intro (customizable).
+  if (resolved.intro.trim()) {
+    renderRichText(doc, resolved.intro, {
+      fontSize: 9,
+      color: "#333333",
+      textOptions: { lineGap: 3 },
+    });
+    doc.moveDown(1);
+    divider();
+  }
+
+  // Statutory text (locked).
   doc.font("Helvetica-Bold").fontSize(9).fillColor(BLUE).text("WAIVER AND RELEASE:");
   doc.moveDown(0.4);
-  doc.font("Helvetica").fontSize(8.5).fillColor("#333333");
-  doc.text(
-    `${meta.description} The undersigned, Beacon Fire Protection ("Claimant"), having furnished ` +
-    `labor and/or materials (fire protection — ${waiver.workStream} work) for the improvement of the real property described above, ` +
-    `hereby releases and waives all lien rights against said property and all claims against the owner and ` +
-    `original contractor arising out of the above-described payment, pursuant to Texas Property Code ${meta.subsection}. ` +
-    (waiver.waiverType.startsWith("unconditional")
-      ? "This waiver is UNCONDITIONAL and effective immediately upon execution."
-      : "This waiver is CONDITIONAL and becomes effective only upon actual receipt and clearance of the payment stated above."),
-    { lineGap: 3 },
-  );
+  doc.font("Helvetica").fontSize(8.5).fillColor("#333333").text(resolved.lockedBody, { lineGap: 3 });
   doc.moveDown(1.5);
   divider();
+
+  // Closing (customizable).
+  if (resolved.closing.trim()) {
+    renderRichText(doc, resolved.closing, {
+      fontSize: 9,
+      color: "#333333",
+      textOptions: { lineGap: 3 },
+    });
+    doc.moveDown(1.5);
+    divider();
+  }
 
   // Approval gates (informational).
   const gateLines: string[] = [];
@@ -676,19 +742,22 @@ router.get("/waivers/:id/pdf", requireSession, async (req, res) => {
     divider();
   }
 
-  // Signature block.
-  doc.font("Helvetica").fontSize(9).fillColor(GRAY);
-  doc.text(`Date: ${today}`);
-  doc.moveDown(2);
-  doc.text("Signed: ___________________________________");
-  doc.moveDown(0.3);
-  doc.text("         Authorized Representative, Beacon Fire Protection");
+  // Signature block (customizable).
+  renderRichText(doc, resolved.signature, {
+    fontSize: 9,
+    color: GRAY,
+    textOptions: { lineGap: 2 },
+  });
   doc.moveDown(2);
 
-  doc.fontSize(7.5).fillColor(LIGHT_GRAY).text(
-    "This waiver is prepared pursuant to Texas Property Code § 53.284. This document is not legal advice. Consult a licensed attorney before signing.",
-    { align: "center" },
-  );
+  // Footer (customizable).
+  if (resolved.footer.trim()) {
+    renderRichText(doc, resolved.footer, {
+      fontSize: 7.5,
+      color: LIGHT_GRAY,
+      textOptions: { align: "center" },
+    });
+  }
 
   doc.end();
 });

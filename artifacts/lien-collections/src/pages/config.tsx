@@ -10,10 +10,23 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 import {
   Card,
   CardContent,
@@ -35,6 +48,11 @@ import {
   GitBranch,
   Pencil,
   Banknote,
+  FileText,
+  RotateCcw,
+  Lock,
+  Eye,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -1627,6 +1645,830 @@ function IntegrationsTab() {
 }
 
 // ---------------------------------------------------------------------------
+// Tab: Document Templates
+// ---------------------------------------------------------------------------
+
+interface DocTemplateListItem {
+  type: string;
+  category: string;
+  label: string;
+  statuteRef: string;
+  customized: boolean;
+  updatedAt: string | null;
+}
+
+interface DocRegion {
+  key: string;
+  label: string;
+  description: string;
+  default: string;
+}
+
+interface DocField {
+  key: string;
+  label: string;
+}
+
+interface ResolvedDoc {
+  branding: string;
+  intro: string;
+  closing: string;
+  signature: string;
+  footer: string;
+  lockedBody: string;
+}
+
+interface DocTemplateDetail {
+  type: string;
+  category: string;
+  label: string;
+  statuteRef: string;
+  lockedBody: string;
+  regions: DocRegion[];
+  fields: DocField[];
+  saved: Record<string, string | null>;
+  customized: boolean;
+  updatedAt: string | null;
+  canEdit: boolean;
+}
+
+interface DocPreviewResult {
+  type: string;
+  label: string;
+  statuteRef: string;
+  resolved: ResolvedDoc;
+  source: { kind: string; projectName?: string };
+}
+
+const DOC_CATEGORY_LABELS: Record<string, string> = {
+  notice: "Statutory Notices",
+  waiver: "Lien Waivers",
+  affidavit: "Lien Affidavit",
+};
+
+const DOC_CATEGORY_ORDER = ["notice", "waiver", "affidavit"];
+
+function DocumentTemplatesTab() {
+  const {
+    data: list,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["doc-templates"],
+    queryFn: () =>
+      apiFetch<{ templates: DocTemplateListItem[]; canEdit: boolean }>(
+        "/config/document-templates",
+      ),
+  });
+
+  const [selectedType, setSelectedType] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!selectedType && list?.templates?.length) {
+      setSelectedType(list.templates[0].type);
+    }
+  }, [list, selectedType]);
+
+  if (isLoading) {
+    return <p className="text-sm text-muted-foreground">Loading templates…</p>;
+  }
+  if (isError) {
+    return (
+      <p className="text-sm text-destructive">
+        Failed to load document templates: {(error as Error)?.message}
+      </p>
+    );
+  }
+
+  const templates = list?.templates ?? [];
+  const grouped = DOC_CATEGORY_ORDER.map((cat) => ({
+    category: cat,
+    items: templates.filter((t) => t.category === cat),
+  })).filter((g) => g.items.length > 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="max-w-md space-y-1.5">
+        <Label className="text-xs font-semibold">
+          Select a template to modify:
+        </Label>
+        <Select
+          value={selectedType ?? ""}
+          onValueChange={(v) => setSelectedType(v)}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select a document to customize" />
+          </SelectTrigger>
+          <SelectContent>
+            {grouped.map((group) => (
+              <SelectGroup key={group.category}>
+                <SelectLabel>
+                  {DOC_CATEGORY_LABELS[group.category] ?? group.category}
+                </SelectLabel>
+                {group.items.map((t) => (
+                  <SelectItem key={t.type} value={t.type}>
+                    <span className="flex items-center gap-2">
+                      {t.label}
+                      {t.customized && (
+                        <Badge
+                          variant="secondary"
+                          className="shrink-0 text-[10px]"
+                        >
+                          Custom
+                        </Badge>
+                      )}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="min-w-0">
+        {selectedType ? (
+          <DocTemplateEditor key={selectedType} type={selectedType} />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Select a document to customize.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+type RichFormatCommand = "bold" | "italic" | "underline";
+type MergeFieldEditorHandle = {
+  insertToken: (key: string) => void;
+  format: (cmd: RichFormatCommand) => void;
+};
+
+interface RichSeg {
+  text?: string;
+  token?: string;
+  br?: boolean;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+}
+
+// Parse a region string (limited `<b>`/`<i>`/`<u>` markup + `{{token}}` merge
+// fields + `\n` newlines) into ordered segments for DOM rendering.
+function parseRichValue(value: string): RichSeg[] {
+  const segs: RichSeg[] = [];
+  let bold = 0;
+  let italic = 0;
+  let underline = 0;
+  const re = /(\{\{\s*\w+\s*\}\}|<\/?[biu]>|\n)/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  const pushText = (t: string) => {
+    if (!t) return;
+    segs.push({
+      text: t,
+      bold: bold > 0,
+      italic: italic > 0,
+      underline: underline > 0,
+    });
+  };
+  while ((m = re.exec(value)) !== null) {
+    if (m.index > last) pushText(value.slice(last, m.index));
+    const tok = m[0];
+    if (tok === "\n") segs.push({ br: true });
+    else if (tok.startsWith("{{"))
+      segs.push({ token: tok.replace(/[{}]/g, "").trim() });
+    else if (tok === "<b>") bold++;
+    else if (tok === "</b>") bold = Math.max(0, bold - 1);
+    else if (tok === "<i>") italic++;
+    else if (tok === "</i>") italic = Math.max(0, italic - 1);
+    else if (tok === "<u>") underline++;
+    else if (tok === "</u>") underline = Math.max(0, underline - 1);
+    last = re.lastIndex;
+  }
+  if (last < value.length) pushText(value.slice(last));
+  return segs;
+}
+
+/**
+ * Rich-text editor for a single template region. Supports limited inline
+ * formatting (bold / italic / underline), renders `{{token}}` merge fields as
+ * non-editable chips inline with the surrounding editable text, and serializes
+ * the content back to a markup string for save/preview.
+ */
+const MergeFieldEditor = React.forwardRef<
+  MergeFieldEditorHandle,
+  {
+    value: string;
+    readOnly: boolean;
+    fieldLabels: Record<string, string>;
+    placeholder?: string;
+    minHeight?: number;
+    onChange: (value: string) => void;
+    onFocus?: () => void;
+  }
+>(function MergeFieldEditor(props, ref) {
+  const elRef = React.useRef<HTMLDivElement | null>(null);
+  const lastValueRef = React.useRef<string>("");
+  const { onChange, fieldLabels } = props;
+
+  const makeChip = React.useCallback(
+    (key: string): HTMLSpanElement => {
+      const span = document.createElement("span");
+      span.contentEditable = "false";
+      span.dataset.token = key;
+      span.className =
+        "inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-1.5 text-[11px] font-medium text-primary mx-0.5 align-baseline";
+      span.textContent = fieldLabels[key] ?? key;
+      return span;
+    },
+    [fieldLabels],
+  );
+
+  const renderHtml = React.useCallback(
+    (value: string) => {
+      const el = elRef.current;
+      if (!el) return;
+      el.innerHTML = "";
+      for (const s of parseRichValue(value)) {
+        if (s.br) {
+          el.appendChild(document.createElement("br"));
+          continue;
+        }
+        if (s.token) {
+          el.appendChild(makeChip(s.token));
+          continue;
+        }
+        let node: Node = document.createTextNode(s.text ?? "");
+        if (s.underline) {
+          const u = document.createElement("u");
+          u.appendChild(node);
+          node = u;
+        }
+        if (s.italic) {
+          const it = document.createElement("i");
+          it.appendChild(node);
+          node = it;
+        }
+        if (s.bold) {
+          const b = document.createElement("b");
+          b.appendChild(node);
+          node = b;
+        }
+        el.appendChild(node);
+      }
+    },
+    [makeChip],
+  );
+
+  const serialize = React.useCallback((): string => {
+    const el = elRef.current;
+    if (!el) return "";
+    type Ctx = { bold: boolean; italic: boolean; underline: boolean };
+    const deriveCtx = (
+      tag: string,
+      style: CSSStyleDeclaration | null,
+      ctx: Ctx,
+    ): Ctx => {
+      const next = { ...ctx };
+      if (tag === "B" || tag === "STRONG") next.bold = true;
+      if (tag === "I" || tag === "EM") next.italic = true;
+      if (tag === "U") next.underline = true;
+      if (style) {
+        const fw = style.fontWeight;
+        if (
+          fw === "bold" ||
+          fw === "bolder" ||
+          (/^\d+$/.test(fw) && parseInt(fw, 10) >= 600)
+        )
+          next.bold = true;
+        if (style.fontStyle === "italic") next.italic = true;
+        const td = `${style.textDecorationLine} ${style.textDecoration}`;
+        if (td.includes("underline")) next.underline = true;
+      }
+      return next;
+    };
+    const wrap = (text: string, ctx: Ctx): string => {
+      if (!text) return "";
+      let t = text;
+      if (ctx.underline) t = `<u>${t}</u>`;
+      if (ctx.italic) t = `<i>${t}</i>`;
+      if (ctx.bold) t = `<b>${t}</b>`;
+      return t;
+    };
+    const ser = (node: ChildNode, needsLeadNl: boolean, ctx: Ctx): string => {
+      if (node.nodeType === Node.TEXT_NODE)
+        return wrap(node.textContent ?? "", ctx);
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const e = node as HTMLElement;
+        if (e.dataset && e.dataset.token) return `{{${e.dataset.token}}}`;
+        if (e.tagName === "BR") return "\n";
+        const next = deriveCtx(e.tagName, e.style ?? null, ctx);
+        let inner = "";
+        e.childNodes.forEach((c, i) => {
+          inner += ser(c, i > 0, next);
+        });
+        if (e.tagName === "DIV" || e.tagName === "P") {
+          return (needsLeadNl ? "\n" : "") + inner;
+        }
+        return inner;
+      }
+      return "";
+    };
+    const base: Ctx = { bold: false, italic: false, underline: false };
+    let out = "";
+    el.childNodes.forEach((c, i) => {
+      out += ser(c, i > 0, base);
+    });
+    return out;
+  }, []);
+
+  // Render from the incoming value on mount and when it changes externally
+  // (e.g. Reset), but never clobber the DOM mid-typing.
+  React.useEffect(() => {
+    if (props.value !== lastValueRef.current) {
+      lastValueRef.current = props.value;
+      renderHtml(props.value);
+    }
+  }, [props.value, renderHtml]);
+
+  const handleInput = React.useCallback(() => {
+    const v = serialize();
+    lastValueRef.current = v;
+    onChange(v);
+  }, [serialize, onChange]);
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      insertToken: (key: string) => {
+        const el = elRef.current;
+        if (!el || props.readOnly) return;
+        el.focus();
+        const sel = window.getSelection();
+        const chip = makeChip(key);
+        if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
+          const range = sel.getRangeAt(0);
+          range.deleteContents();
+          range.insertNode(chip);
+          range.setStartAfter(chip);
+          range.setEndAfter(chip);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        } else {
+          el.appendChild(chip);
+        }
+        handleInput();
+      },
+      format: (cmd: RichFormatCommand) => {
+        const el = elRef.current;
+        if (!el || props.readOnly) return;
+        el.focus();
+        try {
+          document.execCommand("styleWithCSS", false, "false");
+        } catch {
+          /* ignore — not supported everywhere */
+        }
+        document.execCommand(cmd, false);
+        handleInput();
+      },
+    }),
+    [makeChip, handleInput, props.readOnly],
+  );
+
+  return (
+    <div
+      ref={elRef}
+      contentEditable={!props.readOnly}
+      suppressContentEditableWarning
+      onInput={handleInput}
+      onFocus={props.onFocus}
+      role="textbox"
+      aria-multiline="true"
+      data-placeholder={props.placeholder}
+      className={cn(
+        "mf-editor w-full rounded-md border border-input bg-background px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        props.readOnly && "cursor-default opacity-70",
+      )}
+      style={{ minHeight: props.minHeight ?? 52 }}
+    />
+  );
+});
+
+function DocTemplateEditor({ type }: { type: string }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["doc-template", type],
+    queryFn: () =>
+      apiFetch<DocTemplateDetail>(`/config/document-templates/${type}`),
+  });
+
+  const [regions, setRegions] = React.useState<Record<string, string>>({});
+  const editorRefs = React.useRef<
+    Record<string, MergeFieldEditorHandle | null>
+  >({});
+
+  // Seed local editor state from the effective content (saved override or
+  // default) once the detail loads.
+  React.useEffect(() => {
+    if (!data) return;
+    const seed: Record<string, string> = {};
+    for (const r of data.regions) {
+      const savedVal = data.saved?.[r.key];
+      seed[r.key] = savedVal != null ? savedVal : r.default;
+    }
+    setRegions(seed);
+  }, [data]);
+
+  const [preview, setPreview] = React.useState<DocPreviewResult | null>(null);
+  const [projectQuery, setProjectQuery] = React.useState("");
+  const [selectedProject, setSelectedProject] = React.useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+
+  const { data: projectResults } = useQuery({
+    queryKey: ["doc-template-project-search", projectQuery],
+    queryFn: () =>
+      apiFetch<{ results: { id: string; projectName: string }[] }>(
+        `/projects/search?q=${encodeURIComponent(projectQuery)}&limit=6`,
+      ),
+    enabled: projectQuery.trim().length > 0,
+  });
+
+  const previewMutation = useMutation({
+    mutationFn: (body: { regions: Record<string, string>; projectId?: string }) =>
+      apiFetch<DocPreviewResult>(`/config/document-templates/${type}/preview`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (res) => setPreview(res),
+    onError: (e) =>
+      toast({
+        title: "Preview failed",
+        description: (e as Error).message,
+        variant: "destructive",
+      }),
+  });
+
+  const runPreview = React.useCallback(() => {
+    previewMutation.mutate({
+      regions,
+      projectId: selectedProject?.id,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regions, selectedProject]);
+
+  // Auto-run an initial preview once content is seeded.
+  const seededRef = React.useRef(false);
+  React.useEffect(() => {
+    if (data && Object.keys(regions).length > 0 && !seededRef.current) {
+      seededRef.current = true;
+      previewMutation.mutate({ regions });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, regions]);
+
+  const saveMutation = useMutation({
+    mutationFn: (body: Record<string, string | null>) =>
+      apiFetch<DocTemplateDetail>(`/config/document-templates/${type}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      toast({ title: "Template saved" });
+      qc.invalidateQueries({ queryKey: ["doc-templates"] });
+      qc.invalidateQueries({ queryKey: ["doc-template", type] });
+    },
+    onError: (e) =>
+      toast({
+        title: "Save failed",
+        description: (e as Error).message,
+        variant: "destructive",
+      }),
+  });
+
+  const fieldLabels = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const f of data?.fields ?? []) map[f.key] = f.label;
+    return map;
+  }, [data]);
+
+  if (isLoading) {
+    return <p className="text-sm text-muted-foreground">Loading…</p>;
+  }
+  if (isError || !data) {
+    return (
+      <p className="text-sm text-destructive">
+        Failed to load template: {(error as Error)?.message}
+      </p>
+    );
+  }
+
+  const canEdit = data.canEdit;
+
+  const insertFieldInto = (regionKey: string, fieldKey: string) => {
+    editorRefs.current[regionKey]?.insertToken(fieldKey);
+  };
+
+  const formatRegion = (regionKey: string, cmd: RichFormatCommand) => {
+    editorRefs.current[regionKey]?.format(cmd);
+  };
+
+  const handleSave = () => {
+    const body: Record<string, string | null> = {};
+    for (const r of data.regions) {
+      const value = regions[r.key] ?? "";
+      // Store null when the content equals the default so the document falls
+      // back to the canonical default (no stale copies of statutory wording).
+      body[r.key] = value === r.default ? null : value;
+    }
+    saveMutation.mutate(body);
+  };
+
+  const handleResetAll = () => {
+    const seed: Record<string, string> = {};
+    for (const r of data.regions) seed[r.key] = r.default;
+    setRegions(seed);
+    toast({
+      title: "Reset to defaults",
+      description: "Click Save to apply the reset.",
+    });
+  };
+
+  return (
+    <div className="space-y-5">
+    <Collapsible className="rounded-md border border-border">
+      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 rounded-md px-4 py-3 text-left hover:bg-muted/50">
+        <div>
+          <h3 className="text-base font-semibold text-foreground">
+            Customize content
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            {data.label} · Texas Property Code {data.statuteRef}
+            {data.customized ? " · Customized" : " · Using defaults"}
+          </p>
+        </div>
+        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-5 px-4 pb-4">
+        {canEdit && (
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleResetAll}
+              className="gap-1.5"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Reset
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={saveMutation.isPending}
+            >
+              {saveMutation.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        )}
+
+      {!canEdit && (
+        <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
+          <Lock className="h-3.5 w-3.5" />
+          You have read-only access. Only administrators can edit document
+          templates.
+        </div>
+      )}
+
+      {/* Editable regions */}
+      <style>{`.mf-editor:empty:before{content:attr(data-placeholder);color:var(--muted-foreground,#94a3b8);pointer-events:none;}`}</style>
+      <div className="space-y-4">
+        {data.regions.map((r) => (
+          <div
+            key={r.key}
+            className="rounded-md border border-border bg-muted/40 p-3"
+          >
+            <div className="mb-1.5 flex items-baseline justify-between gap-2">
+              <Label className="text-xs font-semibold capitalize">
+                {r.label}
+              </Label>
+              <span className="text-[11px] text-muted-foreground">
+                {r.description}
+              </span>
+            </div>
+            <div className="mb-1.5 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                disabled={!canEdit}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => formatRegion(r.key, "bold")}
+                className="h-7 w-7 rounded-md border border-border bg-background text-[13px] font-bold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                title="Bold"
+                aria-label="Bold"
+              >
+                B
+              </button>
+              <button
+                type="button"
+                disabled={!canEdit}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => formatRegion(r.key, "italic")}
+                className="h-7 w-7 rounded-md border border-border bg-background text-[13px] italic text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                title="Italic"
+                aria-label="Italic"
+              >
+                I
+              </button>
+              <button
+                type="button"
+                disabled={!canEdit}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => formatRegion(r.key, "underline")}
+                className="h-7 w-7 rounded-md border border-border bg-background text-[13px] underline text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                title="Underline"
+                aria-label="Underline"
+              >
+                U
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  disabled={!canEdit}
+                  className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-background px-2 text-[11px] font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="Insert merge field"
+                >
+                  Insert merge field
+                  <ChevronDown className="h-3 w-3" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+                  {data.fields.map((f) => (
+                    <DropdownMenuItem
+                      key={f.key}
+                      className="text-xs"
+                      onSelect={() => insertFieldInto(r.key, f.key)}
+                    >
+                      {f.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            <MergeFieldEditor
+              ref={(h) => {
+                editorRefs.current[r.key] = h;
+              }}
+              value={regions[r.key] ?? ""}
+              readOnly={!canEdit}
+              fieldLabels={fieldLabels}
+              onChange={(value) =>
+                setRegions((prev) => ({ ...prev, [r.key]: value }))
+              }
+              minHeight={r.key === "signature" || r.key === "footer" ? 68 : 48}
+              placeholder={
+                r.key === "branding" || r.key === "intro" || r.key === "closing"
+                  ? "(empty — nothing rendered)"
+                  : undefined
+              }
+            />
+          </div>
+        ))}
+      </div>
+      </CollapsibleContent>
+    </Collapsible>
+
+      {/* Locked statutory body */}
+      <div>
+        <div className="mb-1 flex items-center gap-1.5">
+          <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+          <Label className="text-xs font-semibold">
+            Statutory body (locked)
+          </Label>
+        </div>
+        <div className="rounded-md border border-border bg-muted px-3 py-2 text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap">
+          {data.lockedBody}
+        </div>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          This statutory wording is fixed and merges with real data at PDF
+          generation. It cannot be edited.
+        </p>
+      </div>
+
+      {/* Live preview */}
+      <div className="rounded-md border border-border">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
+          <div className="flex items-center gap-1.5 text-xs font-semibold">
+            <Eye className="h-3.5 w-3.5" />
+            Live preview
+            <span className="font-normal text-muted-foreground">
+              ·{" "}
+              {preview?.source.kind === "project"
+                ? preview.source.projectName
+                : "Sample data"}
+            </span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={runPreview}
+            disabled={previewMutation.isPending}
+            className="gap-1.5"
+          >
+            <Eye className="h-3.5 w-3.5" />
+            {previewMutation.isPending ? "Rendering…" : "Update preview"}
+          </Button>
+        </div>
+
+        <div className="space-y-2 px-3 py-2">
+          <div className="relative">
+            <Input
+              value={projectQuery}
+              onChange={(e) => setProjectQuery(e.target.value)}
+              placeholder="Preview with a real project (search by name)…"
+              className="h-8 text-xs"
+            />
+            {projectQuery.trim().length > 0 &&
+              (projectResults?.results.length ?? 0) > 0 && (
+                <div className="absolute z-10 mt-1 w-full rounded-md border border-border bg-popover shadow-md">
+                  {projectResults!.results.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setSelectedProject({ id: p.id, name: p.projectName });
+                        setProjectQuery("");
+                        previewMutation.mutate({ regions, projectId: p.id });
+                      }}
+                      className="block w-full px-3 py-1.5 text-left text-xs hover:bg-muted"
+                    >
+                      {p.projectName}
+                    </button>
+                  ))}
+                </div>
+              )}
+          </div>
+          {selectedProject && (
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+              Using project:{" "}
+              <span className="font-medium text-foreground">
+                {selectedProject.name}
+              </span>
+              <button
+                onClick={() => {
+                  setSelectedProject(null);
+                  previewMutation.mutate({ regions });
+                }}
+                className="underline"
+              >
+                use sample data
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-border bg-background px-5 py-4">
+          {preview ? (
+            <DocPreviewBody resolved={preview.resolved} />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Preview will appear here.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DocPreviewBody({ resolved }: { resolved: ResolvedDoc }) {
+  const block = (text: string, className: string) =>
+    text.trim() ? (
+      <p className={cn("whitespace-pre-wrap", className)}>{text}</p>
+    ) : null;
+
+  return (
+    <div className="mx-auto max-w-[640px] space-y-3 text-[11px] leading-relaxed text-foreground">
+      {block(resolved.branding, "text-center text-muted-foreground")}
+      {block(resolved.intro, "")}
+      <div className="rounded border-l-2 border-border bg-muted/50 px-3 py-2">
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Statutory body (locked)
+        </p>
+        <p className="whitespace-pre-wrap">{resolved.lockedBody}</p>
+      </div>
+      {block(resolved.closing, "")}
+      {block(resolved.signature, "text-muted-foreground")}
+      {block(
+        resolved.footer,
+        "text-center text-[10px] text-muted-foreground border-t border-border pt-2",
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page root
 // ---------------------------------------------------------------------------
 
@@ -1644,6 +2486,7 @@ export default function ConfigPage() {
             label: "Jurisdiction Rules",
             Icon: ShieldAlert,
           },
+          { value: "documents", label: "Document Templates", Icon: FileText },
           { value: "integrations", label: "Integrations", Icon: Banknote },
         ].map((t) => (
           <button
@@ -1701,6 +2544,10 @@ export default function ConfigPage() {
               <ShieldAlert className="h-4 w-4" />
               Jurisdiction Rules
             </TabsTrigger>
+            <TabsTrigger value="documents" className="gap-1.5">
+              <FileText className="h-4 w-4" />
+              Document Templates
+            </TabsTrigger>
             <TabsTrigger value="integrations" className="gap-1.5">
               <Banknote className="h-4 w-4" />
               Integrations
@@ -1717,6 +2564,10 @@ export default function ConfigPage() {
 
           <TabsContent value="jurisdictions" className="mt-6">
             <JurisdictionRulesTab />
+          </TabsContent>
+
+          <TabsContent value="documents" className="mt-6">
+            <DocumentTemplatesTab />
           </TabsContent>
 
           <TabsContent value="integrations" className="mt-6">
