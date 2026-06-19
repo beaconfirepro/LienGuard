@@ -1,14 +1,14 @@
 import { money } from "@/lib/utils";
 
-const LABELS = ["0–30", "31–60", "61–90", "90+"];
-const BAR_COLORS = ["#14eba3", "#f59f0a", "#f97316", "#eb143f"];
+const LABELS = ["Current", "1–30", "31–60", "61–90", "90+"];
+const BAR_COLORS = ["#14eba3", "#a3e635", "#f59f0a", "#f97316", "#eb143f"];
 
 interface AgingBucketsProps {
   values?: number[];
   variant?: "bars" | "columns";
 }
 
-export function AgingBuckets({ values = [0, 0, 0, 0], variant = "columns" }: AgingBucketsProps) {
+export function AgingBuckets({ values = [0, 0, 0, 0, 0], variant = "columns" }: AgingBucketsProps) {
   const total = values.reduce((a, b) => a + b, 0);
   const max = Math.max(1, ...values);
 
