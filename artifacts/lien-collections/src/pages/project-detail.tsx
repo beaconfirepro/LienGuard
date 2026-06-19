@@ -15,6 +15,14 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -349,6 +357,100 @@ function NoticeBadge({
 }
 
 // ---------------------------------------------------------------------------
+// Create Notice — inline button + minimal modal per work month
+// ---------------------------------------------------------------------------
+
+const NOTICE_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: "early_warning", label: "Early Warning (Courtesy)" },
+  { value: "statutory_claim", label: "Statutory Claim (§ 53.056)" },
+  { value: "retainage_claim", label: "Retainage Claim (§ 53.057)" },
+];
+
+function CreateNoticeButton({
+  streamId,
+  workMonthId,
+  workMonthLabel,
+}: {
+  streamId: string;
+  workMonthId: string;
+  workMonthLabel: string;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [open, setOpen] = React.useState(false);
+  const [noticeType, setNoticeType] = React.useState("statutory_claim");
+
+  const create = useMutation({
+    mutationFn: () =>
+      apiFetch<{ notice: StreamNotice }>(`/notices`, {
+        method: "POST",
+        body: JSON.stringify({ lienStreamId: streamId, workMonthId, noticeType }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["stream-notices", streamId] });
+      toast({
+        title: "Notice created",
+        description: `Draft notice created for ${workMonthLabel}.`,
+      });
+      setOpen(false);
+    },
+    onError: (err: Error) =>
+      toast({ title: "Create failed", description: err.message, variant: "destructive" }),
+  });
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-6 text-xs gap-1 px-2"
+        onClick={() => setOpen(true)}
+      >
+        <Plus className="h-3 w-3" />
+        Create Notice
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create Notice</DialogTitle>
+            <DialogDescription>
+              Draft a new notice for {workMonthLabel}. Recipients are auto-filled from the project
+              parties.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 py-1">
+            <Label htmlFor="notice-type">Notice type</Label>
+            <Select value={noticeType} onValueChange={setNoticeType}>
+              <SelectTrigger id="notice-type">
+                <SelectValue placeholder="Select a notice type" />
+              </SelectTrigger>
+              <SelectContent>
+                {NOTICE_TYPE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)} disabled={create.isPending}>
+              Cancel
+            </Button>
+            <Button onClick={() => create.mutate()} disabled={create.isPending}>
+              {create.isPending ? "Creating…" : "Create Notice"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Deadline countdown helper — days until the earliest open notice deadline
 // ---------------------------------------------------------------------------
 
@@ -494,6 +596,14 @@ function StreamDeadlinesPanel({
                     {/* Countdown for open notice deadlines when no notice exists yet */}
                     {wmNotices.length === 0 && noticeDays !== null && (
                       <DeadlineCountdown days={noticeDays} />
+                    )}
+                    {/* Inline create-notice action when no notice exists yet */}
+                    {wmNotices.length === 0 && (
+                      <CreateNoticeButton
+                        streamId={streamId}
+                        workMonthId={wm.id}
+                        workMonthLabel={formatMonth(wm.month)}
+                      />
                     )}
                   </div>
                   {wm.invoiceLinkId && !wm.clearedFlag && (
