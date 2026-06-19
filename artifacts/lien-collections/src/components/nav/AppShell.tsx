@@ -4,8 +4,9 @@ import { cn } from "@/lib/utils";
 import { useResponsive } from "@/hooks/use-responsive";
 import {
   LayoutGrid, Landmark, DollarSign, Lock, Settings,
-  ChevronLeft, ChevronRight, Bell, Menu, X, Search,
+  ChevronLeft, Bell, Menu, X, Search,
   Sun, Moon, PanelRightClose, PanelRightOpen,
+  PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 
 /* ─── Right-panel context ────────────────────────────────────────────────── */
@@ -89,24 +90,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [drawer, setDrawer] = React.useState(false);
   const [right, setRight] = React.useState<React.ReactNode>(null);
   const [rightOpen, setRightOpen] = React.useState(true);
+  const [leftOpen, setLeftOpen] = React.useState(true);
 
   React.useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
     document.body.classList.toggle("dark", theme === "dark");
   }, [theme]);
 
-  const sidebarW = isDesktop ? (collapsed ? 70 : 236) : 0;
-  const avail = width - sidebarW;
-  const rightFits = avail - 314 >= 470;
-  const hasRight = !!right && rightOpen && !isMobile;
-  const rightCol = hasRight && rightFits && isDesktop;
-  const rightStacked = hasRight && !rightCol;
-
   const title = getTitle(location);
 
   const isLiensSection = LIENS_PATHS.some((p) =>
     p === "/liens" ? location === p || location.startsWith("/projects") || location.startsWith("/filing") || location.startsWith("/monthly") || location.startsWith("/send-queue") || location.startsWith("/waivers") : location.startsWith(p)
   );
+
+  /* Inner left tab (DD-UI: LP · content · RP). Shown for sections that have
+     their own pages — currently the Liens workspace. */
+  const liensNav = MODULE_NAV.find((m) => m.key === "liens");
+  const sectionNav = isLiensSection && liensNav?.sub
+    ? { heading: "Liens", items: liensNav.sub }
+    : null;
+
+  const sidebarW = isDesktop ? (collapsed ? 70 : 236) : 0;
+  const hasLeft = !!sectionNav && leftOpen && isDesktop;
+  const leftW = hasLeft ? 208 : 0;
+  const avail = width - sidebarW - leftW;
+  const rightFits = avail - 314 >= 470;
+  const hasRight = !!right && rightOpen && !isMobile;
+  const rightCol = hasRight && rightFits && isDesktop;
+  const rightStacked = hasRight && !rightCol;
 
   const ctx = { setRight };
 
@@ -149,44 +160,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   m.key === "liens" ? (location.startsWith(m.to) || isLiensSection) :
                   location.startsWith(m.to);
                 return (
-                  <div key={m.key}>
-                    <Link href={m.to}>
-                      <div
-                        className={cn(
-                          "flex items-center gap-3 rounded-md py-2.5 text-[13.5px] cursor-pointer",
-                          collapsed ? "justify-center px-2.5" : "px-3",
-                        )}
-                        style={active
-                          ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
-                          : { color: "var(--text-dim)", fontWeight: 500 }}
-                      >
-                        <m.Icon className="h-[18px] w-[18px] shrink-0" />
-                        {!collapsed && <span className="whitespace-nowrap">{m.label}</span>}
-                      </div>
-                    </Link>
-                    {!collapsed && m.sub && active && (
-                      <div
-                        className="ml-4 mt-0.5 flex flex-col gap-0.5 border-l pb-1 pl-3"
-                        style={{ borderColor: "var(--helm-border)" }}
-                      >
-                        {m.sub.map((s) => {
-                          const sa = location === s.to;
-                          return (
-                            <Link key={s.to} href={s.to}>
-                              <div
-                                className="rounded-md px-2 py-1.5 text-[12.5px] cursor-pointer"
-                                style={sa
-                                  ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
-                                  : { color: "var(--text-dim)", fontWeight: 500 }}
-                              >
-                                {s.label}
-                              </div>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                  <Link key={m.key} href={m.to}>
+                    <div
+                      className={cn(
+                        "flex items-center gap-3 rounded-md py-2.5 text-[13.5px] cursor-pointer",
+                        collapsed ? "justify-center px-2.5" : "px-3",
+                      )}
+                      style={active
+                        ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
+                        : { color: "var(--text-dim)", fontWeight: 500 }}
+                    >
+                      <m.Icon className="h-[18px] w-[18px] shrink-0" />
+                      {!collapsed && <span className="whitespace-nowrap">{m.label}</span>}
+                    </div>
+                  </Link>
                 );
               })}
             </nav>
@@ -265,6 +252,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="sticky top-16 z-20 flex items-center gap-3 border-b px-4 py-2.5 md:px-6"
             style={{ background: "var(--bg)", borderColor: "var(--helm-border)" }}
           >
+            {!!sectionNav && isDesktop && (
+              <button
+                onClick={() => setLeftOpen((o) => !o)}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors"
+                style={{
+                  background: leftOpen ? "var(--surface-3)" : "var(--surface-2)",
+                  borderColor: "var(--helm-border)",
+                  color: leftOpen ? "var(--text-base)" : "var(--text-dim)",
+                }}
+                title={leftOpen ? "Collapse panel" : "Expand panel"}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-3)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = leftOpen ? "var(--surface-3)" : "var(--surface-2)")}
+              >
+                {leftOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+              </button>
+            )}
             <div className="min-w-0 flex-1">
               <div className="truncate text-[15.5px] font-semibold" style={{ color: "var(--text-base)" }}>{title}</div>
             </div>
@@ -286,14 +289,46 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             )}
           </div>
 
-          {/* Body — content + optional right panel */}
+          {/* Body — inner left tab · content · right panel (DD-UI: LP · content · RP) */}
           <div
             className="grid flex-1 items-start gap-4 p-4 md:gap-[18px] md:p-[18px]"
             style={{
-              gridTemplateColumns: isDesktop && rightCol ? "minmax(0,1fr) 296px" : "1fr",
+              gridTemplateColumns: [
+                hasLeft ? "208px" : null,
+                "minmax(0,1fr)",
+                rightCol ? "296px" : null,
+              ].filter(Boolean).join(" "),
               paddingBottom: isMobile ? 80 : undefined,
             }}
           >
+            {hasLeft && sectionNav && (
+              <aside
+                className="sticky top-[120px] flex flex-col gap-0.5 rounded-lg border p-2"
+                style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
+              >
+                <div
+                  className="px-2 pb-1.5 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.12em]"
+                  style={{ color: "var(--text-muted-color)" }}
+                >
+                  {sectionNav.heading}
+                </div>
+                {sectionNav.items.map((s) => {
+                  const sa = location === s.to;
+                  return (
+                    <Link key={s.to} href={s.to}>
+                      <div
+                        className="rounded-md px-2.5 py-2 text-[12.5px] cursor-pointer transition-colors"
+                        style={sa
+                          ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
+                          : { color: "var(--text-dim)", fontWeight: 500 }}
+                      >
+                        {s.label}
+                      </div>
+                    </Link>
+                  );
+                })}
+              </aside>
+            )}
             <div className="flex min-w-0 flex-col gap-4">
               {children}
             </div>
@@ -359,26 +394,54 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex h-16 items-center justify-between border-b px-[18px]" style={{ borderColor: "var(--helm-border)" }}>
-                <span className="text-[17px] font-bold" style={{ color: "var(--text-base)" }}>Helm</span>
+                <span className="text-[15px] font-bold leading-tight" style={{ color: "var(--text-base)" }}>
+                  Lien &amp; Collections
+                  <span className="block text-[9.5px] font-semibold uppercase tracking-[0.16em]" style={{ color: "var(--text-muted-color)" }}>By Beacon</span>
+                </span>
                 <button onClick={() => setDrawer(false)} style={{ color: "var(--text-dim)" }}>
                   <X className="h-5 w-5" />
                 </button>
               </div>
               <nav className="flex flex-1 flex-col gap-1 p-3">
                 {MODULE_NAV.map((m) => {
-                  const active = m.to === "/" ? location === "/" : location.startsWith(m.to);
+                  const active =
+                    m.to === "/" ? location === "/" :
+                    m.key === "liens" ? (location.startsWith(m.to) || isLiensSection) :
+                    location.startsWith(m.to);
                   return (
-                    <Link key={m.key} href={m.to}>
-                      <div
-                        className="flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm cursor-pointer"
-                        style={active
-                          ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
-                          : { color: "var(--text-dim)", fontWeight: 500 }}
-                        onClick={() => setDrawer(false)}
-                      >
-                        <m.Icon className="h-4 w-4 shrink-0" />{m.label}
-                      </div>
-                    </Link>
+                    <div key={m.key}>
+                      <Link href={m.to}>
+                        <div
+                          className="flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm cursor-pointer"
+                          style={active
+                            ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
+                            : { color: "var(--text-dim)", fontWeight: 500 }}
+                          onClick={() => setDrawer(false)}
+                        >
+                          <m.Icon className="h-4 w-4 shrink-0" />{m.label}
+                        </div>
+                      </Link>
+                      {m.sub && active && (
+                        <div className="ml-4 mt-0.5 flex flex-col gap-0.5 border-l pb-1 pl-3" style={{ borderColor: "var(--helm-border)" }}>
+                          {m.sub.map((s) => {
+                            const sa = location === s.to;
+                            return (
+                              <Link key={s.to} href={s.to}>
+                                <div
+                                  className="rounded-md px-2 py-1.5 text-[12.5px] cursor-pointer"
+                                  style={sa
+                                    ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
+                                    : { color: "var(--text-dim)", fontWeight: 500 }}
+                                  onClick={() => setDrawer(false)}
+                                >
+                                  {s.label}
+                                </div>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </nav>
