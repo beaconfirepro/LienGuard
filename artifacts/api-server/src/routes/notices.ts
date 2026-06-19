@@ -23,8 +23,9 @@ import {
   projectPartyLinksTable,
   invoiceLinksTable,
   mailingRecordsTable,
+  lienDeadlinesTable,
 } from "@workspace/db";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, isNull } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { createCertifiedMailLabel } from "../lib/shippo";
 
@@ -663,7 +664,26 @@ router.post("/notices/:id/send", async (req, res) => {
     .where(and(eq(noticesTable.id, id), eq(noticesTable.orgId, orgId)))
     .returning();
 
-  res.json({ notice: updated, mailing });
+  // Auto-satisfy matching open deadlines for this work month. When a notice is
+  // sent, the notice/retainage deadline it fulfills should be marked satisfied
+  // so the timeline greys it out and the countdown badge disappears.
+  let satisfiedDeadlines: typeof lienDeadlinesTable.$inferSelect[] = [];
+  if (notice.workMonthId) {
+    satisfiedDeadlines = await db
+      .update(lienDeadlinesTable)
+      .set({ satisfiedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          eq(lienDeadlinesTable.orgId, orgId),
+          eq(lienDeadlinesTable.workMonthId, notice.workMonthId),
+          inArray(lienDeadlinesTable.ruleKind, ["notice", "retainage"]),
+          isNull(lienDeadlinesTable.satisfiedAt),
+        ),
+      )
+      .returning();
+  }
+
+  res.json({ notice: updated, mailing, satisfiedDeadlines });
 });
 
 // ---------------------------------------------------------------------------
