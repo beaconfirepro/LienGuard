@@ -664,15 +664,15 @@ function MailingTracker() {
           id: string;
           status: string;
           noticeType: string;
-          trackingNumber?: string;
           sentAt: string | null;
           deliveredAt: string | null;
           project: { cachedProjectName: string | null } | null;
+          mailing: { trackingNumber: string | null; labelUrl: string | null } | null;
         }[];
-      }>("/monthly/send-queue"),
+      }>("/notices?status=sent,delivered"),
   });
 
-  const sentNotices = (data?.notices ?? []).filter((n) => n.status === "sent" || n.status === "delivered");
+  const sentNotices = data?.notices ?? [];
 
   if (!sentNotices.length) return null;
 

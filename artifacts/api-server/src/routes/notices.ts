@@ -31,6 +31,91 @@ import { createCertifiedMailLabel } from "../lib/shippo";
 const router = Router();
 router.use(requireSession);
 
+// ---------------------------------------------------------------------------
+// GET /notices — list notices with optional status filter
+// ---------------------------------------------------------------------------
+
+router.get("/notices", async (req, res) => {
+  const { orgId } = getSession(req);
+  const { status, projectId } = req.query as { status?: string; projectId?: string };
+
+  const conditions = [eq(noticesTable.orgId, orgId)];
+
+  if (status) {
+    const statuses = status.split(",").map((s) => s.trim()).filter(Boolean);
+    if (statuses.length === 1) {
+      conditions.push(eq(noticesTable.status, statuses[0] as "draft" | "approved" | "sent" | "delivered"));
+    } else if (statuses.length > 1) {
+      conditions.push(inArray(noticesTable.status, statuses as ("draft" | "approved" | "sent" | "delivered")[]));
+    }
+  }
+
+  if (projectId) {
+    const streams = await db
+      .select({ id: lienStreamsTable.id })
+      .from(lienStreamsTable)
+      .where(and(eq(lienStreamsTable.orgId, orgId), eq(lienStreamsTable.lienProjectId, projectId)));
+    const streamIds = streams.map((s) => s.id);
+    if (!streamIds.length) {
+      res.json({ notices: [] });
+      return;
+    }
+    conditions.push(inArray(noticesTable.lienStreamId, streamIds));
+  }
+
+  const notices = await db
+    .select()
+    .from(noticesTable)
+    .where(and(...conditions));
+
+  if (!notices.length) {
+    res.json({ notices: [] });
+    return;
+  }
+
+  // Enrich with mailing records and project names.
+  const noticeIds = notices.map((n) => n.id);
+  const mailings = await db
+    .select()
+    .from(mailingRecordsTable)
+    .where(and(eq(mailingRecordsTable.orgId, orgId), inArray(mailingRecordsTable.noticeId, noticeIds)));
+
+  const mailingByNotice = new Map(mailings.map((m) => [m.noticeId, m]));
+
+  // Load projects via streams.
+  const streamIds = [...new Set(notices.map((n) => n.lienStreamId).filter(Boolean))] as string[];
+  const streams = streamIds.length
+    ? await db
+        .select({ id: lienStreamsTable.id, lienProjectId: lienStreamsTable.lienProjectId })
+        .from(lienStreamsTable)
+        .where(and(eq(lienStreamsTable.orgId, orgId), inArray(lienStreamsTable.id, streamIds)))
+    : [];
+
+  const projectIds = [...new Set(streams.map((s) => s.lienProjectId))];
+  const projects = projectIds.length
+    ? await db
+        .select({ id: lienProjectsTable.id, cachedProjectName: lienProjectsTable.cachedProjectName })
+        .from(lienProjectsTable)
+        .where(and(eq(lienProjectsTable.orgId, orgId), inArray(lienProjectsTable.id, projectIds)))
+    : [];
+
+  const streamProjectMap = new Map(streams.map((s) => [s.id, s.lienProjectId]));
+  const projectMap = new Map(projects.map((p) => [p.id, p]));
+
+  const enriched = notices.map((n) => {
+    const projectId = n.lienStreamId ? streamProjectMap.get(n.lienStreamId) : undefined;
+    const project = projectId ? projectMap.get(projectId) : undefined;
+    const mailing = n.id ? mailingByNotice.get(n.id) : undefined;
+    return {
+      ...n,
+      project: project ?? null,
+      mailing: mailing ?? null,
+    };
+  });
+
+  res.json({ notices: enriched });
+});
+
 function buildWorkDescription(workStream: string, noticeType: string): string {
   if (noticeType === "retainage_claim") {
     return `Retainage for fire-protection ${workStream} work`;

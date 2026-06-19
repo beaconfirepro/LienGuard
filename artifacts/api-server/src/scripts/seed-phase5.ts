@@ -67,6 +67,10 @@ async function main() {
         target: waiversTable.id,
         set: {
           approvalStatus: w.approvalStatus,
+          pmApprovedByUserId: null,
+          pmApprovedAt: null,
+          financeApprovedByUserId: null,
+          financeApprovedAt: null,
           notarized: w.notarized,
           signedDate: w.signedDate ?? null,
           invoiceLinkId: w.invoiceLinkId ?? null,

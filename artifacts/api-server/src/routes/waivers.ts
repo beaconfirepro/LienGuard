@@ -24,6 +24,7 @@ import {
   noticesTable,
   mailingRecordsTable,
   linkedClientsTable,
+  noticeRecipientsTable,
 } from "@workspace/db";
 import { eq, and, inArray, isNull, not } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
@@ -307,9 +308,17 @@ router.post("/waivers/:id/approve-pm", requireSession, async (req, res) => {
     return;
   }
 
-  // Only PM (or admin) may approve. Dev: accept any session user.
-  // In production: check req.session.role === "pm" || "admin".
-  const userId = "user_coord"; // dev placeholder — replace with req.session.userId
+  // Role gate — only PM or admin may approve.
+  const session = getSession(req);
+  const canApprovePm = !session.role || session.role === "pm" || session.role === "admin";
+  if (!canApprovePm) {
+    res.status(403).json({
+      error: `Your role ('${session.role}') is not authorized to approve PM gates. Required: pm or admin.`,
+    });
+    return;
+  }
+
+  const userId = session.userId ?? "user_unknown";
 
   const newStatus =
     waiver.waiverType === "unconditional_progress"
@@ -371,7 +380,17 @@ router.post("/waivers/:id/approve-finance", requireSession, async (req, res) => 
     return;
   }
 
-  const userId = "user_finance"; // dev placeholder
+  // Role gate — only Finance or admin may approve.
+  const session = getSession(req);
+  const canApproveFinance = !session.role || session.role === "finance" || session.role === "admin";
+  if (!canApproveFinance) {
+    res.status(403).json({
+      error: `Your role ('${session.role}') is not authorized to approve Finance gates. Required: finance or admin.`,
+    });
+    return;
+  }
+
+  const userId = session.userId ?? "user_unknown";
 
   const [updated] = await db
     .update(waiversTable)
@@ -411,12 +430,39 @@ router.post("/waivers/:id/notarize", requireSession, async (req, res) => {
     return;
   }
 
-  // Load project to check requiresNotarizedWaivers via linkedClient (best effort).
+  // Load project for display name.
   const [project] = await db
     .select()
     .from(lienProjectsTable)
     .where(and(eq(lienProjectsTable.id, waiver.lienProjectId), eq(lienProjectsTable.orgId, orgId)))
     .limit(1);
+
+  // Enforce requiresNotarizedWaivers gate via invoiceLinkId → linkedClient.
+  // The join path: waiver.invoiceLinkId → invoiceLinksTable.linkedClientId → linkedClientsTable.requiresNotarizedWaivers
+  if (waiver.invoiceLinkId) {
+    const [invoice] = await db
+      .select({ linkedClientId: invoiceLinksTable.linkedClientId })
+      .from(invoiceLinksTable)
+      .where(and(eq(invoiceLinksTable.id, waiver.invoiceLinkId), eq(invoiceLinksTable.orgId, orgId)))
+      .limit(1);
+
+    if (invoice?.linkedClientId) {
+      const [client] = await db
+        .select({ requiresNotarizedWaivers: linkedClientsTable.requiresNotarizedWaivers })
+        .from(linkedClientsTable)
+        .where(and(eq(linkedClientsTable.id, invoice.linkedClientId), eq(linkedClientsTable.orgId, orgId)))
+        .limit(1);
+
+      // If the client record explicitly states notarization is NOT required, block it.
+      if (client && client.requiresNotarizedWaivers === false) {
+        res.status(409).json({
+          error: "The linked client does not require notarized waivers. Notarization is not applicable for this waiver.",
+          code: "NOTARIZATION_NOT_REQUIRED",
+        });
+        return;
+      }
+    }
+  }
 
   const docDescription = `Texas Property Code § 53.284 Lien Waiver — ${waiver.waiverType.replace(/_/g, " ")} — ${project?.cachedProjectName ?? waiver.lienProjectId}`;
 

@@ -1,8 +1,11 @@
 import { Request, Response, NextFunction } from "express";
 
+export type UserRole = "admin" | "pm" | "finance" | "coordinator";
+
 export interface SessionData {
   orgId: string;
   userId?: string;
+  role?: UserRole;
 }
 
 declare global {

@@ -7,9 +7,14 @@
  * Usage:
  *   curl -c cookies.txt http://localhost:8080/dev/session
  *   curl -b cookies.txt http://localhost:8080/api/org
+ *
+ * Role simulation (for testing approval gates):
+ *   curl -c cookies.txt "http://localhost:8080/api/dev/session?role=pm"
+ *   Supported roles: admin (default), pm, finance, coordinator
  */
 import { Router, type IRouter } from "express";
-import type { Response } from "express";
+import type { Request, Response } from "express";
+import type { UserRole } from "../lib/session";
 
 const router: IRouter = Router();
 
@@ -18,10 +23,10 @@ const DEV_USER = process.env.DEV_USER_ID ?? "user_dev_001";
 
 const SESSION_MAX_AGE_MS = 8 * 60 * 60 * 1000; /* 8 hours */
 
-function setSessionCookie(res: Response, orgId: string, userId: string) {
+function setSessionCookie(res: Response, orgId: string, userId: string, role: UserRole) {
   res.cookie(
     "lc_session",
-    JSON.stringify({ orgId, userId }),
+    JSON.stringify({ orgId, userId, role }),
     {
       signed: true,
       httpOnly: true,
@@ -32,12 +37,19 @@ function setSessionCookie(res: Response, orgId: string, userId: string) {
 }
 
 /** GET /dev/session — issue a signed session cookie for the dev test org. */
-router.get("/session", (_req, res) => {
-  setSessionCookie(res, DEV_ORG, DEV_USER);
+router.get("/session", (req: Request, res) => {
+  const validRoles: UserRole[] = ["admin", "pm", "finance", "coordinator"];
+  const roleParam = req.query.role as string | undefined;
+  const role: UserRole = validRoles.includes(roleParam as UserRole)
+    ? (roleParam as UserRole)
+    : "admin";
+
+  setSessionCookie(res, DEV_ORG, DEV_USER, role);
   res.json({
     message: "Dev session cookie set",
     orgId: DEV_ORG,
     userId: DEV_USER,
+    role,
     expiresIn: "8h",
   });
 });
