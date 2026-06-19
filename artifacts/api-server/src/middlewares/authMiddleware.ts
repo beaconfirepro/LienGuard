@@ -29,6 +29,36 @@ declare global {
   }
 }
 
+// ── TEMPORARY LOGIN BYPASS ───────────────────────────────────────────────
+// When AUTH_BYPASS=1 every request is treated as an authenticated admin so we
+// can use the app without going through the real Replit Auth / OIDC flow during
+// development. This is a full authorization bypass, so it is triple-guarded:
+//   1. opt-in via AUTH_BYPASS=1 (set development-scoped only),
+//   2. refuses to activate when NODE_ENV === "production",
+//   3. refuses to activate inside a Replit deployment (REPLIT_DEPLOYMENT set).
+// Remove this block (and the AUTH_BYPASS env var) to restore normal login.
+const AUTH_BYPASS =
+  process.env.AUTH_BYPASS === "1" &&
+  process.env.NODE_ENV !== "production" &&
+  !process.env.REPLIT_DEPLOYMENT;
+
+if (AUTH_BYPASS) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    "⚠️  AUTH_BYPASS is ACTIVE — every request is authenticated as admin. " +
+      "This must NEVER run in a deployed/production environment.",
+  );
+}
+
+const BYPASS_USER: Express.User = {
+  id: "dev-bypass-user",
+  email: "dev@local.test",
+  firstName: "Dev",
+  lastName: "Bypass",
+  profileImageUrl: null,
+  role: "admin",
+};
+
 async function refreshIfExpired(
   sid: string,
   session: SessionData,
@@ -64,6 +94,12 @@ export async function authMiddleware(
   req.isAuthenticated = function (this: Request) {
     return this.user != null;
   } as Request["isAuthenticated"];
+
+  if (AUTH_BYPASS) {
+    req.user = BYPASS_USER;
+    next();
+    return;
+  }
 
   const sid = getSessionId(req);
   if (!sid) {
