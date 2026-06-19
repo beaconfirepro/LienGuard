@@ -16,6 +16,7 @@ import noticesRouter, { mailingWebhookRouter } from "./routes/notices";
 import waiversRouter from "./routes/waivers";
 import filingRouter from "./routes/filing";
 import reportsRouter from "./routes/reports";
+import collectionsRouter from "./routes/collections";
 import devRouter from "./routes/dev";
 import { logger } from "./lib/logger";
 import { parseSession } from "./lib/session";
@@ -65,6 +66,7 @@ app.use("/api", mailingWebhookRouter);      // POST /api/webhooks/mailing       
 app.use("/api", waiversRouter);             // POST /api/waivers, GET /api/waivers/exposure, etc.
 app.use("/api", filingRouter);              // POST /api/filing/:streamId/*, GET /api/filing/stream/:sid
 app.use("/api", reportsRouter);             // GET /api/reports/exposure, /timeline/:id, /lapsed
+app.use("/api/collections", collectionsRouter); // GET/POST /api/collections/*     (session)
 app.use("/api", apiRouter);                 // GET /api/org, etc.                  (session, catch-all)
 
 export default app;
