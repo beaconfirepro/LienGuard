@@ -312,35 +312,107 @@ export default function AccountDetailPage() {
         <AgingBuckets values={agingValues} variant="columns" />
       </div>
 
-      {/* Lien backstop */}
-      {lienBackstop ? (
-        <div
-          className="flex items-center gap-2.5 rounded-lg border px-[18px] py-3.5"
-          style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
-        >
-          <Landmark className="h-4 w-4 shrink-0 text-[#f59f0a]" />
-          <div className="text-[12.5px]" style={{ color: "var(--text-dim)" }}>
-            Lien backstop —{" "}
-            <span className="font-semibold" style={{ color: "var(--text-base)" }}>
-              {lienBackstop.deadlineType.replace("_", " ")} due{" "}
-              {new Date(lienBackstop.deadlineDate).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </span>
+      {/* Escalation ladder — full ladder with current stage highlighted */}
+      <div
+        className="overflow-hidden rounded-lg border"
+        style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
+      >
+        <div className="border-b px-[18px] py-3" style={{ borderColor: "var(--helm-border)" }}>
+          <div className="text-[13px] font-semibold" style={{ color: "var(--text-base)" }}>
+            Escalation ladder
           </div>
         </div>
-      ) : (
-        <div
-          className="flex items-center gap-2.5 rounded-lg border px-[18px] py-3.5"
-          style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
-        >
-          <Landmark className="h-4 w-4 shrink-0" style={{ color: "var(--text-dim)" }} />
-          <div className="text-[12.5px]" style={{ color: "var(--text-dim)" }}>
-            No lien deadlines found for this client's projects.
-          </div>
+        <div className="divide-y" style={{ borderColor: "var(--helm-border)" }}>
+          {ESCALATION_LADDER.map((stage, idx) => {
+            const isCurrent = stage === account.escalationStage;
+            const isPast = idx < currentStageIdx;
+            const STAGE_CLR: Record<string, string> = {
+              none: "#14eba3",
+              soft_collections: "#6366f1",
+              pre_lien_notice: "#f59f0a",
+              lien_filing: "#f97316",
+              agency_attorney: "#eb143f",
+              write_off: "#6b7280",
+            };
+            const color = STAGE_CLR[stage] ?? "#6b7280";
+            return (
+              <div
+                key={stage}
+                className="flex items-center gap-3 px-[18px] py-2.5"
+                style={
+                  isCurrent
+                    ? { background: alpha(color, 0.1), borderLeft: `3px solid ${color}` }
+                    : { borderLeft: "3px solid transparent" }
+                }
+              >
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ background: isCurrent || isPast ? color : "var(--helm-border)" }}
+                />
+                <span
+                  className="flex-1 text-[12.5px]"
+                  style={{
+                    color: isCurrent ? "var(--text-base)" : isPast ? "var(--text-dim)" : "var(--text-muted-color)",
+                    fontWeight: isCurrent ? 600 : 400,
+                  }}
+                >
+                  {STAGE_LABELS[stage]}
+                </span>
+                {isCurrent && (
+                  <span
+                    className="rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
+                    style={{ color, background: alpha(color, 0.15) }}
+                  >
+                    current
+                  </span>
+                )}
+                {!isCurrent && stage === nextStage && (
+                  <button
+                    onClick={() => escalateMut.mutate(nextStage)}
+                    disabled={escalateMut.isPending}
+                    className="rounded-md border px-2.5 py-0.5 text-[11px] font-semibold text-[#eb143f]"
+                    style={{ background: alpha("#eb143f", 0.07), borderColor: alpha("#eb143f", 0.28) }}
+                  >
+                    Escalate
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
+      </div>
+
+      {/* Lien backstop — only shown when stage is pre_lien_notice or higher */}
+      {["pre_lien_notice", "lien_filing", "agency_attorney", "write_off"].includes(account.escalationStage) && (
+        lienBackstop ? (
+          <div
+            className="flex items-center gap-2.5 rounded-lg border px-[18px] py-3.5"
+            style={{ background: alpha("#f59f0a", 0.06), borderColor: alpha("#f59f0a", 0.35) }}
+          >
+            <Landmark className="h-4 w-4 shrink-0 text-[#f59f0a]" />
+            <div className="text-[12.5px]" style={{ color: "var(--text-dim)" }}>
+              Lien backstop —{" "}
+              <span className="font-semibold" style={{ color: "var(--text-base)" }}>
+                {lienBackstop.deadlineType.replace(/_/g, " ")} due{" "}
+                {new Date(lienBackstop.deadlineDate).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div
+            className="flex items-center gap-2.5 rounded-lg border px-[18px] py-3.5"
+            style={{ background: "var(--surface)", borderColor: alpha("#f59f0a", 0.25) }}
+          >
+            <Landmark className="h-4 w-4 shrink-0 text-[#f59f0a]" />
+            <div className="text-[12.5px]" style={{ color: "var(--text-dim)" }}>
+              No lien deadlines found for this client's projects — verify lien stream is set up.
+            </div>
+          </div>
+        )
       )}
 
       {/* Actions row */}
@@ -369,16 +441,6 @@ export default function AccountDetailPage() {
           <Plus className="h-3.5 w-3.5" />
           Payment plan
         </button>
-        {nextStage && (
-          <button
-            onClick={() => escalateMut.mutate(nextStage)}
-            disabled={escalateMut.isPending}
-            className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-[12.5px] font-semibold text-[#eb143f]"
-            style={{ background: alpha("#eb143f", 0.07), borderColor: alpha("#eb143f", 0.3) }}
-          >
-            Escalate → {STAGE_LABELS[nextStage]}
-          </button>
-        )}
       </div>
 
       {/* Log activity form */}
