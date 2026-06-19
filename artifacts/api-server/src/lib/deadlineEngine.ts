@@ -1,11 +1,14 @@
 /**
  * deadlineEngine.ts — Texas § 53.003(e) jurisdiction rule engine.
  *
- * Computes lien deadlines from LienRule records. Given a rule and an anchor
- * date, produces computedDate (raw arithmetic) and adjustedDate (rolled to
- * next business day if needed per § 53.003(e)).
+ * Given a LienRule and anchor context, computes:
+ *  - computedDate: raw deadline per rule arithmetic
+ *  - adjustedDate: rolled to next business day per § 53.003(e)
+ *  - sourceData: provenance snapshot (L13) including statute citation,
+ *    linked invoice ID, and contributing timesheet IDs
  *
  * Texas state holidays defined by Tex. Gov't Code § 662.021.
+ * Unknown anchor types throw rather than silently default.
  */
 
 // ---------------------------------------------------------------------------
@@ -27,9 +30,7 @@ function nthWeekday(year: number, month: number, weekday: number, n: number): Da
 
 function lastWeekday(year: number, month: number, weekday: number): Date {
   const d = new Date(Date.UTC(year, month, 0));
-  while (d.getUTCDay() !== weekday) {
-    d.setUTCDate(d.getUTCDate() - 1);
-  }
+  while (d.getUTCDay() !== weekday) d.setUTCDate(d.getUTCDate() - 1);
   return new Date(d);
 }
 
@@ -76,9 +77,7 @@ function isBusinessDay(date: Date): boolean {
 
 export function nextBusinessDay(date: Date): Date {
   const d = new Date(date);
-  while (!isBusinessDay(d)) {
-    d.setUTCDate(d.getUTCDate() + 1);
-  }
+  while (!isBusinessDay(d)) d.setUTCDate(d.getUTCDate() + 1);
   return d;
 }
 
@@ -114,6 +113,10 @@ export interface DeadlineInput {
   workMonthDate: Date;
   completionDate: Date | null;
   filingDate: Date | null;
+  /** Provenance: invoice linked to this work month (L13) */
+  invoiceLinkId?: string | null;
+  /** Provenance: Connecteam time-record IDs that define this work month (L13) */
+  timesheetIds?: string[];
 }
 
 export interface ComputedDeadline {
@@ -126,10 +129,15 @@ export interface ComputedDeadline {
 
 /**
  * Compute a single deadline from a rule + anchor context.
- * Returns null if the required anchor is not available.
+ *
+ * Returns null when a required anchor (completion, filing_date) is not yet
+ * available — callers should skip that rule for now and recompute when the
+ * data is ready.
+ *
+ * Throws for truly unsupported anchor values (data integrity guard).
  */
 export function computeDeadline(input: DeadlineInput): ComputedDeadline | null {
-  const { rule, workMonthDate, completionDate, filingDate } = input;
+  const { rule, workMonthDate, completionDate, filingDate, invoiceLinkId, timesheetIds } = input;
 
   let anchorDate: Date | null;
   switch (rule.anchor) {
@@ -143,26 +151,27 @@ export function computeDeadline(input: DeadlineInput): ComputedDeadline | null {
       anchorDate = filingDate;
       break;
     default:
-      anchorDate = workMonthDate;
+      throw new Error(
+        `Unsupported anchor type: "${rule.anchor}" in rule "${rule.id}". ` +
+        `Valid values: work_month, completion, filing_date.`,
+      );
   }
 
-  if (anchorDate === null) return null;
+  if (anchorDate === null) return null; // anchor not yet available — expected, not an error
 
   let raw: Date;
 
   if (rule.offsetMonths != null && rule.offsetDayOfMonth != null) {
-    // e.g. "15th of the 3rd month after the work month"
-    // anchor=2026-03-01 + offsetMonths=3 + offsetDayOfMonth=15 → 2026-06-15
-    const targetMonth = anchorDate.getUTCMonth() + rule.offsetMonths;
-    const targetYear = anchorDate.getUTCFullYear() + Math.floor(targetMonth / 12);
-    raw = new Date(Date.UTC(targetYear, targetMonth % 12, rule.offsetDayOfMonth));
+    // "15th of the Nth month after the work month"
+    // e.g. Mar 2026 + 3 months + day 15 → Jun 15, 2026
+    const totalMonths = anchorDate.getUTCMonth() + rule.offsetMonths;
+    const targetYear = anchorDate.getUTCFullYear() + Math.floor(totalMonths / 12);
+    const targetMonth = totalMonths % 12;
+    raw = new Date(Date.UTC(targetYear, targetMonth, rule.offsetDayOfMonth));
   } else if (rule.offsetDays != null) {
-    if (rule.offsetIsBusinessDays) {
-      raw = addBusinessDays(new Date(anchorDate), rule.offsetDays);
-    } else {
-      raw = new Date(anchorDate);
-      raw.setUTCDate(raw.getUTCDate() + rule.offsetDays);
-    }
+    raw = rule.offsetIsBusinessDays
+      ? addBusinessDays(new Date(anchorDate), rule.offsetDays)
+      : (() => { const d = new Date(anchorDate); d.setUTCDate(d.getUTCDate() + rule.offsetDays!); return d; })();
   } else {
     raw = new Date(anchorDate);
   }
@@ -170,6 +179,7 @@ export function computeDeadline(input: DeadlineInput): ComputedDeadline | null {
   const adjusted =
     rule.businessDayHandling === "next_business_day" ? nextBusinessDay(raw) : new Date(raw);
 
+  // Provenance snapshot — every field here helps a coordinator verify the date (L13)
   const sourceData: Record<string, unknown> = {
     anchor: rule.anchor,
     anchorDate: anchorDate.toISOString().slice(0, 10),
@@ -181,6 +191,9 @@ export function computeDeadline(input: DeadlineInput): ComputedDeadline | null {
   if (rule.offsetDayOfMonth != null) sourceData.offsetDayOfMonth = rule.offsetDayOfMonth;
   if (rule.offsetDays != null) sourceData.offsetDays = rule.offsetDays;
   if (rule.offsetIsBusinessDays) sourceData.offsetIsBusinessDays = true;
+  // Traceability: link back to source records
+  if (invoiceLinkId) sourceData.invoiceLinkId = invoiceLinkId;
+  if (timesheetIds?.length) sourceData.timesheetIds = timesheetIds;
 
   return {
     ruleId: rule.id,

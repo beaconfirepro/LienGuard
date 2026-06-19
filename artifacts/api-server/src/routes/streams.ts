@@ -4,7 +4,8 @@
  * POST   /streams/open              open a new stream
  * PATCH  /streams/:id/status        update stream status (state-machine gated)
  * GET    /streams/:id/work-months   list derived work months + deadlines
- * POST   /streams/:id/recompute     re-derive work months + recompute deadlines
+ * POST   /streams/:id/recompute     re-derive work months from timesheets + QBO,
+ *                                   recompute ALL deadlines for every work month
  */
 
 import { Router } from "express";
@@ -16,12 +17,11 @@ import {
   lienDeadlinesTable,
   lienRulesTable,
   lienRuleSetsTable,
-  jurisdictionsTable,
   timesheetLinksTable,
   invoiceLinksTable,
   lienFilingsTable,
 } from "@workspace/db";
-import { eq, and, lt, isNull } from "drizzle-orm";
+import { eq, and, lt } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { computeDeadline } from "../lib/deadlineEngine";
 import { randomUUID } from "crypto";
@@ -30,7 +30,7 @@ const router = Router();
 router.use(requireSession);
 
 // ---------------------------------------------------------------------------
-// State machine
+// Stream status state machine
 // ---------------------------------------------------------------------------
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -81,7 +81,9 @@ router.post("/streams/open", async (req, res) => {
     );
 
   if (existing.length > 0) {
-    return res.status(409).json({ error: `A ${workStream} stream already exists for this project` });
+    return res.status(409).json({
+      error: `A ${workStream} stream already exists for this project`,
+    });
   }
 
   const [stream] = await db
@@ -154,27 +156,26 @@ router.get("/streams/:id/work-months", async (req, res) => {
     .from(workMonthsTable)
     .where(and(eq(workMonthsTable.lienStreamId, id), eq(workMonthsTable.orgId, orgId)));
 
-  const deadlinesByMonth: Record<string, typeof lienDeadlinesTable.$inferSelect[]> = {};
-  for (const wm of workMonths) {
-    const deadlines = await db
-      .select()
-      .from(lienDeadlinesTable)
-      .where(and(eq(lienDeadlinesTable.workMonthId, wm.id), eq(lienDeadlinesTable.orgId, orgId)));
-    deadlinesByMonth[wm.id] = deadlines;
-  }
+  const enriched = await Promise.all(
+    workMonths.map(async (wm) => {
+      const deadlines = await db
+        .select()
+        .from(lienDeadlinesTable)
+        .where(and(eq(lienDeadlinesTable.workMonthId, wm.id), eq(lienDeadlinesTable.orgId, orgId)));
+      return { ...wm, deadlines };
+    }),
+  );
 
-  return res.json({
-    stream,
-    workMonths: workMonths.map((wm) => ({
-      ...wm,
-      deadlines: deadlinesByMonth[wm.id] ?? [],
-    })),
-  });
+  return res.json({ stream, workMonths: enriched });
 });
 
 // ---------------------------------------------------------------------------
 // POST /streams/:id/recompute
-// Derives work months from timesheets + QBO, then recomputes all deadlines.
+//
+// Derives work months from Connecteam timesheets, cross-references QBO
+// invoices on a per-month basis to determine overdue/cleared state, then
+// recomputes ALL deadlines for every derived work month (not gated on
+// overdue state — coordinators need to see all statutory dates).
 // ---------------------------------------------------------------------------
 
 router.post("/streams/:id/recompute", async (req, res) => {
@@ -191,12 +192,16 @@ router.post("/streams/:id/recompute", async (req, res) => {
   const [project] = await db
     .select()
     .from(lienProjectsTable)
-    .where(and(eq(lienProjectsTable.id, stream.lienProjectId), eq(lienProjectsTable.orgId, orgId)));
+    .where(
+      and(eq(lienProjectsTable.id, stream.lienProjectId), eq(lienProjectsTable.orgId, orgId)),
+    );
 
   if (!project) return res.status(404).json({ error: "Project not found" });
 
+  const now = new Date();
+
   // ------------------------------------------------------------------
-  // 1. Derive work months from timesheets
+  // Step 1: Load timesheets and group by YYYY-MM, tracking record IDs
   // ------------------------------------------------------------------
 
   const timesheets = await db
@@ -210,22 +215,27 @@ router.post("/streams/:id/recompute", async (req, res) => {
       ),
     );
 
-  // Group by YYYY-MM
-  const monthBuckets = new Map<string, Date>();
+  // monthKey → { firstDayOfMonth, timesheetIds[] }
+  type MonthBucket = { date: Date; timesheetIds: string[] };
+  const monthBuckets = new Map<string, MonthBucket>();
+
   for (const ts of timesheets) {
     const d = new Date(ts.workDate);
     const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
     if (!monthBuckets.has(key)) {
-      monthBuckets.set(key, new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)));
+      monthBuckets.set(key, {
+        date: new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)),
+        timesheetIds: [],
+      });
     }
+    monthBuckets.get(key)!.timesheetIds.push(ts.connecteamTimeRecordId);
   }
 
   // ------------------------------------------------------------------
-  // 2. Determine overdue invoice for each work month
+  // Step 2: Load all non-supplier invoices for the project (once)
   // ------------------------------------------------------------------
 
-  const now = new Date();
-  const invoices = await db
+  const allInvoices = await db
     .select()
     .from(invoiceLinksTable)
     .where(
@@ -236,19 +246,38 @@ router.post("/streams/:id/recompute", async (req, res) => {
       ),
     );
 
-  const overdueInvoices = invoices.filter(
-    (inv) => !inv.clearedFlag && new Date(inv.dueDate) < now,
-  );
-  const hasOverdue = overdueInvoices.length > 0;
-  const primaryInvoice = overdueInvoices[0] ?? null;
-
   // ------------------------------------------------------------------
-  // 3. Upsert WorkMonth records
+  // Step 3: Upsert WorkMonth records with per-month invoice cross-check
+  //
+  // A work month is "derivedOverdue" if there is an invoice whose
+  // invoiceDate falls in the same YYYY-MM and that invoice is past-due
+  // and not coordinator-cleared. The primary invoice for the month is
+  // linked for source-data traceability.
   // ------------------------------------------------------------------
 
-  const upsertedWorkMonths: (typeof workMonthsTable.$inferSelect)[] = [];
+  type WorkMonthResult = {
+    wm: typeof workMonthsTable.$inferSelect;
+    timesheetIds: string[];
+  };
+  const upsertedWorkMonths: WorkMonthResult[] = [];
 
-  for (const [, monthDate] of monthBuckets) {
+  for (const [monthKey, { date: monthDate, timesheetIds }] of monthBuckets) {
+    // Invoices whose invoiceDate falls in this work month
+    const monthInvoices = allInvoices.filter((inv) => {
+      const d = new Date(inv.invoiceDate);
+      const k = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+      return k === monthKey;
+    });
+
+    const overdueForMonth = monthInvoices.filter(
+      (inv) => !inv.clearedFlag && new Date(inv.dueDate) < now,
+    );
+
+    const derivedOverdue = overdueForMonth.length > 0;
+    const clearedFlag = monthInvoices.length > 0 && monthInvoices.every((inv) => inv.clearedFlag);
+    const primaryInvoice = overdueForMonth[0] ?? null;
+
+    // Upsert the WorkMonth record
     const existingWM = await db
       .select()
       .from(workMonthsTable)
@@ -262,12 +291,13 @@ router.post("/streams/:id/recompute", async (req, res) => {
       .limit(1);
 
     let wm: typeof workMonthsTable.$inferSelect;
+
     if (existingWM.length > 0) {
       const [updated] = await db
         .update(workMonthsTable)
         .set({
-          derivedOverdue: hasOverdue,
-          clearedFlag: overdueInvoices.length === 0,
+          derivedOverdue,
+          clearedFlag,
           invoiceLinkId: primaryInvoice?.id ?? null,
           updatedAt: now,
         })
@@ -282,18 +312,19 @@ router.post("/streams/:id/recompute", async (req, res) => {
           orgId,
           lienStreamId: id,
           month: monthDate,
-          derivedOverdue: hasOverdue,
-          clearedFlag: overdueInvoices.length === 0,
+          derivedOverdue,
+          clearedFlag,
           invoiceLinkId: primaryInvoice?.id ?? null,
         })
         .returning();
       wm = created;
     }
-    upsertedWorkMonths.push(wm);
+
+    upsertedWorkMonths.push({ wm, timesheetIds });
   }
 
   // ------------------------------------------------------------------
-  // 4. Load lien rules for this project's jurisdiction + workflowType + stream
+  // Step 4: Load lien rules for this project's jurisdiction + workflow type + stream
   // ------------------------------------------------------------------
 
   const ruleSets = await db
@@ -311,16 +342,20 @@ router.post("/streams/:id/recompute", async (req, res) => {
     .from(lienFilingsTable)
     .where(and(eq(lienFilingsTable.lienStreamId, id), eq(lienFilingsTable.orgId, orgId)))
     .limit(1);
+
   const filingDate = filingRows[0]?.filingDate ? new Date(filingRows[0].filingDate) : null;
   const completionDate = project.contractStartDate ? new Date(project.contractStartDate) : null;
 
+  // ------------------------------------------------------------------
+  // Step 5: Compute deadlines for ALL work months (no overdue gate)
+  // Coordinators need statutory dates for every month with billable work,
+  // regardless of current payment status.
+  // ------------------------------------------------------------------
+
   const allDeadlines: (typeof lienDeadlinesTable.$inferSelect)[] = [];
 
-  for (const wm of upsertedWorkMonths) {
+  for (const { wm, timesheetIds } of upsertedWorkMonths) {
     const monthDate = new Date(wm.month);
-
-    // Only compute deadlines for overdue months
-    if (!wm.derivedOverdue) continue;
 
     for (const rs of ruleSets) {
       const rules = await db
@@ -336,15 +371,25 @@ router.post("/streams/:id/recompute", async (req, res) => {
         );
 
       for (const rule of rules) {
-        const computed = computeDeadline({
-          rule,
-          workMonthDate: monthDate,
-          completionDate,
-          filingDate,
-        });
-        if (!computed) continue;
+        let computed;
+        try {
+          computed = computeDeadline({
+            rule,
+            workMonthDate: monthDate,
+            completionDate,
+            filingDate,
+            invoiceLinkId: wm.invoiceLinkId,
+            timesheetIds,
+          });
+        } catch (engineErr) {
+          // Unsupported anchor or bad rule data — skip and log; do not abort
+          // the entire recompute for a single bad rule
+          console.error(`[deadline-engine] Skipping rule ${rule.id}:`, engineErr);
+          continue;
+        }
+        if (!computed) continue; // anchor not yet available (e.g. no filing date yet)
 
-        // Upsert deadline (one per workMonth + rule combination)
+        // Upsert: one LienDeadline per (workMonth × rule)
         const existingDl = await db
           .select()
           .from(lienDeadlinesTable)
@@ -358,6 +403,7 @@ router.post("/streams/:id/recompute", async (req, res) => {
           .limit(1);
 
         let dl: typeof lienDeadlinesTable.$inferSelect;
+
         if (existingDl.length > 0) {
           const [updated] = await db
             .update(lienDeadlinesTable)
@@ -386,6 +432,7 @@ router.post("/streams/:id/recompute", async (req, res) => {
             .returning();
           dl = created;
         }
+
         allDeadlines.push(dl);
       }
     }
@@ -393,7 +440,7 @@ router.post("/streams/:id/recompute", async (req, res) => {
 
   return res.json({
     stream,
-    workMonths: upsertedWorkMonths,
+    workMonths: upsertedWorkMonths.map((r) => r.wm),
     deadlines: allDeadlines,
     summary: {
       workMonthsProcessed: upsertedWorkMonths.length,
