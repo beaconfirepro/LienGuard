@@ -152,13 +152,15 @@ router.post("/run", async (req, res) => {
   // 6. Check which stream+workMonth combos already have a notice.
   const existingNotices = streamIds.length
     ? await db
-        .select({ lienStreamId: noticesTable.lienStreamId, workMonthId: noticesTable.workMonthId })
+        .select({ lienStreamId: noticesTable.lienStreamId, workMonthId: noticesTable.workMonthId, noticeType: noticesTable.noticeType })
         .from(noticesTable)
         .where(and(eq(noticesTable.orgId, orgId), inArray(noticesTable.lienStreamId, streamIds)))
     : [];
 
+  // Key includes noticeType so that an existing early_warning doesn't block
+  // the required statutory_claim from being generated for the same stream+month.
   const existingKeys = new Set(
-    existingNotices.map((n) => `${n.lienStreamId}:${n.workMonthId ?? ""}`),
+    existingNotices.map((n) => `${n.lienStreamId}:${n.workMonthId ?? ""}:${n.noticeType}`),
   );
 
   // 7. Create draft notices for at-risk work months that don't have one yet.
@@ -172,15 +174,17 @@ router.post("/run", async (req, res) => {
     const project = projectMap.get(stream.lienProjectId);
     if (!project) continue;
 
-    const key = `${stream.id}:${wm.id}`;
+    // Determine the target notice type for this workflow.
+    const noticeType: "statutory_claim" | "retainage_claim" | "early_warning" =
+      project.lienWorkflowType === "commercial_sub" || project.lienWorkflowType === "residential_sub"
+        ? "statutory_claim"
+        : "statutory_claim";
+
+    const key = `${stream.id}:${wm.id}:${noticeType}`;
     if (existingKeys.has(key)) {
       skipped++;
       continue;
     }
-
-    // Determine notice type.
-    const noticeType =
-      project.lienWorkflowType === "commercial_sub" ? "statutory_claim" : "statutory_claim";
 
     // Determine claim amount from invoice link on work month.
     let claimAmount = "0.00";
@@ -429,8 +433,30 @@ router.get("/report", async (req, res) => {
 
 router.get("/send-queue", async (req, res) => {
   const { orgId } = getSession(req);
+  const { month } = req.query as { month?: string };
 
-  // Return all draft/approved notices with full context.
+  // Readiness window: show notices whose associated notice deadline falls within
+  // the target calendar month (default = current month). This enforces the
+  // 10th/11th send-window semantics — operators see only the current batch.
+  const { start: windowStart, end: windowEnd } = monthBounds(month);
+
+  // First, collect workMonthIds whose notice deadline falls in the window.
+  const deadlinesInWindow = await db
+    .select({ workMonthId: lienDeadlinesTable.workMonthId })
+    .from(lienDeadlinesTable)
+    .where(
+      and(
+        eq(lienDeadlinesTable.orgId, orgId),
+        eq(lienDeadlinesTable.ruleKind, "notice"),
+        gte(lienDeadlinesTable.adjustedDate, windowStart),
+        lt(lienDeadlinesTable.adjustedDate, windowEnd),
+      ),
+    );
+
+  const windowWorkMonthIds = deadlinesInWindow.map((d) => d.workMonthId).filter(Boolean) as string[];
+
+  // Return draft/approved notices whose workMonth deadline is in the window,
+  // plus draft/approved notices with no deadline (manually created without a work month).
   const notices = await db
     .select()
     .from(noticesTable)
@@ -438,6 +464,12 @@ router.get("/send-queue", async (req, res) => {
       and(
         eq(noticesTable.orgId, orgId),
         or(eq(noticesTable.status, "draft"), eq(noticesTable.status, "approved")),
+        windowWorkMonthIds.length
+          ? or(
+              inArray(noticesTable.workMonthId, windowWorkMonthIds),
+              isNull(noticesTable.workMonthId),
+            )
+          : isNull(noticesTable.workMonthId),
       ),
     );
 

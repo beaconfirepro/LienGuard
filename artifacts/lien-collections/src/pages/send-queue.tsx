@@ -52,6 +52,15 @@ function apiPost(path: string, body?: unknown) {
   }).then((r) => r.json());
 }
 
+function apiPatch(path: string, body: unknown) {
+  return fetch(`/api${path}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then((r) => r.json());
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function daysUntil(iso: string | null): number {
@@ -106,6 +115,27 @@ export default function SendQueuePage() {
     () => notices.find((n) => n.id === selectedId) ?? notices[0],
     [notices, selectedId],
   );
+
+  const [editing, setEditing] = React.useState(false);
+  const [editAmount, setEditAmount] = React.useState("");
+  const [editDesc, setEditDesc] = React.useState("");
+
+  React.useEffect(() => {
+    if (selected) {
+      setEditAmount(selected.claimAmount ?? "");
+      setEditDesc(selected.workDescription ?? "");
+      setEditing(false);
+    }
+  }, [selected?.id]);
+
+  const editMutation = useMutation({
+    mutationFn: ({ id, claimAmount, workDescription }: { id: string; claimAmount: string; workDescription: string }) =>
+      apiPatch(`/notices/${id}`, { claimAmount, workDescription }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["send-queue"] });
+      setEditing(false);
+    },
+  });
 
   const approveMutation = useMutation({
     mutationFn: (id: string) => apiPost(`/notices/${id}/approve`),
@@ -271,6 +301,59 @@ export default function SendQueuePage() {
             {noticeBody(selected)}
           </div>
 
+          {/* Inline edit form (draft only) */}
+          {editing && selected.status === "draft" && (
+            <div
+              className="rounded-lg border p-4 flex flex-col gap-3"
+              style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)" }}
+            >
+              <div className="text-[11.5px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>
+                Edit notice
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>
+                  Claim amount
+                </label>
+                <input
+                  type="text"
+                  value={editAmount}
+                  onChange={(e) => setEditAmount(e.target.value)}
+                  className="rounded-md border px-3 py-2 text-[13px] font-mono"
+                  style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-base)" }}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>
+                  Work description
+                </label>
+                <textarea
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  rows={2}
+                  className="rounded-md border px-3 py-2 text-[12.5px] resize-none"
+                  style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-base)" }}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => editMutation.mutate({ id: selected.id, claimAmount: editAmount, workDescription: editDesc })}
+                  disabled={editMutation.isPending}
+                  className="rounded-md border px-3.5 py-1.5 text-[13px] font-semibold"
+                  style={{ background: alpha("#14eba3", 0.14), borderColor: alpha("#14eba3", 0.3), color: "#14eba3" }}
+                >
+                  {editMutation.isPending ? "Saving…" : "Save"}
+                </button>
+                <button
+                  onClick={() => setEditing(false)}
+                  className="rounded-md border px-3.5 py-1.5 text-[13px]"
+                  style={{ background: "var(--surface-3)", borderColor: "var(--helm-border)", color: "var(--text-dim)" }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Action buttons */}
           <div className="flex flex-wrap gap-2">
             <a
@@ -287,6 +370,21 @@ export default function SendQueuePage() {
               <FileText className="h-3.5 w-3.5" />
               Preview PDF
             </a>
+
+            {selected.status === "draft" && !editing && (
+              <button
+                onClick={() => setEditing(true)}
+                className="flex items-center gap-1.5 rounded-md border px-3.5 py-2 text-[13px] font-semibold"
+                style={{
+                  background: "var(--surface-3)",
+                  borderColor: "var(--helm-border)",
+                  color: "var(--text-dim)",
+                }}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </button>
+            )}
 
             {selected.status === "draft" && (
               <button
