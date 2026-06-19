@@ -6,7 +6,7 @@ import {
   LayoutGrid, Landmark, DollarSign, Lock, Settings,
   ChevronLeft, Bell, Menu, X, Search,
   Sun, Moon, PanelRightClose, PanelRightOpen,
-  PanelLeftClose, PanelLeftOpen,
+  PanelLeftClose, PanelLeftOpen, FileSignature,
 } from "lucide-react";
 
 /* ─── Panel context (inner left + right) ─────────────────────────────────── */
@@ -55,23 +55,14 @@ export function Panel({
 /* ─── Navigation config ──────────────────────────────────────────────────── */
 const MODULE_NAV = [
   { key: "dashboard", label: "Dashboard", to: "/", Icon: LayoutGrid },
-  {
-    key: "liens", label: "Liens", to: "/liens", Icon: Landmark,
-    sub: [
-      { label: "Projects", to: "/liens" },
-      { label: "Send Queue", to: "/send-queue" },
-      { label: "Waivers", to: "/waivers" },
-    ],
-  },
+  { key: "liens", label: "Liens", to: "/liens", Icon: Landmark },
+  { key: "waivers", label: "Waivers", to: "/waivers", Icon: FileSignature },
   { key: "collections", label: "Collections", to: "/collections", Icon: DollarSign },
   { key: "holds", label: "Vendor Holds", to: "/holds", Icon: Lock },
-  { key: "config", label: "Settings", to: "/settings", Icon: Settings },
 ];
 
-const LIENS_PATHS = ["/liens", "/send-queue", "/waivers", "/projects", "/filing"];
-
 const TITLES: [RegExp, string][] = [
-  [/^\/settings$/, "Settings"],
+  [/^\/settings$/, "Company Settings"],
   [/^\/liens$/, "Liens — Projects"],
   [/^\/send-queue$/, "Ready-to-Send Queue"],
   [/^\/projects\//, "Project Lien Detail"],
@@ -106,9 +97,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const title = getTitle(location);
 
-  const isLiensSection = LIENS_PATHS.some((p) =>
-    p === "/liens" ? location === p || location.startsWith("/projects") || location.startsWith("/filing") || location.startsWith("/send-queue") || location.startsWith("/waivers") : location.startsWith(p)
-  );
+  const isLiensSection =
+    location === "/liens" ||
+    location.startsWith("/projects") ||
+    location.startsWith("/filing") ||
+    location.startsWith("/send-queue");
 
   /* Inner left panel (DD-UI: LP · content · RP) is now page-registered via
      useLeftPanel — pages decide its content. */
@@ -177,28 +170,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         {!collapsed && <span className="whitespace-nowrap">{m.label}</span>}
                       </div>
                     </Link>
-                    {m.sub && active && !collapsed && (
-                      <div
-                        className="ml-[18px] mt-0.5 flex flex-col gap-0.5 border-l pb-1 pl-3"
-                        style={{ borderColor: "var(--helm-border)" }}
-                      >
-                        {m.sub.map((s) => {
-                          const sa = location === s.to;
-                          return (
-                            <Link key={s.to} href={s.to}>
-                              <div
-                                className="rounded-md px-2.5 py-1.5 text-[12.5px] cursor-pointer transition-colors"
-                                style={sa
-                                  ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
-                                  : { color: "var(--text-dim)", fontWeight: 500 }}
-                              >
-                                {s.label}
-                              </div>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -206,16 +177,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             {/* Footer */}
             <div className="flex flex-col gap-1 border-t p-3" style={{ borderColor: "var(--helm-border)" }}>
-              <button
-                onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-                className={cn("flex items-center gap-3 rounded-md py-2.5 text-[14px] font-medium", collapsed ? "justify-center px-2.5" : "px-3")}
-                style={{ color: "var(--text-dim)" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-              >
-                {theme === "dark" ? <Sun className="h-5 w-5 shrink-0" /> : <Moon className="h-5 w-5 shrink-0" />}
-                {!collapsed && <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>}
-              </button>
+              <Link href="/settings">
+                <div
+                  className={cn("flex items-center gap-3 rounded-md py-2.5 text-[14px] font-medium cursor-pointer", collapsed ? "justify-center px-2.5" : "px-3")}
+                  style={location === "/settings"
+                    ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
+                    : { color: "var(--text-dim)" }}
+                  onMouseEnter={(e) => { if (location !== "/settings") e.currentTarget.style.background = "var(--surface-2)"; }}
+                  onMouseLeave={(e) => { if (location !== "/settings") e.currentTarget.style.background = "transparent"; }}
+                >
+                  <Settings className="h-5 w-5 shrink-0" />
+                  {!collapsed && <span>Company Settings</span>}
+                </div>
+              </Link>
               <button
                 onClick={() => setCollapsed((c) => !c)}
                 className={cn("flex items-center gap-3 rounded-md py-2.5 text-[14px] font-medium", collapsed ? "justify-center px-2.5" : "px-3")}
@@ -267,6 +241,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <button className="relative flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-md border" style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)", color: "var(--text-dim)" }}>
               <Bell className="h-[18px] w-[18px]" />
               <span className="absolute right-2 top-1.5 h-1.5 w-1.5 rounded-full border-2 bg-[#eb143f]" style={{ borderColor: "var(--surface)" }} />
+            </button>
+            <button
+              onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+              className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-md border"
+              style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)", color: "var(--text-dim)" }}
+              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {theme === "dark" ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
             </button>
             <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-[#1a1205]" style={{ background: "linear-gradient(135deg,#f59e0b,#f97316)" }}>
               DB
@@ -371,11 +353,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {[
               { label: "Dashboard", to: "/", Icon: LayoutGrid },
               { label: "Liens", to: "/liens", Icon: Landmark },
+              { label: "Waivers", to: "/waivers", Icon: FileSignature },
               { label: "Collections", to: "/collections", Icon: DollarSign },
-              { label: "Holds", to: "/holds", Icon: Lock },
               { label: "Settings", to: "/settings", Icon: Settings },
             ].map(({ label, to, Icon }) => {
-              const active = to === "/" ? location === to : location.startsWith(to);
+              const active =
+                to === "/" ? location === to :
+                to === "/liens" ? isLiensSection :
+                location.startsWith(to);
               return (
                 <Link key={label} href={to}>
                   <div
@@ -427,29 +412,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                           <m.Icon className="h-4 w-4 shrink-0" />{m.label}
                         </div>
                       </Link>
-                      {m.sub && active && (
-                        <div className="ml-4 mt-0.5 flex flex-col gap-0.5 border-l pb-1 pl-3" style={{ borderColor: "var(--helm-border)" }}>
-                          {m.sub.map((s) => {
-                            const sa = location === s.to;
-                            return (
-                              <Link key={s.to} href={s.to}>
-                                <div
-                                  className="rounded-md px-2 py-1.5 text-[12.5px] cursor-pointer"
-                                  style={sa
-                                    ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
-                                    : { color: "var(--text-dim)", fontWeight: 500 }}
-                                  onClick={() => setDrawer(false)}
-                                >
-                                  {s.label}
-                                </div>
-                              </Link>
-                            );
-                          })}
-                        </div>
-                      )}
                     </div>
                   );
                 })}
+                <Link href="/settings">
+                  <div
+                    className="flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm cursor-pointer"
+                    style={location === "/settings"
+                      ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
+                      : { color: "var(--text-dim)", fontWeight: 500 }}
+                    onClick={() => setDrawer(false)}
+                  >
+                    <Settings className="h-4 w-4 shrink-0" />Company Settings
+                  </div>
+                </Link>
               </nav>
             </div>
           </div>
