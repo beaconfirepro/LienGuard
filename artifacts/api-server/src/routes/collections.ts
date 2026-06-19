@@ -178,11 +178,13 @@ async function recomputeRiskScore(
 }
 
 // ---------------------------------------------------------------------------
-// GET /collections/aging — AR aging buckets reconciled to invoices
+// GET /collections/aging — AR aging buckets (org total + per-client breakdown)
+// QBO cache freshness: invoices with lastSyncedAt older than 24h are flagged stale
 // ---------------------------------------------------------------------------
 router.get("/aging", requireSession, async (req, res) => {
   const { orgId } = getSession(req);
   const now = new Date();
+  const staleThreshold = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
   const invoices = await db
     .select()
@@ -194,8 +196,20 @@ router.get("/aging", requireSession, async (req, res) => {
       ),
     );
 
+  // Detect stale QBO sync (any invoice not synced within 24h)
+  const staleCount = invoices.filter(
+    (inv) => !inv.lastSyncedAt || new Date(inv.lastSyncedAt) < staleThreshold,
+  ).length;
+
+  // Org-level buckets
   const buckets = { current: 0, d1_30: 0, d31_60: 0, d61_90: 0, d91plus: 0 };
   let totalOverdue = 0;
+
+  // Per-client aggregation: { [linkedClientId]: { buckets, totalOverdue, invoiceCount } }
+  const byClient: Record<
+    string,
+    { buckets: typeof buckets; totalOverdue: number; invoiceCount: number }
+  > = {};
 
   for (const inv of invoices) {
     if (!inv.dueDate) continue;
@@ -203,20 +217,30 @@ router.get("/aging", requireSession, async (req, res) => {
     const daysOverdue = Math.floor(
       (now.getTime() - new Date(inv.dueDate).getTime()) / 86_400_000,
     );
-    if (daysOverdue <= 0) {
-      buckets.current += amount;
-    } else if (daysOverdue <= 30) {
-      buckets.d1_30 += amount;
+
+    const clientId = inv.linkedClientId ?? "__unknown__";
+    if (!byClient[clientId]) {
+      byClient[clientId] = {
+        buckets: { current: 0, d1_30: 0, d31_60: 0, d61_90: 0, d91plus: 0 },
+        totalOverdue: 0,
+        invoiceCount: 0,
+      };
+    }
+    byClient[clientId].invoiceCount += 1;
+
+    const bucket =
+      daysOverdue <= 0 ? "current"
+      : daysOverdue <= 30 ? "d1_30"
+      : daysOverdue <= 60 ? "d31_60"
+      : daysOverdue <= 90 ? "d61_90"
+      : "d91plus";
+
+    buckets[bucket] += amount;
+    byClient[clientId].buckets[bucket] += amount;
+
+    if (daysOverdue > 0) {
       totalOverdue += amount;
-    } else if (daysOverdue <= 60) {
-      buckets.d31_60 += amount;
-      totalOverdue += amount;
-    } else if (daysOverdue <= 90) {
-      buckets.d61_90 += amount;
-      totalOverdue += amount;
-    } else {
-      buckets.d91plus += amount;
-      totalOverdue += amount;
+      byClient[clientId].totalOverdue += amount;
     }
   }
 
@@ -228,6 +252,18 @@ router.get("/aging", requireSession, async (req, res) => {
       if (!i.dueDate) return false;
       return new Date(i.dueDate) < now;
     }).length,
+    byClient,
+    qboSync: {
+      staleCount,
+      lastSyncedAt:
+        invoices.length > 0
+          ? invoices
+              .map((i) => i.lastSyncedAt)
+              .filter(Boolean)
+              .sort()
+              .at(-1) ?? null
+          : null,
+    },
   });
 });
 
@@ -678,7 +714,7 @@ router.post(
       notes?: string;
     };
 
-    if (!amount || !promisedDate) {
+    if (amount === undefined || amount === null || !promisedDate) {
       res.status(400).json({ error: "amount and promisedDate are required" });
       return;
     }
