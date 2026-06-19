@@ -90,6 +90,17 @@ const WAIVER_TYPE_SUBSECTION: Record<WaiverType, string> = {
   unconditional_final: "§ 53.284(e)",
 };
 
+const WAIVER_TYPE_DEFINITIONS: Record<WaiverType, string> = {
+  conditional_progress:
+    "Waives lien rights for a single progress payment, but only takes effect once that payment actually clears.",
+  unconditional_progress:
+    "Waives lien rights for a progress payment that has already been received and cleared. Effective immediately.",
+  conditional_final:
+    "Waives all remaining lien rights on the project, but only takes effect once the final payment clears.",
+  unconditional_final:
+    "Waives all lien rights for a final payment that has already been received and cleared. Effective immediately.",
+};
+
 function gateText(w: Waiver): string | null {
   if (w.approvalStatus === "pending_pm" && !w.pmApprovedAt) {
     return "Requires Project Manager approval before release.";
@@ -244,6 +255,25 @@ function CreateWaiverModal({
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>
+              Waiver type
+            </label>
+            <select
+              value={form.waiverType}
+              onChange={(e) => setForm((f) => ({ ...f, waiverType: e.target.value as WaiverType }))}
+              className={inp}
+              style={inpStyle}
+            >
+              {(Object.entries(WAIVER_TYPE_LABELS) as [WaiverType, string][]).map(([v, l]) => (
+                <option key={v} value={v}>{l} — {WAIVER_TYPE_SUBSECTION[v]}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] leading-snug" style={{ color: "var(--text-muted-color)" }}>
+              {WAIVER_TYPE_DEFINITIONS[form.waiverType]}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>
               Project
             </label>
             <select
@@ -262,31 +292,14 @@ function CreateWaiverModal({
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>
-                Stream
-              </label>
-              <select value={form.workStream} onChange={(e) => setForm((f) => ({ ...f, workStream: e.target.value }))} className={inp} style={inpStyle}>
-                <option value="construction">Construction</option>
-                <option value="design">Design</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>
-                Type
-              </label>
-              <select
-                value={form.waiverType}
-                onChange={(e) => setForm((f) => ({ ...f, waiverType: e.target.value as WaiverType }))}
-                className={inp}
-                style={inpStyle}
-              >
-                {(Object.entries(WAIVER_TYPE_LABELS) as [WaiverType, string][]).map(([v, l]) => (
-                  <option key={v} value={v}>{l}</option>
-                ))}
-              </select>
-            </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>
+              Stream
+            </label>
+            <select value={form.workStream} onChange={(e) => setForm((f) => ({ ...f, workStream: e.target.value }))} className={inp} style={inpStyle}>
+              <option value="construction">Construction</option>
+              <option value="design">Design</option>
+            </select>
           </div>
 
           <div className="flex flex-col gap-1">
@@ -415,22 +428,14 @@ export default function WaiversPage() {
   useLeftPanel(
     <Panel title="New Waiver" accent="#14eba3">
       <div className="flex flex-col gap-2 p-3">
-        {(Object.entries(WAIVER_TYPE_LABELS) as [WaiverType, string][]).map(([type, label]) => (
-          <button
-            key={type}
-            onClick={() => setCreateType(type)}
-            className="flex items-center gap-2 rounded-md border px-3 py-2.5 text-left text-[12.5px] font-semibold transition-opacity hover:opacity-80"
-            style={{ background: alpha("#14eba3", 0.1), borderColor: alpha("#14eba3", 0.25), color: "#14eba3" }}
-          >
-            <Plus className="h-3.5 w-3.5 shrink-0" />
-            <span className="min-w-0">
-              <span className="block">{label}</span>
-              <span className="block text-[10px] font-normal" style={{ color: "var(--text-muted-color)" }}>
-                {WAIVER_TYPE_SUBSECTION[type]}
-              </span>
-            </span>
-          </button>
-        ))}
+        <button
+          onClick={() => setCreateType("conditional_progress")}
+          className="flex items-center justify-center gap-2 rounded-md border px-3 py-2.5 text-center text-[12.5px] font-semibold transition-opacity hover:opacity-80"
+          style={{ background: alpha("#14eba3", 0.1), borderColor: alpha("#14eba3", 0.25), color: "#14eba3" }}
+        >
+          <Plus className="h-3.5 w-3.5 shrink-0" />
+          <span>New Waiver</span>
+        </button>
       </div>
 
       {/* Lien Exposure */}
