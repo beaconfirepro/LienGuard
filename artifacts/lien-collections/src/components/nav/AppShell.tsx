@@ -77,7 +77,7 @@ const TITLES: [RegExp, string][] = [
 ];
 
 function getTitle(path: string) {
-  return TITLES.find(([re]) => re.test(path))?.[1] ?? "Lien & Collections";
+  return TITLES.find(([re]) => re.test(path))?.[1] ?? "Liens & Collections";
 }
 
 /* ─── Main AppShell ──────────────────────────────────────────────────────── */
@@ -142,8 +142,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Landmark className="h-6 w-6 text-amber-500 shrink-0" />
               {!collapsed && (
                 <div className="leading-none">
-                  <div className="text-[15px] font-bold tracking-tight" style={{ color: "var(--text-base)" }}>Lien &amp; Collections</div>
-                  <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[1.5px]" style={{ color: "var(--text-muted-color)" }}>by Beacon</div>
+                  <div className="text-[15px] font-bold tracking-tight" style={{ color: "var(--text-base)" }}>Liens &amp; Collections</div>
+                  <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[1.5px]" style={{ color: "var(--text-muted-color)" }}>by HELM</div>
                 </div>
               )}
             </div>
@@ -221,10 +221,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Landmark className="h-5 w-5 shrink-0 text-amber-500" />
               <div className="min-w-0">
                 <div className="text-[17px] font-bold leading-tight tracking-tight" style={{ color: "var(--text-base)" }}>
-                  Lien &amp; Collections
+                  Liens &amp; Collections
                 </div>
                 <div className="truncate text-[12px]" style={{ color: "var(--text-dim)" }}>
-                  Texas · Module 22 · protecting Beacon's right to payment
+                  Texas · Module 22 · protecting HELM's right to payment
                 </div>
               </div>
             </div>
@@ -340,7 +340,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="flex flex-wrap items-center justify-between gap-3 border-t px-6 py-3 text-[11px]"
             style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-muted-color)", marginBottom: isMobile ? 62 : 0 }}
           >
-            <span>© 2026 Beacon Fire Protection · Lien &amp; Collections v1.0</span>
+            <span>© 2026 HELM Fire Protection · Liens &amp; Collections v1.0</span>
             <span className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-[#14eba3]" />
               Status: Operational
@@ -387,8 +387,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               <div className="flex h-16 items-center justify-between border-b px-[18px]" style={{ borderColor: "var(--helm-border)" }}>
                 <span className="text-[15px] font-bold leading-tight" style={{ color: "var(--text-base)" }}>
-                  Lien &amp; Collections
-                  <span className="block text-[9.5px] font-semibold uppercase tracking-[0.16em]" style={{ color: "var(--text-muted-color)" }}>By Beacon</span>
+                  Liens &amp; Collections
+                  <span className="block text-[9.5px] font-semibold uppercase tracking-[0.16em]" style={{ color: "var(--text-muted-color)" }}>By HELM</span>
                 </span>
                 <button onClick={() => setDrawer(false)} style={{ color: "var(--text-dim)" }}>
                   <X className="h-5 w-5" />

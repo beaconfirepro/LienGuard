@@ -89,12 +89,12 @@ function noticeBody(n: QueueNotice): string {
   const amt = money(Number(n.claimAmount));
 
   if (n.noticeType === "retainage_claim") {
-    return `This notice is to advise you that Beacon Fire Protection has furnished labor and materials for fire-protection work at ${project}. The unpaid retainage balance is ${amt}. If this balance is not paid, the property may be subject to a mechanic's lien.`;
+    return `This notice is to advise you that HELM Fire Protection has furnished labor and materials for fire-protection work at ${project}. The unpaid retainage balance is ${amt}. If this balance is not paid, the property may be subject to a mechanic's lien.`;
   }
   if (n.noticeType === "early_warning") {
-    return `This is a courtesy notice from Beacon Fire Protection. We have furnished labor and materials for fire-protection work at ${project} in ${month}. The unpaid balance is ${amt}. Payment within 10 days will avoid the issuance of a formal statutory notice.`;
+    return `This is a courtesy notice from HELM Fire Protection. We have furnished labor and materials for fire-protection work at ${project} in ${month}. The unpaid balance is ${amt}. Payment within 10 days will avoid the issuance of a formal statutory notice.`;
   }
-  return `This notice is to advise you that Beacon Fire Protection has furnished labor and materials for fire-protection work at ${project}. The unpaid balance for work performed in ${month} is ${amt}. If this balance is not paid, the property may be subject to a mechanic's lien.`;
+  return `This notice is to advise you that HELM Fire Protection has furnished labor and materials for fire-protection work at ${project}. The unpaid balance for work performed in ${month} is ${amt}. If this balance is not paid, the property may be subject to a mechanic's lien.`;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────

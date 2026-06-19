@@ -33,11 +33,11 @@ import { cn } from "@/lib/utils";
 const WORKFLOW_TYPE_LABELS: Record<string, { label: string; description: string }> = {
   commercial_sub: {
     label: "Commercial Sub",
-    description: "Beacon is sub-contractor on a commercial job — primary Beacon case",
+    description: "HELM is sub-contractor on a commercial job — primary HELM case",
   },
   residential_sub: {
     label: "Residential Sub",
-    description: "Beacon is sub-contractor; GC has direct agreement with owner-occupant",
+    description: "HELM is sub-contractor; GC has direct agreement with owner-occupant",
   },
   public_bond: {
     label: "Public / Bond",
@@ -1078,7 +1078,7 @@ export default function ConfigPage() {
         <div>
           <p className="text-sm text-muted-foreground mt-1">
             Reference tree, stage clock triggers, jurisdiction rule sets, and integrations for{" "}
-            <span className="font-medium text-foreground">Beacon Fire Protection</span>.
+            <span className="font-medium text-foreground">HELM Fire Protection</span>.
           </p>
         </div>
 
