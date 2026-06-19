@@ -36,6 +36,7 @@ import {
 import { eq, and, inArray, desc, asc, isNull, sql } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { hubspotClient } from "../lib/clients/hubspot";
+import { qboSyncClient } from "../lib/clients/qbo";
 
 const router = Router();
 
@@ -186,33 +187,37 @@ router.get("/aging", requireSession, async (req, res) => {
   const now = new Date();
   const staleThreshold = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-  // AR invoices only — exclude supplier/AP invoices from aging totals
-  const invoices = await db
-    .select()
-    .from(invoiceLinksTable)
-    .where(
-      and(
-        eq(invoiceLinksTable.orgId, orgId),
-        eq(invoiceLinksTable.clearedFlag, false),
-        eq(invoiceLinksTable.isSupplierInvoice, false),
-      ),
-    );
-
-  // QBO cache freshness check — flag stale records and trigger refresh
-  const staleInvoices = invoices.filter(
-    (inv) => !inv.lastSyncedAt || new Date(inv.lastSyncedAt) < staleThreshold,
+  const arInvoiceFilter = and(
+    eq(invoiceLinksTable.orgId, orgId),
+    eq(invoiceLinksTable.clearedFlag, false),
+    eq(invoiceLinksTable.isSupplierInvoice, false),
   );
-  const staleCount = staleInvoices.length;
 
-  // Refresh stale QBO cache: bump lastSyncedAt to now for each stale invoice.
-  // In production this would call the QBO API; the stub marks them as refreshed
-  // so subsequent requests see a clean state until the next 24h window.
-  if (staleCount > 0) {
-    const staleIds = staleInvoices.map((inv) => inv.id);
-    await db
-      .update(invoiceLinksTable)
-      .set({ lastSyncedAt: now })
-      .where(inArray(invoiceLinksTable.id, staleIds));
+  // AR invoices only — exclude supplier/AP invoices from aging totals
+  let invoices = await db.select().from(invoiceLinksTable).where(arInvoiceFilter);
+
+  const isStale = (inv: (typeof invoices)[number]) =>
+    !inv.lastSyncedAt || new Date(inv.lastSyncedAt) < staleThreshold;
+
+  // QBO cache freshness check — flag stale records and pull fresh data from QBO.
+  let staleCount = invoices.filter(isStale).length;
+  const qboConfigured = qboSyncClient.isConfigured();
+  let qboSynced = 0;
+
+  // Refresh stale invoices directly from QBO. When credentials are not
+  // configured this is a no-op skip — we keep serving cached invoice_links
+  // data rather than faking freshness by bumping lastSyncedAt.
+  if (staleCount > 0 && qboConfigured) {
+    const result = await qboSyncClient.syncStaleInvoicesForOrg({
+      orgId,
+      staleThresholdMs: 24 * 60 * 60 * 1000,
+    });
+    qboSynced = result.synced;
+    if (!result.skipped && result.synced > 0) {
+      // Re-read so aging buckets reflect freshly synced amounts/due dates.
+      invoices = await db.select().from(invoiceLinksTable).where(arInvoiceFilter);
+      staleCount = invoices.filter(isStale).length;
+    }
   }
 
   // Org-level buckets
@@ -269,6 +274,8 @@ router.get("/aging", requireSession, async (req, res) => {
     byClient,
     qboSync: {
       staleCount,
+      configured: qboConfigured,
+      synced: qboSynced,
       lastSyncedAt:
         invoices.length > 0
           ? invoices
