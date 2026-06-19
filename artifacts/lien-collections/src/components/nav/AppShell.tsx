@@ -320,7 +320,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b px-4 md:px-6"
             style={{ background: "var(--bg)", borderColor: "var(--helm-border)" }}
           >
-            {isMobile && (
+            {!isDesktop && (
               <button onClick={() => setDrawer(true)} className="-ml-1 p-1.5" style={{ color: "var(--text-base)" }}>
                 <Menu className="h-6 w-6" />
               </button>
