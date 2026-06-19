@@ -374,6 +374,11 @@ export default function WaiversPage() {
     queryFn: () => apiFetch<{ exposure: ExposureRow[] }>("/waivers/exposure"),
   });
 
+  const exposureSig =
+    exposureData?.exposure
+      ?.map((r) => `${r.streamId}:${r.projectName}:${r.grossExposure}:${r.waivedAmount}:${r.netExposure}`)
+      .join("|") ?? "";
+
   const waivers = data?.waivers ?? [];
   const pendingWaivers = waivers.filter(
     (w) => w.approvalStatus === "pending_pm" || w.approvalStatus === "pending_pm_finance",
@@ -419,8 +424,44 @@ export default function WaiversPage() {
           </button>
         ))}
       </div>
+
+      {/* Lien Exposure */}
+      {(exposureData?.exposure?.length ?? 0) > 0 && (
+        <div className="border-t" style={{ borderColor: "var(--helm-border)" }}>
+          <div className="flex items-center gap-2 px-4 pb-2 pt-3">
+            <Landmark className="h-3.5 w-3.5" style={{ color: "#6366f1" }} />
+            <span className="text-[10.5px] font-semibold uppercase tracking-[0.12em]" style={{ color: "var(--text-muted-color)" }}>
+              Lien Exposure
+            </span>
+          </div>
+          <div className="flex flex-col gap-2 px-3 pb-3">
+            {exposureData!.exposure.map((row) => (
+              <div
+                key={row.streamId}
+                className="rounded-md border px-3 py-2"
+                style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)" }}
+              >
+                <div className="truncate text-[12px] font-medium" style={{ color: "var(--text-base)" }}>
+                  {row.projectName}
+                </div>
+                <div className="mt-0.5 flex items-center justify-between gap-2">
+                  <span className="text-[10.5px]" style={{ color: "var(--text-muted-color)" }}>
+                    gross {money(row.grossExposure)} — waived {money(row.waivedAmount)}
+                  </span>
+                  <span
+                    className="font-mono text-[12.5px] font-semibold"
+                    style={{ color: row.netExposure > 0 ? "#f59e0b" : "#14eba3" }}
+                  >
+                    {money(row.netExposure)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </Panel>,
-    [],
+    [exposureSig],
   );
 
   useRightPanel(
@@ -472,41 +513,6 @@ export default function WaiversPage() {
       )}
 
       <div className="flex flex-col gap-4">
-        {/* Exposure summary */}
-        {(exposureData?.exposure?.length ?? 0) > 0 && (
-          <div
-            className="rounded-lg border p-4"
-            style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
-          >
-            <div className="mb-3 flex items-center gap-2">
-              <Landmark className="h-4 w-4" style={{ color: "#6366f1" }} />
-              <span className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>
-                Lien Exposure
-              </span>
-            </div>
-            <div className="flex flex-col gap-2">
-              {exposureData!.exposure.map((row) => (
-                <div key={row.streamId} className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-[12.5px]" style={{ color: "var(--text-dim)" }}>
-                    {row.projectName} · {row.workStream}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[11px]" style={{ color: "var(--text-muted-color)" }}>
-                      gross {money(row.grossExposure)} — waived {money(row.waivedAmount)}
-                    </span>
-                    <span
-                      className="font-mono text-[13px] font-semibold"
-                      style={{ color: row.netExposure > 0 ? "#f59e0b" : "#14eba3" }}
-                    >
-                      {money(row.netExposure)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Waiver cards */}
         {waivers.length === 0 && (
           <div
