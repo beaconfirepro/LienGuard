@@ -262,26 +262,86 @@ export default function DashboardPage() {
             </>
           )}
 
+          {/* Overdue pipeline by escalation stage */}
           <div
-            className="mb-2.5 mt-[18px] text-[10.5px] font-semibold uppercase tracking-wide"
+            className="mb-2 mt-[18px] text-[10.5px] font-semibold uppercase tracking-wide"
             style={{ color: "var(--text-muted-color)" }}
           >
-            Collections pipeline
+            Overdue pipeline by stage
           </div>
+          {(() => {
+            const STAGE_ORDER_DASH = [
+              "lien_filing",
+              "agency_attorney",
+              "pre_lien_notice",
+              "soft_collections",
+              "none",
+            ] as const;
+            const STAGE_LABEL_SHORT: Record<string, string> = {
+              none: "Monitoring",
+              soft_collections: "Soft",
+              pre_lien_notice: "Pre-Lien",
+              lien_filing: "Filing",
+              agency_attorney: "Agency",
+            };
+            const STAGE_CLR: Record<string, string> = {
+              none: "#14eba3",
+              soft_collections: "#6366f1",
+              pre_lien_notice: "#f59f0a",
+              lien_filing: "#f97316",
+              agency_attorney: "#eb143f",
+            };
+            const overdueAccounts = accounts.filter((a) => a.oldestOverdueDays > 0);
+            const hasAny = overdueAccounts.length > 0;
+            if (!hasAny) {
+              return (
+                <div className="text-[11.5px]" style={{ color: "var(--text-muted-color)" }}>
+                  No overdue accounts.
+                </div>
+              );
+            }
+            return (
+              <div className="space-y-1.5">
+                {STAGE_ORDER_DASH.map((stage) => {
+                  const group = overdueAccounts.filter((a) => a.escalationStage === stage);
+                  if (!group.length) return null;
+                  const total = group.reduce((s, a) => s + Number(a.totalOverdue), 0);
+                  const color = STAGE_CLR[stage];
+                  return (
+                    <Link key={stage} href={`/collections?stage=${stage}`}>
+                      <div
+                        className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 hover:opacity-80"
+                        style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)" }}
+                      >
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ background: color }}
+                        />
+                        <span className="flex-1 text-[12px] font-medium" style={{ color: "var(--text-base)" }}>
+                          {STAGE_LABEL_SHORT[stage]}
+                        </span>
+                        <span className="font-mono text-[11px]" style={{ color: "var(--text-dim)" }}>
+                          {group.length}
+                        </span>
+                        <span className="font-mono text-[12px] font-semibold" style={{ color }}>
+                          {money(total)}
+                        </span>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            );
+          })()}
           <Link href="/collections">
             <div
-              className="flex cursor-pointer items-center justify-between gap-2 rounded-md border px-3 py-2.5 hover:opacity-80"
+              className="mt-2 flex cursor-pointer items-center justify-between gap-2 rounded-md border px-3 py-2 hover:opacity-80"
               style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)" }}
             >
-              <div>
-                <div className="text-[12.5px] font-medium" style={{ color: "var(--text-base)" }}>
-                  View all overdue accounts
-                </div>
-                <div className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted-color)" }}>
-                  {accounts.length} accounts · escalation tracking
-                </div>
-              </div>
-              <ChevronRight className="h-4 w-4 shrink-0" style={{ color: "var(--text-muted-color)" }} />
+              <span className="text-[12px]" style={{ color: "var(--text-dim)" }}>
+                View full pipeline →
+              </span>
+              <ChevronRight className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-muted-color)" }} />
             </div>
           </Link>
         </div>

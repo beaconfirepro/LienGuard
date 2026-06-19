@@ -125,36 +125,39 @@ async function recomputeRiskScore(
       ),
     );
 
-  // Score factors (sum to max 100)
-  // Factor 1: Overdue age (0-40 pts)
+  // Total AR (all unpaid invoices — including non-overdue) for ratio computation
+  const totalAR = unpaidInvoices.reduce((sum, inv) => sum + Number(inv.amount), 0);
+
+  // Score factors matching spec weights (40 / 30 / 20 / 10 = 100)
+  // Factor 1: Days since oldest overdue invoice (0-40 pts, ~40% weight)
   let agePts = 0;
   if (oldestOverdueDays > 90) agePts = 40;
-  else if (oldestOverdueDays > 60) agePts = 28;
-  else if (oldestOverdueDays > 30) agePts = 16;
-  else if (oldestOverdueDays > 0) agePts = 6;
+  else if (oldestOverdueDays > 60) agePts = 33;
+  else if (oldestOverdueDays > 30) agePts = 22;
+  else if (oldestOverdueDays > 0) agePts = 10;
 
-  // Factor 2: Escalation stage (0-35 pts)
-  const stagePts: Record<string, number> = {
-    none: 0,
-    soft_collections: 8,
-    pre_lien_notice: 18,
-    lien_filing: 28,
-    agency_attorney: 35,
-    write_off: 35,
-  };
-  const escalationPts = stagePts[escalationStage] ?? 0;
+  // Factor 2: Overdue-to-total-AR ratio (0-30 pts, ~30% weight)
+  const overdueRatio = totalAR > 0 ? totalOverdue / totalAR : 0;
+  let ratioPts = 0;
+  if (overdueRatio >= 0.75) ratioPts = 30;
+  else if (overdueRatio >= 0.5) ratioPts = 22;
+  else if (overdueRatio >= 0.25) ratioPts = 15;
+  else if (overdueRatio > 0) ratioPts = 7;
 
-  // Factor 3: Broken promises (0-15 pts, 5 per broken promise, capped)
-  const brokenPts = Math.min(brokenPromises.length * 5, 15);
+  // Factor 3: Broken promises count (0-20 pts, ~20% weight)
+  let brokenPts = 0;
+  if (brokenPromises.length >= 3) brokenPts = 20;
+  else if (brokenPromises.length === 2) brokenPts = 16;
+  else if (brokenPromises.length === 1) brokenPts = 10;
 
-  // Factor 4: Total overdue exposure (0-10 pts)
+  // Factor 4: Total overdue exposure vs threshold (0-10 pts, ~10% weight)
   let exposurePts = 0;
-  if (totalOverdue > 50000) exposurePts = 10;
-  else if (totalOverdue > 25000) exposurePts = 7;
-  else if (totalOverdue > 10000) exposurePts = 4;
-  else if (totalOverdue > 2500) exposurePts = 2;
+  if (totalOverdue >= 50000) exposurePts = 10;
+  else if (totalOverdue >= 25000) exposurePts = 8;
+  else if (totalOverdue >= 10000) exposurePts = 6;
+  else if (totalOverdue >= 2500) exposurePts = 3;
 
-  const riskScore = Math.min(agePts + escalationPts + brokenPts + exposurePts, 100);
+  const riskScore = Math.min(agePts + ratioPts + brokenPts + exposurePts, 100);
 
   // Persist refreshed values
   await db
@@ -446,6 +449,15 @@ router.get("/accounts/:id", requireSession, async (req, res) => {
     }
   }
 
+  // Recompute risk score on every GET so the detail page always reflects live data
+  const freshScore = await recomputeRiskScore(
+    accountId,
+    orgId,
+    account.linkedClientId,
+    account.escalationStage,
+  );
+  const freshAccount = { ...account, ...freshScore };
+
   // Open promise suppressing dunning
   const openPromise = promises.find((p) => p.status === "open") ?? null;
 
@@ -466,7 +478,7 @@ router.get("/accounts/:id", requireSession, async (req, res) => {
   }
 
   res.json({
-    account,
+    account: freshAccount,
     client: client ?? null,
     activities,
     promises,

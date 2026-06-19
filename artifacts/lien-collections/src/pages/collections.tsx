@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Phone, Plus, Check, X, RefreshCw } from "lucide-react";
+import { ChevronRight, Phone, Plus, Check, X, RefreshCw, Filter } from "lucide-react";
 import { Panel, useRightPanel } from "@/components/nav/AppShell";
 import { QueueList } from "@/components/ui/queue-list";
 import { AgingBuckets } from "@/components/ui/aging-buckets";
@@ -61,6 +61,27 @@ const STAGE_ORDER = [
   "write_off",
 ];
 
+const STATUS_OPTIONS = [
+  { value: "", label: "All statuses" },
+  { value: "current", label: "Current" },
+  { value: "overdue", label: "Overdue" },
+  { value: "in_collections", label: "In Collections" },
+  { value: "promised", label: "Promised" },
+  { value: "payment_plan", label: "Payment Plan" },
+  { value: "escalated", label: "Escalated" },
+  { value: "written_off", label: "Written Off" },
+];
+
+const STAGE_OPTIONS = [
+  { value: "", label: "All stages" },
+  { value: "none", label: "Monitoring" },
+  { value: "soft_collections", label: "Soft Collections" },
+  { value: "pre_lien_notice", label: "Pre-Lien Notice" },
+  { value: "lien_filing", label: "Lien Filing" },
+  { value: "agency_attorney", label: "Agency / Attorney" },
+  { value: "write_off", label: "Write-Off" },
+];
+
 const riskColor = (r: number | null) => {
   if (r == null) return "#6b7280";
   return r >= 75 ? "#eb143f" : r >= 45 ? "#f59f0a" : "#14eba3";
@@ -71,6 +92,8 @@ export default function CollectionsPage() {
   const qc = useQueryClient();
   const [callIds, setCallIds] = React.useState<string[]>([]);
   const [closed, setClosed] = React.useState<Record<string, boolean>>({});
+  const [filterStatus, setFilterStatus] = React.useState("");
+  const [filterStage, setFilterStage] = React.useState("");
 
   const { data: accountsData, isLoading: loadingAccounts } = useQuery({
     queryKey: ["collections/accounts"],
@@ -98,8 +121,38 @@ export default function CollectionsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["collections/accounts"] }),
   });
 
-  const accounts = accountsData?.accounts ?? [];
+  const promiseMut = useMutation({
+    mutationFn: ({ accountId }: { accountId: string }) =>
+      apiFetch(`/collections/accounts/${accountId}/promise`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: 0,
+          promisedDate: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+          notes: "Quick promise — update details on account page",
+        }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["collections/accounts"] }),
+  });
+
+  const advanceMut = useMutation({
+    mutationFn: ({ accountId }: { accountId: string }) =>
+      apiFetch(`/collections/accounts/${accountId}/advance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["collections/accounts"] }),
+  });
+
+  const allAccounts = accountsData?.accounts ?? [];
   const aging = agingData?.buckets;
+
+  // Apply filters
+  const accounts = allAccounts.filter((a) => {
+    if (filterStatus && a.status !== filterStatus) return false;
+    if (filterStage && a.escalationStage !== filterStage) return false;
+    return true;
+  });
 
   const agingValues = aging
     ? [aging.current, aging.d1_30, aging.d31_60, aging.d61_90, aging.d91plus]
@@ -110,9 +163,11 @@ export default function CollectionsPage() {
   const toggleCall = (id: string) =>
     setCallIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
 
-  const callAccts = accounts
+  const callAccts = allAccounts
     .filter((a) => callIds.includes(a.id))
     .sort((a, b) => (b.riskScore ?? 0) - (a.riskScore ?? 0));
+
+  const activeFilterCount = (filterStatus ? 1 : 0) + (filterStage ? 1 : 0);
 
   useRightPanel(
     <Panel title="Call Queue" accent="#eb143f" count={callAccts.length}>
@@ -150,6 +205,39 @@ export default function CollectionsPage() {
           </span>
         </div>
         <AgingBuckets values={agingValues} variant="columns" />
+      </div>
+
+      {/* Filter controls */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Filter className="h-4 w-4 shrink-0" style={{ color: "var(--text-dim)" }} />
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className="rounded-md border px-3 py-1.5 text-[12.5px]"
+          style={{ background: "var(--surface)", borderColor: activeFilterCount > 0 && filterStatus ? "#6366f1" : "var(--helm-border)", color: "var(--text-base)" }}
+        >
+          {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <select
+          value={filterStage}
+          onChange={(e) => setFilterStage(e.target.value)}
+          className="rounded-md border px-3 py-1.5 text-[12.5px]"
+          style={{ background: "var(--surface)", borderColor: activeFilterCount > 0 && filterStage ? "#6366f1" : "var(--helm-border)", color: "var(--text-base)" }}
+        >
+          {STAGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        {activeFilterCount > 0 && (
+          <button
+            onClick={() => { setFilterStatus(""); setFilterStage(""); }}
+            className="text-[12px]"
+            style={{ color: "var(--text-dim)" }}
+          >
+            Clear ({activeFilterCount})
+          </button>
+        )}
+        <span className="ml-auto text-[12px]" style={{ color: "var(--text-muted-color)" }}>
+          {accounts.length} account{accounts.length !== 1 ? "s" : ""}
+        </span>
       </div>
 
       {/* Call list */}
@@ -267,7 +355,7 @@ export default function CollectionsPage() {
               return (
                 <div
                   key={a.id}
-                  className="flex cursor-pointer items-center gap-3 border-b px-4 py-3 last:border-0"
+                  className="flex cursor-pointer items-center gap-2 border-b px-4 py-3 last:border-0"
                   style={{ borderColor: "var(--helm-border)" }}
                   onClick={() => navigate(`/collections/${a.id}`)}
                 >
@@ -276,16 +364,52 @@ export default function CollectionsPage() {
                       {a.cachedName ?? a.id}
                     </div>
                     <div className="truncate text-[11.5px]" style={{ color: "var(--text-muted-color)" }}>
-                      {a.oldestOverdueDays}d oldest
+                      {a.oldestOverdueDays}d oldest · {a.status}
                       {a.hasOpenPromise && (
                         <span className="ml-1.5 text-[#6366f1]">· promise on file</span>
                       )}
                     </div>
                   </div>
                   <RiskPill risk={a.riskScore} />
-                  <span className="w-[74px] shrink-0 text-right font-mono text-[13px] font-semibold text-[#eb143f]">
+                  <span className="w-[64px] shrink-0 text-right font-mono text-[13px] font-semibold text-[#eb143f]">
                     {money(Number(a.totalOverdue))}
                   </span>
+                  {/* Per-row quick actions */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      logActivityMut.mutate({ accountId: a.id, method: "phone" });
+                    }}
+                    title="Log contact"
+                    className="flex shrink-0 items-center gap-1 rounded-md border px-2 py-1.5 text-[11.5px] font-semibold"
+                    style={{ color: "#14eba3", background: alpha("#14eba3", 0.1), borderColor: alpha("#14eba3", 0.25) }}
+                  >
+                    <Phone className="h-3 w-3" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      promiseMut.mutate({ accountId: a.id });
+                    }}
+                    disabled={a.hasOpenPromise}
+                    title={a.hasOpenPromise ? "Promise already on file" : "Record promise"}
+                    className="flex shrink-0 items-center gap-1 rounded-md border px-2 py-1.5 text-[11.5px] font-semibold disabled:opacity-40"
+                    style={{ color: "#6366f1", background: alpha("#6366f1", 0.1), borderColor: alpha("#6366f1", 0.25) }}
+                  >
+                    <Plus className="h-3 w-3" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      advanceMut.mutate({ accountId: a.id });
+                    }}
+                    disabled={a.hasOpenPromise || !a.currentDunningStepId}
+                    title={a.hasOpenPromise ? "Suppressed — promise on file" : "Advance dunning"}
+                    className="flex shrink-0 items-center gap-1 rounded-md border px-2 py-1.5 text-[11.5px] font-semibold disabled:opacity-40"
+                    style={{ color: "#f59f0a", background: alpha("#f59f0a", 0.1), borderColor: alpha("#f59f0a", 0.25) }}
+                  >
+                    <ChevronRight className="h-3 w-3" />
+                  </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -299,9 +423,7 @@ export default function CollectionsPage() {
                     }
                   >
                     {on ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-                    {on ? "On call list" : "Add to call list"}
                   </button>
-                  <ChevronRight className="h-4 w-4 shrink-0" style={{ color: "var(--text-muted-color)" }} />
                 </div>
               );
             })}
@@ -311,7 +433,9 @@ export default function CollectionsPage() {
 
       {accounts.length === 0 && (
         <div className="rounded-lg border px-6 py-10 text-center text-sm" style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-muted-color)" }}>
-          No collection accounts found.
+          {activeFilterCount > 0
+            ? "No accounts match the current filters."
+            : "No collection accounts found."}
         </div>
       )}
     </>
