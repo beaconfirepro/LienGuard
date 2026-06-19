@@ -48,10 +48,16 @@ import {
   Bell,
   Send,
   Gavel,
+  ChevronLeft,
+  FileSignature,
+  Lock,
+  ArrowDownCircle,
+  ArrowUpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DeadlineCountdown } from "@/components/ui/deadline-countdown";
-import { Panel, useLeftPanel } from "@/components/nav/AppShell";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Panel, useLeftPanel, useRightPanel } from "@/components/nav/AppShell";
 import { WorkspaceHeader, WorkspaceTabs } from "@/components/nav/WorkspaceLayout";
 import FilingWorkspace from "@/components/filing/FilingWorkspace";
 
@@ -805,222 +811,6 @@ function StreamDeadlinesPanel({
 }
 
 // ---------------------------------------------------------------------------
-// Invoices panel
-// ---------------------------------------------------------------------------
-
-function InvoicesPanel({ projectId }: { projectId: string }) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const [open, setOpen] = React.useState(true);
-
-  const { data: qboStatus } = useQuery({
-    queryKey: ["qbo-status"],
-    queryFn: () => apiFetch<{ connected: boolean }>("/config/qbo-status"),
-    staleTime: 60_000,
-  });
-  const connected = qboStatus?.connected ?? false;
-
-  const { data: invoiceData, isLoading: invoicesLoading } = useQuery({
-    queryKey: ["invoices", projectId],
-    queryFn: () => apiFetch<{ invoices: Invoice[] }>(`/invoices?projectId=${projectId}`),
-    enabled: !!projectId,
-  });
-  const invoices = invoiceData?.invoices ?? [];
-
-  const syncMutation = useMutation({
-    mutationFn: () =>
-      apiFetch<{ synced: number; skipped: boolean; reason?: string }>("/invoices/sync", {
-        method: "POST",
-        body: JSON.stringify({ projectId }),
-      }),
-    onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: ["invoices", projectId] });
-      if (result.skipped) {
-        toast({
-          title: "Sync skipped",
-          description: result.reason ?? "QBO credentials not configured",
-          variant: "default",
-        });
-      } else {
-        toast({
-          title: "Invoices synced",
-          description: `${result.synced} invoice${result.synced !== 1 ? "s" : ""} pulled from QuickBooks.`,
-        });
-      }
-    },
-    onError: (err: Error) =>
-      toast({ title: "Sync failed", description: err.message, variant: "destructive" }),
-  });
-
-  const clearMutation = useMutation({
-    mutationFn: ({ id, flag }: { id: string; flag: boolean }) =>
-      apiFetch(`/invoices/${id}/clear`, {
-        method: "POST",
-        body: JSON.stringify({ clearedFlag: flag }),
-      }),
-    onMutate: async ({ id, flag }) => {
-      await qc.cancelQueries({ queryKey: ["invoices", projectId] });
-      const prev = qc.getQueryData<{ invoices: Invoice[] }>(["invoices", projectId]);
-      qc.setQueryData<{ invoices: Invoice[] }>(["invoices", projectId], (old) =>
-        old
-          ? { invoices: old.invoices.map((inv) => inv.id === id ? { ...inv, clearedFlag: flag } : inv) }
-          : old,
-      );
-      return { prev };
-    },
-    onError: (err: Error, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(["invoices", projectId], ctx.prev);
-      toast({ title: "Clear failed", description: err.message, variant: "destructive" });
-    },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["invoices", projectId] }),
-  });
-
-  function invoiceRowColor(inv: Invoice): string {
-    if (inv.clearedFlag) return "bg-teal-50 border-teal-200";
-    if (inv.qboStatus === "paid") return "bg-green-50 border-green-200";
-    if (new Date(inv.dueDate) < new Date()) return "bg-red-50 border-red-200";
-    return "bg-card border-border";
-  }
-
-  function qboStatusBadge(inv: Invoice) {
-    if (inv.clearedFlag) {
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-teal-100 text-teal-700 px-2 py-0.5 text-xs font-medium">
-          <CheckCircle2 className="h-3 w-3" />
-          Cleared
-        </span>
-      );
-    }
-    if (inv.qboStatus === "paid") {
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-medium">
-          <CheckCircle2 className="h-3 w-3" />
-          Paid
-        </span>
-      );
-    }
-    if (new Date(inv.dueDate) < new Date()) {
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 text-red-700 px-2 py-0.5 text-xs font-medium">
-          <AlertTriangle className="h-3 w-3" />
-          Overdue
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 text-xs font-medium">
-        <Clock className="h-3 w-3" />
-        Open
-      </span>
-    );
-  }
-
-  return (
-    <div className="rounded-lg border bg-muted/10">
-      {/* Panel header */}
-      <div className="flex items-center justify-between px-4 py-3">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="flex items-center gap-2 text-sm font-semibold hover:opacity-80 transition-opacity"
-        >
-          <Receipt className="h-4 w-4 text-primary" />
-          Invoices (QBO)
-          {invoices.length > 0 && (
-            <Badge variant="secondary" className="text-xs">
-              {invoices.length}
-            </Badge>
-          )}
-        </button>
-
-        <div className="flex items-center gap-2">
-          {connected ? (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs gap-1"
-              disabled={syncMutation.isPending}
-              onClick={() => syncMutation.mutate()}
-            >
-              <RefreshCw className={cn("h-3 w-3", syncMutation.isPending && "animate-spin")} />
-              Sync QBO
-            </Button>
-          ) : (
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <LinkIcon className="h-3 w-3" />
-              Not connected —{" "}
-              <a href="/config" className="underline hover:text-foreground">
-                add credentials in Settings
-              </a>
-            </span>
-          )}
-        </div>
-      </div>
-
-      {open && (
-        <div className="border-t px-4 pb-4 pt-3">
-          {invoicesLoading ? (
-            <p className="text-xs text-muted-foreground py-2">Loading invoices…</p>
-          ) : invoices.length === 0 ? (
-            <p className="text-xs text-muted-foreground py-2">
-              No invoices on record.{" "}
-              {connected
-                ? "Click Sync QBO to pull from QuickBooks."
-                : "Connect QBO credentials to enable sync."}
-            </p>
-          ) : (
-            <div className="overflow-x-auto rounded-md border">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b bg-muted/40">
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Invoice #</th>
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Date</th>
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Due Date</th>
-                    <th className="text-right px-3 py-2 font-medium text-muted-foreground">Amount</th>
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
-                    <th className="text-center px-3 py-2 font-medium text-muted-foreground">Cleared</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoices.map((inv) => (
-                    <tr
-                      key={inv.id}
-                      className={cn("border-b last:border-0", invoiceRowColor(inv))}
-                    >
-                      <td className="px-3 py-2 font-mono">
-                        {inv.qboInvoiceId ? `#${inv.qboInvoiceId}` : "—"}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums">{formatDate(inv.invoiceDate)}</td>
-                      <td className="px-3 py-2 tabular-nums">{formatDate(inv.dueDate)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums font-medium">
-                        ${Number(inv.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="px-3 py-2">{qboStatusBadge(inv)}</td>
-                      <td className="px-3 py-2 text-center">
-                        <input
-                          type="checkbox"
-                          checked={inv.clearedFlag}
-                          disabled={clearMutation.isPending}
-                          onChange={(e) =>
-                            clearMutation.mutate({ id: inv.id, flag: e.target.checked })
-                          }
-                          className="h-4 w-4 rounded border-gray-300 accent-teal-600 cursor-pointer"
-                          title={inv.clearedFlag ? "Mark as not cleared" : "Mark as cleared"}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Last Time on Job panel
 // ---------------------------------------------------------------------------
 
@@ -1117,6 +907,878 @@ function LastTimeOnJobPanel({ projectId }: { projectId: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// AR — customer invoices (receivables) with notice-eligibility indicators
+// ---------------------------------------------------------------------------
+
+function isOverdue(iso: string): boolean {
+  return new Date(iso) < new Date();
+}
+
+/** A customer invoice is a candidate for a pre-lien notice when it is unpaid,
+ *  not yet cleared, and already past its due date. This is an at-a-glance
+ *  indicator — the binding notice deadlines live on each work month. */
+function invoiceNoticeEligible(inv: Invoice): boolean {
+  return !inv.clearedFlag && inv.qboStatus !== "paid" && isOverdue(inv.dueDate);
+}
+
+function ARPanel({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: qboStatus } = useQuery({
+    queryKey: ["qbo-status"],
+    queryFn: () => apiFetch<{ connected: boolean }>("/config/qbo-status"),
+    staleTime: 60_000,
+  });
+  const connected = qboStatus?.connected ?? false;
+
+  const { data: invoiceData, isLoading } = useQuery({
+    queryKey: ["invoices", projectId],
+    queryFn: () => apiFetch<{ invoices: Invoice[] }>(`/invoices?projectId=${projectId}`),
+    enabled: !!projectId,
+  });
+  const invoices = (invoiceData?.invoices ?? []).filter((inv) => !inv.isSupplierInvoice);
+
+  const syncMutation = useMutation({
+    mutationFn: () =>
+      apiFetch<{ synced: number; skipped: boolean; reason?: string }>("/invoices/sync", {
+        method: "POST",
+        body: JSON.stringify({ projectId }),
+      }),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ["invoices", projectId] });
+      if (result.skipped) {
+        toast({ title: "Sync skipped", description: result.reason ?? "QBO credentials not configured" });
+      } else {
+        toast({
+          title: "Invoices synced",
+          description: `${result.synced} invoice${result.synced !== 1 ? "s" : ""} pulled from QuickBooks.`,
+        });
+      }
+    },
+    onError: (err: Error) => toast({ title: "Sync failed", description: err.message, variant: "destructive" }),
+  });
+
+  const clearMutation = useMutation({
+    mutationFn: ({ id, flag }: { id: string; flag: boolean }) =>
+      apiFetch(`/invoices/${id}/clear`, { method: "POST", body: JSON.stringify({ clearedFlag: flag }) }),
+    onMutate: async ({ id, flag }) => {
+      await qc.cancelQueries({ queryKey: ["invoices", projectId] });
+      const prev = qc.getQueryData<{ invoices: Invoice[] }>(["invoices", projectId]);
+      qc.setQueryData<{ invoices: Invoice[] }>(["invoices", projectId], (old) =>
+        old ? { invoices: old.invoices.map((inv) => (inv.id === id ? { ...inv, clearedFlag: flag } : inv)) } : old,
+      );
+      return { prev };
+    },
+    onError: (err: Error, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["invoices", projectId], ctx.prev);
+      toast({ title: "Clear failed", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["invoices", projectId] }),
+  });
+
+  function rowColor(inv: Invoice): string {
+    if (inv.clearedFlag) return "bg-teal-50 border-teal-200";
+    if (inv.qboStatus === "paid") return "bg-green-50 border-green-200";
+    if (isOverdue(inv.dueDate)) return "bg-red-50 border-red-200";
+    return "bg-card border-border";
+  }
+
+  function statusBadge(inv: Invoice) {
+    if (inv.clearedFlag)
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-teal-100 text-teal-700 px-2 py-0.5 text-xs font-medium">
+          <CheckCircle2 className="h-3 w-3" /> Cleared
+        </span>
+      );
+    if (inv.qboStatus === "paid")
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-medium">
+          <CheckCircle2 className="h-3 w-3" /> Paid
+        </span>
+      );
+    if (isOverdue(inv.dueDate))
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 text-red-700 px-2 py-0.5 text-xs font-medium">
+          <AlertTriangle className="h-3 w-3" /> Overdue
+        </span>
+      );
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 text-xs font-medium">
+        <Clock className="h-3 w-3" /> Open
+      </span>
+    );
+  }
+
+  function noticeBadge(inv: Invoice) {
+    if (inv.clearedFlag || inv.qboStatus === "paid")
+      return <span className="text-xs text-muted-foreground">—</span>;
+    if (invoiceNoticeEligible(inv))
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 text-orange-700 px-2 py-0.5 text-xs font-medium cursor-help">
+                <Bell className="h-3 w-3" /> Eligible
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="max-w-xs text-xs">
+              Unpaid and past due — a candidate for a pre-lien notice. Open the lien stream to send.
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-500 px-2 py-0.5 text-xs font-medium">
+        <Clock className="h-3 w-3" /> Monitoring
+      </span>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <ArrowDownCircle className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold">Accounts Receivable</h3>
+          <span className="text-xs text-muted-foreground">— customer invoices</span>
+        </div>
+        {connected ? (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1"
+            disabled={syncMutation.isPending}
+            onClick={() => syncMutation.mutate()}
+          >
+            <RefreshCw className={cn("h-3 w-3", syncMutation.isPending && "animate-spin")} />
+            Sync QBO
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground flex items-center gap-1">
+            <LinkIcon className="h-3 w-3" />
+            Not connected —{" "}
+            <a href="/config" className="underline hover:text-foreground">add credentials</a>
+          </span>
+        )}
+      </div>
+
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground py-2">Loading invoices…</p>
+      ) : invoices.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-2">
+          No customer invoices on record.{" "}
+          {connected ? "Click Sync QBO to pull from QuickBooks." : "Connect QBO credentials to enable sync."}
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b bg-muted/40">
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Invoice #</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Date</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Due Date</th>
+                <th className="text-right px-3 py-2 font-medium text-muted-foreground">Amount</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Notice</th>
+                <th className="text-center px-3 py-2 font-medium text-muted-foreground">Cleared</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.map((inv) => (
+                <tr key={inv.id} className={cn("border-b last:border-0", rowColor(inv))}>
+                  <td className="px-3 py-2 font-mono">{inv.qboInvoiceId ? `#${inv.qboInvoiceId}` : "—"}</td>
+                  <td className="px-3 py-2 tabular-nums">{formatDate(inv.invoiceDate)}</td>
+                  <td className="px-3 py-2 tabular-nums">{formatDate(inv.dueDate)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-medium">
+                    ${Number(inv.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="px-3 py-2">{statusBadge(inv)}</td>
+                  <td className="px-3 py-2">{noticeBadge(inv)}</td>
+                  <td className="px-3 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      checked={inv.clearedFlag}
+                      disabled={clearMutation.isPending}
+                      onChange={(e) => clearMutation.mutate({ id: inv.id, flag: e.target.checked })}
+                      className="h-4 w-4 rounded border-gray-300 accent-teal-600 cursor-pointer"
+                      title={inv.clearedFlag ? "Mark as not cleared" : "Mark as cleared"}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AP — supplier bills (payables) + holds
+// ---------------------------------------------------------------------------
+
+interface ProjectHold {
+  id: string;
+  holdType: string;
+  reason: string;
+  setAt: string;
+}
+
+function APPanel({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: invoiceData, isLoading } = useQuery({
+    queryKey: ["invoices", projectId],
+    queryFn: () => apiFetch<{ invoices: Invoice[] }>(`/invoices?projectId=${projectId}`),
+    enabled: !!projectId,
+  });
+  const bills = (invoiceData?.invoices ?? []).filter((inv) => inv.isSupplierInvoice);
+
+  const { data: holdsData } = useQuery({
+    queryKey: ["project-holds", projectId],
+    queryFn: () => apiFetch<{ holds: ProjectHold[] }>(`/holds?projectId=${projectId}`),
+    enabled: !!projectId,
+  });
+  const holds = holdsData?.holds ?? [];
+
+  const recompute = useMutation({
+    mutationFn: () => apiFetch("/holds/recompute", { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["project-holds", projectId] });
+      toast({ title: "Holds recomputed", description: "Schedule & material holds re-evaluated." });
+    },
+    onError: (err: Error) => toast({ title: "Recompute failed", description: err.message, variant: "destructive" }),
+  });
+
+  function rowColor(inv: Invoice): string {
+    if (inv.qboStatus === "paid") return "bg-green-50 border-green-200";
+    if (isOverdue(inv.dueDate)) return "bg-red-50 border-red-200";
+    return "bg-card border-border";
+  }
+
+  function statusBadge(inv: Invoice) {
+    if (inv.qboStatus === "paid")
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-medium">
+          <CheckCircle2 className="h-3 w-3" /> Paid
+        </span>
+      );
+    if (isOverdue(inv.dueDate))
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 text-red-700 px-2 py-0.5 text-xs font-medium">
+          <AlertTriangle className="h-3 w-3" /> Overdue
+        </span>
+      );
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 text-xs font-medium">
+        <Clock className="h-3 w-3" /> Unpaid
+      </span>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <ArrowUpCircle className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold">Accounts Payable</h3>
+          <span className="text-xs text-muted-foreground">— supplier bills</span>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs gap-1"
+          disabled={recompute.isPending}
+          onClick={() => recompute.mutate()}
+        >
+          <RefreshCw className={cn("h-3 w-3", recompute.isPending && "animate-spin")} />
+          Recompute Holds
+        </Button>
+      </div>
+
+      {/* Active holds on this project */}
+      {holds.length > 0 ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <Lock className="h-4 w-4 text-red-600 shrink-0" />
+            <span className="text-sm font-medium text-red-800">Active Holds</span>
+          </div>
+          {holds.map((h) => (
+            <div key={h.id} className="flex items-center gap-2 ml-6">
+              <span
+                className={cn(
+                  "inline-flex rounded px-1.5 py-0.5 text-xs font-medium",
+                  h.holdType === "schedule_hold" ? "bg-red-100 text-red-700" : "bg-orange-100 text-orange-700",
+                )}
+              >
+                {h.holdType === "schedule_hold" ? "Schedule Hold" : "Material Hold"}
+              </span>
+              <span className="text-xs text-red-700">{h.reason}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground flex items-center gap-2">
+          <Shield className="h-3.5 w-3.5 text-green-600" />
+          No active holds. Holds are auto-evaluated from overdue invoices — use Recompute Holds to re-check.
+        </div>
+      )}
+
+      {/* Supplier bills */}
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground py-2">Loading bills…</p>
+      ) : bills.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-2">No supplier bills on record for this project.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b bg-muted/40">
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Bill #</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Date</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Due Date</th>
+                <th className="text-right px-3 py-2 font-medium text-muted-foreground">Amount</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bills.map((inv) => (
+                <tr key={inv.id} className={cn("border-b last:border-0", rowColor(inv))}>
+                  <td className="px-3 py-2 font-mono">{inv.qboInvoiceId ? `#${inv.qboInvoiceId}` : "—"}</td>
+                  <td className="px-3 py-2 tabular-nums">{formatDate(inv.invoiceDate)}</td>
+                  <td className="px-3 py-2 tabular-nums">{formatDate(inv.dueDate)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-medium">
+                    ${Number(inv.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="px-3 py-2">{statusBadge(inv)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Waivers tab — project waivers summary
+// ---------------------------------------------------------------------------
+
+interface ProjectWaiver {
+  id: string;
+  workStream: string;
+  waiverType: string;
+  paymentAmount: string;
+  approvalStatus: string;
+  notarized: boolean;
+  signedDate: string | null;
+  providedToGc: boolean;
+}
+
+const WAIVER_TYPE_LABELS: Record<string, string> = {
+  conditional_progress: "Conditional Progress",
+  unconditional_progress: "Unconditional Progress",
+  conditional_final: "Conditional Final",
+  unconditional_final: "Unconditional Final",
+};
+
+const WAIVER_STATUS_COLORS: Record<string, string> = {
+  approved: "bg-green-100 text-green-700",
+  pending_pm: "bg-amber-100 text-amber-700",
+  pending_finance: "bg-amber-100 text-amber-700",
+  not_required: "bg-gray-100 text-gray-600",
+  rejected: "bg-red-100 text-red-700",
+};
+
+function WaiversPanel({ projectId }: { projectId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["project-waivers", projectId],
+    queryFn: () => apiFetch<{ waivers: ProjectWaiver[] }>(`/waivers?projectId=${projectId}`),
+    enabled: !!projectId,
+  });
+  const waivers = data?.waivers ?? [];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <FileSignature className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold">Lien Waivers</h3>
+        </div>
+        <a href="/waivers" className="text-xs underline text-muted-foreground hover:text-foreground">
+          Open Waivers
+        </a>
+      </div>
+
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground py-2">Loading waivers…</p>
+      ) : waivers.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-2">No waivers on record for this project.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b bg-muted/40">
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Type</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Stream</th>
+                <th className="text-right px-3 py-2 font-medium text-muted-foreground">Amount</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Notarized</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Signed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {waivers.map((w) => (
+                <tr key={w.id} className="border-b last:border-0 bg-card">
+                  <td className="px-3 py-2 font-medium">{WAIVER_TYPE_LABELS[w.waiverType] ?? w.waiverType}</td>
+                  <td className="px-3 py-2 capitalize">{w.workStream}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-medium">
+                    ${Number(w.paymentAmount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize",
+                        WAIVER_STATUS_COLORS[w.approvalStatus] ?? "bg-gray-100 text-gray-600",
+                      )}
+                    >
+                      {w.approvalStatus.replace(/_/g, " ")}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    {w.notarized ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums text-muted-foreground">
+                    {w.signedDate ? formatDate(w.signedDate) : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Notices tab — project notices summary (across streams)
+// ---------------------------------------------------------------------------
+
+const NOTICE_STATUS_COLORS: Record<string, string> = {
+  draft: "bg-gray-100 text-gray-600",
+  approved: "bg-blue-100 text-blue-700",
+  sent: "bg-amber-100 text-amber-700",
+  delivered: "bg-green-100 text-green-700",
+};
+
+const NOTICE_TYPE_LABELS: Record<string, string> = {
+  early_warning: "Early Warning",
+  statutory_claim: "Monthly Notice",
+  retainage_claim: "Retainage Claim",
+};
+
+function NoticesPanel({ projectId }: { projectId: string }) {
+  const navigate = useLocation()[1];
+  const { data, isLoading } = useQuery({
+    queryKey: ["project-notices", projectId],
+    queryFn: () => apiFetch<{ notices: StreamNotice[] }>(`/notices?projectId=${projectId}`),
+    enabled: !!projectId,
+  });
+  const notices = data?.notices ?? [];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Bell className="h-4 w-4 text-primary" />
+        <h3 className="text-sm font-semibold">Notices</h3>
+      </div>
+
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground py-2">Loading notices…</p>
+      ) : notices.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-2">
+          No notices yet. Notices are created per work month on the lien streams above.
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b bg-muted/40">
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Type</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Month</th>
+                <th className="text-right px-3 py-2 font-medium text-muted-foreground">Claim</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Sent</th>
+                <th className="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {notices.map((n) => (
+                <tr key={n.id} className="border-b last:border-0 bg-card">
+                  <td className="px-3 py-2 font-medium">{NOTICE_TYPE_LABELS[n.noticeType] ?? n.noticeType}</td>
+                  <td className="px-3 py-2">{n.monthListed ? formatMonth(n.monthListed) : "—"}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-medium">
+                    {n.claimAmount
+                      ? `$${Number(n.claimAmount).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                      : "—"}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize",
+                        NOTICE_STATUS_COLORS[n.status] ?? "bg-gray-100 text-gray-600",
+                      )}
+                    >
+                      {n.status}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 tabular-nums text-muted-foreground">
+                    {n.sentAt ? formatDate(n.sentAt) : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/send-queue?notice=${n.id}`)}
+                      className="text-xs underline text-muted-foreground hover:text-foreground"
+                    >
+                      View
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Parties tab
+// ---------------------------------------------------------------------------
+
+function PartiesPanel({
+  projectId,
+  parties,
+  contractorTier,
+}: {
+  projectId: string;
+  parties: Party[];
+  contractorTier: string;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [addParty, setAddParty] = React.useState({
+    hubspotCompanyId: "",
+    partyRelationType: "",
+    cachedLegalName: "",
+    cachedMailingAddress: "",
+  });
+
+  const addPartyMutation = useMutation({
+    mutationFn: (body: object) =>
+      apiFetch(`/projects/${projectId}/parties`, { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: (res: { party: Party; warnings: string[] }) => {
+      qc.invalidateQueries({ queryKey: ["project", projectId] });
+      if (res.warnings?.length) {
+        toast({ title: "Party added", description: res.warnings.join(" | ") });
+      } else {
+        toast({ title: "Party added" });
+      }
+      setAddParty({ hubspotCompanyId: "", partyRelationType: "", cachedLegalName: "", cachedMailingAddress: "" });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const removeParty = useMutation({
+    mutationFn: (partyId: string) =>
+      apiFetch(`/projects/${projectId}/parties/${partyId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["project", projectId] });
+      toast({ title: "Party removed" });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Users className="h-4 w-4 text-primary" />
+        <h3 className="text-sm font-semibold">Parties</h3>
+        {contractorTier === "second_tier" && (
+          <span className="text-xs text-muted-foreground ml-1">
+            — 2nd-tier requires hiring party + original contractor
+          </span>
+        )}
+      </div>
+
+      {parties.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No parties added yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {parties.map((party) => (
+            <div key={party.id} className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-medium truncate">{party.cachedLegalName}</span>
+                  <Badge variant="outline" className="text-xs shrink-0">
+                    {PARTY_ROLE_LABELS[party.partyRelationType] ?? party.partyRelationType}
+                  </Badge>
+                </div>
+                {party.cachedMailingAddress && (
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">{party.cachedMailingAddress}</p>
+                )}
+              </div>
+              <button
+                type="button"
+                title="Remove party"
+                className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors"
+                onClick={() => removeParty.mutate(party.id)}
+                disabled={removeParty.isPending}
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="rounded-lg border border-dashed bg-muted/20 p-4 space-y-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Add Party</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Role</Label>
+            <Select
+              value={addParty.partyRelationType}
+              onValueChange={(v) => setAddParty((p) => ({ ...p, partyRelationType: v }))}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="Select role…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="owner">Owner</SelectItem>
+                <SelectItem value="original_contractor">Original Contractor (GC)</SelectItem>
+                <SelectItem value="hiring_party">Hiring Party</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">HubSpot Company ID</Label>
+            <Input
+              placeholder="hs_co_…"
+              className="h-8 text-xs"
+              value={addParty.hubspotCompanyId}
+              onChange={(e) => setAddParty((p) => ({ ...p, hubspotCompanyId: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Legal Name</Label>
+            <Input
+              placeholder="Legal entity name"
+              className="h-8 text-xs"
+              value={addParty.cachedLegalName}
+              onChange={(e) => setAddParty((p) => ({ ...p, cachedLegalName: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Mailing Address (optional)</Label>
+            <Input
+              placeholder="123 Main St, City, TX"
+              className="h-8 text-xs"
+              value={addParty.cachedMailingAddress}
+              onChange={(e) => setAddParty((p) => ({ ...p, cachedMailingAddress: e.target.value }))}
+            />
+          </div>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs"
+          disabled={!addParty.partyRelationType || !addParty.hubspotCompanyId || addPartyMutation.isPending}
+          onClick={() => addPartyMutation.mutate(addParty)}
+        >
+          <Plus className="h-3 w-3 mr-1" />
+          Add Party
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Lien Setup card (left rail) — self-contained so it manages its own form
+// ---------------------------------------------------------------------------
+
+function LienSetupCard({ projectId, project }: { projectId: string; project: Project }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [form, setForm] = React.useState({
+    contractorTier: project.contractorTier,
+    legalPropertyAddress: project.legalPropertyAddress ?? "",
+    county: project.county ?? "",
+    contractStartDate: project.contractStartDate ? project.contractStartDate.slice(0, 10) : "",
+  });
+
+  const patchProject = useMutation({
+    mutationFn: (body: object) =>
+      apiFetch(`/projects/${projectId}`, { method: "PATCH", body: JSON.stringify(body) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["project", projectId] });
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      toast({ title: "Project updated" });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  return (
+    <div className="flex flex-col gap-3 border-t p-3" style={{ borderColor: "var(--helm-border)" }}>
+      <div className="flex items-center gap-2">
+        <Building2 className="h-3.5 w-3.5 text-primary" />
+        <span className="text-[12px] font-semibold" style={{ color: "var(--text-base)" }}>Lien Setup</span>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-[11px]">Contractor Tier</Label>
+        <Select value={form.contractorTier} onValueChange={(v) => setForm((f) => ({ ...f, contractorTier: v }))}>
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="first_tier">1st Tier</SelectItem>
+            <SelectItem value="second_tier">2nd Tier</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-[11px]">County</Label>
+        <Input
+          placeholder="e.g. Travis"
+          className="h-8 text-xs"
+          value={form.county}
+          onChange={(e) => setForm((f) => ({ ...f, county: e.target.value }))}
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-[11px]">Legal Property Address</Label>
+        <Input
+          placeholder="100 Main St, Austin, TX"
+          className="h-8 text-xs"
+          value={form.legalPropertyAddress}
+          onChange={(e) => setForm((f) => ({ ...f, legalPropertyAddress: e.target.value }))}
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-[11px]">Contract Start Date</Label>
+        <Input
+          type="date"
+          className="h-8 text-xs"
+          value={form.contractStartDate}
+          onChange={(e) => setForm((f) => ({ ...f, contractStartDate: e.target.value }))}
+        />
+      </div>
+
+      <Button
+        size="sm"
+        className="h-8 text-xs"
+        disabled={patchProject.isPending}
+        onClick={() =>
+          patchProject.mutate({
+            contractorTier: form.contractorTier,
+            legalPropertyAddress: form.legalPropertyAddress || null,
+            county: form.county || null,
+            contractStartDate: form.contractStartDate || null,
+          })
+        }
+      >
+        Save Setup
+      </Button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Upcoming Deadlines card (right rail) — nearest unsatisfied deadline / stream
+// ---------------------------------------------------------------------------
+
+function StreamUpcomingRow({ stream }: { stream: LienStream }) {
+  const { data } = useQuery({
+    queryKey: ["stream-work-months", stream.id],
+    queryFn: () => apiFetch<StreamWithWorkMonths>(`/streams/${stream.id}/work-months`),
+  });
+
+  const next = React.useMemo(() => {
+    const all = (data?.workMonths ?? [])
+      .flatMap((wm) => wm.deadlines)
+      .filter((dl) => !dl.satisfiedAt)
+      .sort((a, b) => new Date(a.adjustedDate).getTime() - new Date(b.adjustedDate).getTime());
+    return all[0] ?? null;
+  }, [data]);
+
+  return (
+    <div className="rounded-md border p-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)" }}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[12px] font-medium capitalize" style={{ color: "var(--text-base)" }}>
+          {stream.workStream.replace(/_/g, " ")}
+        </span>
+        <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>
+          {stream.status.replace(/_/g, " ")}
+        </span>
+      </div>
+      {next ? (
+        <div className="mt-1.5 flex items-center justify-between gap-2">
+          <span className="text-[11.5px]" style={{ color: "var(--text-dim)" }}>
+            {RULE_KIND_LABELS[next.ruleKind] ?? next.ruleKind}
+          </span>
+          <span
+            className={cn(
+              "text-[11.5px] font-semibold tabular-nums",
+              deadlineUrgency(next.adjustedDate) === "overdue" && "text-red-600",
+              deadlineUrgency(next.adjustedDate) === "urgent" && "text-orange-600",
+              deadlineUrgency(next.adjustedDate) === "upcoming" && "text-amber-600",
+            )}
+          >
+            {formatDate(next.adjustedDate)}
+          </span>
+        </div>
+      ) : (
+        <p className="mt-1 text-[11px]" style={{ color: "var(--text-muted-color)" }}>
+          No upcoming deadlines.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function UpcomingDeadlinesCard({ streams }: { streams: LienStream[] }) {
+  return (
+    <Panel title="Deadlines">
+      <div className="flex flex-col gap-2 p-3">
+        {streams.length === 0 ? (
+          <p className="text-[11.5px]" style={{ color: "var(--text-muted-color)" }}>
+            No lien streams open.
+          </p>
+        ) : (
+          streams.map((s) => <StreamUpcomingRow key={s.id} stream={s} />)
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
@@ -1135,79 +1797,13 @@ function DeadlinesTab({
   holdsData?: HoldsData;
   onOpenFiling: (streamId: string) => void;
 }) {
-  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  // Lien setup form state
-  const [setupForm, setSetupForm] = React.useState<{
-    contractorTier: string;
-    legalPropertyAddress: string;
-    county: string;
-    contractStartDate: string;
-  } | null>(null);
-
-  // Initialize form when data loads
-  React.useEffect(() => {
-    if (data?.project && setupForm === null) {
-      const p = data.project;
-      setSetupForm({
-        contractorTier: p.contractorTier,
-        legalPropertyAddress: p.legalPropertyAddress ?? "",
-        county: p.county ?? "",
-        contractStartDate: p.contractStartDate
-          ? p.contractStartDate.slice(0, 10)
-          : "",
-      });
-    }
-  }, [data?.project, setupForm]);
-
-  // Party add form state
-  const [addParty, setAddParty] = React.useState({
-    hubspotCompanyId: "",
-    partyRelationType: "",
-    cachedLegalName: "",
-    cachedMailingAddress: "",
-  });
+  const { project, parties, streams, checklist } = data;
 
   // New stream form state
   const [newStream, setNewStream] = React.useState({ workStream: "" });
-
-  const patchProject = useMutation({
-    mutationFn: (body: object) =>
-      apiFetch(`/projects/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["project", id] });
-      qc.invalidateQueries({ queryKey: ["projects"] });
-      toast({ title: "Project updated" });
-    },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
-  });
-
-  const addPartyMutation = useMutation({
-    mutationFn: (body: object) =>
-      apiFetch(`/projects/${id}/parties`, { method: "POST", body: JSON.stringify(body) }),
-    onSuccess: (res: { party: Party; warnings: string[] }) => {
-      qc.invalidateQueries({ queryKey: ["project", id] });
-      if (res.warnings?.length) {
-        toast({ title: "Party added", description: res.warnings.join(" | "), variant: "default" });
-      } else {
-        toast({ title: "Party added" });
-      }
-      setAddParty({ hubspotCompanyId: "", partyRelationType: "", cachedLegalName: "", cachedMailingAddress: "" });
-    },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
-  });
-
-  const removeParty = useMutation({
-    mutationFn: (partyId: string) =>
-      apiFetch(`/projects/${id}/parties/${partyId}`, { method: "DELETE" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["project", id] });
-      toast({ title: "Party removed" });
-    },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
-  });
 
   const openStream = useMutation({
     mutationFn: (body: { lienProjectId: string; workStream: string }) =>
@@ -1222,84 +1818,75 @@ function DeadlinesTab({
 
   useLeftPanel(
     <Panel title="Project">
-      {data ? (
-        <div className="flex flex-col gap-3 p-3">
-          <div>
-            <div className="text-[13px] font-semibold" style={{ color: "var(--text-base)" }}>
-              {data.project.cachedProjectName ?? data.project.hubspotProjectId}
-            </div>
-            <div className="mt-2 flex flex-col gap-1">
-              {[
-                { label: "County", value: data.project.county ?? "—" },
-                { label: "Tier", value: data.project.contractorTier.replace(/_/g, " ") },
-                { label: "Workflow", value: data.project.lienWorkflowType.replace(/_/g, " ") },
-              ].map((r) => (
-                <div key={r.label} className="flex items-center justify-between gap-2">
-                  <span className="text-[11px]" style={{ color: "var(--text-muted-color)" }}>{r.label}</span>
-                  <span className="text-[11.5px] font-medium capitalize" style={{ color: "var(--text-dim)" }}>{r.value}</span>
-                </div>
-              ))}
-            </div>
+      <div className="flex flex-col gap-3 p-3">
+        <div>
+          <div className="text-[13px] font-semibold" style={{ color: "var(--text-base)" }}>
+            {project.cachedProjectName ?? project.hubspotProjectId}
           </div>
-          <div>
-            <div
-              className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em]"
-              style={{ color: "var(--text-muted-color)" }}
-            >
-              Lien Streams
-            </div>
-            {data.streams.length > 0 ? (
-              <div className="flex flex-col gap-1">
-                {data.streams.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => onOpenFiling(s.id)}
-                    className="flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left hover:opacity-80"
-                    style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)" }}
-                  >
-                    <span className="truncate text-[12px] font-medium capitalize" style={{ color: "var(--text-base)" }}>
-                      {s.workStream.replace(/_/g, " ")}
-                    </span>
-                    <span
-                      className="shrink-0 text-[10px] font-semibold uppercase tracking-wide"
-                      style={{ color: "var(--text-muted-color)" }}
-                    >
-                      {s.status.replace(/_/g, " ")}
-                    </span>
-                  </button>
-                ))}
+          <div className="mt-2 flex flex-col gap-1">
+            {[
+              { label: "County", value: project.county ?? "—" },
+              { label: "Tier", value: project.contractorTier.replace(/_/g, " ") },
+              { label: "Workflow", value: project.lienWorkflowType.replace(/_/g, " ") },
+            ].map((r) => (
+              <div key={r.label} className="flex items-center justify-between gap-2">
+                <span className="text-[11px]" style={{ color: "var(--text-muted-color)" }}>{r.label}</span>
+                <span className="text-[11.5px] font-medium capitalize" style={{ color: "var(--text-dim)" }}>{r.value}</span>
               </div>
-            ) : (
-              <div className="text-[11.5px]" style={{ color: "var(--text-muted-color)" }}>No lien streams</div>
-            )}
+            ))}
           </div>
         </div>
-      ) : (
-        <div className="p-3 text-[12px]" style={{ color: "var(--text-muted-color)" }}>Loading…</div>
-      )}
+        <div>
+          <div
+            className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em]"
+            style={{ color: "var(--text-muted-color)" }}
+          >
+            Lien Streams
+          </div>
+          {streams.length > 0 ? (
+            <div className="flex flex-col gap-1">
+              {streams.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => onOpenFiling(s.id)}
+                  className="flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left hover:opacity-80"
+                  style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)" }}
+                >
+                  <span className="truncate text-[12px] font-medium capitalize" style={{ color: "var(--text-base)" }}>
+                    {s.workStream.replace(/_/g, " ")}
+                  </span>
+                  <span
+                    className="shrink-0 text-[10px] font-semibold uppercase tracking-wide"
+                    style={{ color: "var(--text-muted-color)" }}
+                  >
+                    {s.status.replace(/_/g, " ")}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="text-[11.5px]" style={{ color: "var(--text-muted-color)" }}>No lien streams</div>
+          )}
+        </div>
+      </div>
+      <LienSetupCard key={id} projectId={id} project={project} />
     </Panel>,
-    [data],
+    [data, id],
   );
 
-  const { project, parties, streams, subSystemType, checklist } = data;
-  const form = setupForm ?? {
-    contractorTier: project.contractorTier,
-    legalPropertyAddress: project.legalPropertyAddress ?? "",
-    county: project.county ?? "",
-    contractStartDate: project.contractStartDate ? project.contractStartDate.slice(0, 10) : "",
-  };
+  useRightPanel(
+    <div className="flex flex-col gap-3">
+      <UpcomingDeadlinesCard streams={streams} />
+      <Panel title="Crew Activity">
+        <div className="p-3">
+          <LastTimeOnJobPanel projectId={id} />
+        </div>
+      </Panel>
+    </div>,
+    [data, id],
+  );
 
   const activeHolds = holdsData?.holds ?? [];
-
-  function handleSaveSetup() {
-    patchProject.mutate({
-      contractorTier: form.contractorTier,
-      legalPropertyAddress: form.legalPropertyAddress || null,
-      county: form.county || null,
-      contractStartDate: form.contractStartDate || null,
-    });
-  }
-
   const existingStreamTypes = new Set(streams.map((s) => s.workStream));
 
   return (
@@ -1334,81 +1921,6 @@ function DeadlinesTab({
 
         <Separator />
 
-        {/* Lien Setup Form */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold">Lien Setup</h2>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Contractor Tier</Label>
-              <Select
-                value={form.contractorTier}
-                onValueChange={(v) => setSetupForm((f) => f ? { ...f, contractorTier: v } : f)}
-              >
-                <SelectTrigger className="h-9 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="first_tier">
-                    <span className="font-medium">1st Tier</span>
-                    <span className="ml-1 text-xs text-muted-foreground">— contracted directly with GC</span>
-                  </SelectItem>
-                  <SelectItem value="second_tier">
-                    <span className="font-medium">2nd Tier</span>
-                    <span className="ml-1 text-xs text-muted-foreground">— contracted with a sub</span>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">County</Label>
-              <Input
-                placeholder="e.g. Travis"
-                className="h-9 text-sm"
-                value={form.county}
-                onChange={(e) => setSetupForm((f) => f ? { ...f, county: e.target.value } : f)}
-              />
-            </div>
-
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label className="text-xs">Legal Property Address</Label>
-              <Input
-                placeholder="e.g. 100 Main St, Austin, TX 78701"
-                className="h-9 text-sm"
-                value={form.legalPropertyAddress}
-                onChange={(e) =>
-                  setSetupForm((f) => f ? { ...f, legalPropertyAddress: e.target.value } : f)
-                }
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">Contract Start Date</Label>
-              <Input
-                type="date"
-                className="h-9 text-sm"
-                value={form.contractStartDate}
-                onChange={(e) =>
-                  setSetupForm((f) => f ? { ...f, contractStartDate: e.target.value } : f)
-                }
-              />
-            </div>
-          </div>
-
-          <Button
-            size="sm"
-            onClick={handleSaveSetup}
-            disabled={patchProject.isPending}
-          >
-            Save Setup
-          </Button>
-        </div>
-
-        <Separator />
-
         {/* Lien Streams + Deadlines */}
         <div className="space-y-3">
           <div className="flex items-center gap-2">
@@ -1430,6 +1942,13 @@ function DeadlinesTab({
                         Opened {new Date(s.openedAt).toLocaleDateString()}
                       </span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => onOpenFiling(s.id)}
+                      className="text-xs underline text-muted-foreground hover:text-foreground"
+                    >
+                      Open filing →
+                    </button>
                     <span
                       className={cn(
                         "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
@@ -1492,136 +2011,42 @@ function DeadlinesTab({
 
         <Separator />
 
-        {/* Invoices (QBO) */}
-        <div className="space-y-3">
-          <InvoicesPanel projectId={id!} />
-        </div>
+        {/* Ledger sub-tabs */}
+        <Tabs defaultValue="ar" className="w-full">
+          <TabsList className="flex flex-wrap h-auto gap-1">
+            <TabsTrigger value="ar" className="gap-1.5 text-xs">
+              <ArrowDownCircle className="h-3.5 w-3.5" /> AR
+            </TabsTrigger>
+            <TabsTrigger value="ap" className="gap-1.5 text-xs">
+              <ArrowUpCircle className="h-3.5 w-3.5" /> AP
+            </TabsTrigger>
+            <TabsTrigger value="waivers" className="gap-1.5 text-xs">
+              <FileSignature className="h-3.5 w-3.5" /> Waivers
+            </TabsTrigger>
+            <TabsTrigger value="notices" className="gap-1.5 text-xs">
+              <Bell className="h-3.5 w-3.5" /> Notices
+            </TabsTrigger>
+            <TabsTrigger value="parties" className="gap-1.5 text-xs">
+              <Users className="h-3.5 w-3.5" /> Parties
+            </TabsTrigger>
+          </TabsList>
 
-        <Separator />
-
-        {/* Last Time on Job */}
-        <div className="space-y-3">
-          <LastTimeOnJobPanel projectId={id!} />
-        </div>
-
-        <Separator />
-
-        {/* Parties */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold">Parties</h2>
-            {project.contractorTier === "second_tier" && (
-              <span className="text-xs text-muted-foreground ml-1">
-                — 2nd-tier requires hiring party + original contractor
-              </span>
-            )}
-          </div>
-
-          {parties.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No parties added yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {parties.map((party) => (
-                <div
-                  key={party.id}
-                  className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium truncate">{party.cachedLegalName}</span>
-                      <Badge variant="outline" className="text-xs shrink-0">
-                        {PARTY_ROLE_LABELS[party.partyRelationType] ?? party.partyRelationType}
-                      </Badge>
-                    </div>
-                    {party.cachedMailingAddress && (
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                        {party.cachedMailingAddress}
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    title="Remove party"
-                    className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors"
-                    onClick={() => removeParty.mutate(party.id)}
-                    disabled={removeParty.isPending}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Add party form */}
-          <div className="rounded-lg border border-dashed bg-muted/20 p-4 space-y-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Add Party
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Role</Label>
-                <Select
-                  value={addParty.partyRelationType}
-                  onValueChange={(v) => setAddParty((p) => ({ ...p, partyRelationType: v }))}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Select role…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="owner">Owner</SelectItem>
-                    <SelectItem value="original_contractor">Original Contractor (GC)</SelectItem>
-                    <SelectItem value="hiring_party">Hiring Party</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">HubSpot Company ID</Label>
-                <Input
-                  placeholder="hs_co_…"
-                  className="h-8 text-xs"
-                  value={addParty.hubspotCompanyId}
-                  onChange={(e) => setAddParty((p) => ({ ...p, hubspotCompanyId: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Legal Name</Label>
-                <Input
-                  placeholder="Legal entity name"
-                  className="h-8 text-xs"
-                  value={addParty.cachedLegalName}
-                  onChange={(e) => setAddParty((p) => ({ ...p, cachedLegalName: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Mailing Address (optional)</Label>
-                <Input
-                  placeholder="123 Main St, City, TX"
-                  className="h-8 text-xs"
-                  value={addParty.cachedMailingAddress}
-                  onChange={(e) =>
-                    setAddParty((p) => ({ ...p, cachedMailingAddress: e.target.value }))
-                  }
-                />
-              </div>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs"
-              disabled={
-                !addParty.partyRelationType ||
-                !addParty.hubspotCompanyId ||
-                addPartyMutation.isPending
-              }
-              onClick={() => addPartyMutation.mutate(addParty)}
-            >
-              <Plus className="h-3 w-3 mr-1" />
-              Add Party
-            </Button>
-          </div>
-        </div>
+          <TabsContent value="ar" className="mt-4">
+            <ARPanel projectId={id!} />
+          </TabsContent>
+          <TabsContent value="ap" className="mt-4">
+            <APPanel projectId={id!} />
+          </TabsContent>
+          <TabsContent value="waivers" className="mt-4">
+            <WaiversPanel projectId={id!} />
+          </TabsContent>
+          <TabsContent value="notices" className="mt-4">
+            <NoticesPanel projectId={id!} />
+          </TabsContent>
+          <TabsContent value="parties" className="mt-4">
+            <PartiesPanel projectId={id!} parties={parties} contractorTier={project.contractorTier} />
+          </TabsContent>
+        </Tabs>
       </div>
   );
 }
@@ -1732,7 +2157,6 @@ export default function ProjectDetailPage() {
     <Screen>
       <div className="flex flex-col gap-4">
         <WorkspaceHeader
-          back={{ label: "Back to Projects", onClick: () => setLocation("/liens") }}
           title={project.cachedProjectName ?? project.hubspotProjectId}
           subtitle={
             <div className="flex items-center gap-2 flex-wrap">
@@ -1760,32 +2184,43 @@ export default function ProjectDetailPage() {
             </div>
           }
           right={
-            <div className="flex items-center gap-2 flex-wrap">
-              {activeHolds.length > 0 && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 text-red-700 px-3 py-1 text-xs font-medium">
-                  <Shield className="h-3.5 w-3.5" />
-                  {activeHolds.length} Hold{activeHolds.length !== 1 ? "s" : ""}
-                </span>
-              )}
-              {project.completionChecklistComplete ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 text-green-700 px-3 py-1 text-xs font-medium">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  Setup Complete
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 text-amber-700 px-3 py-1 text-xs font-medium">
-                  <XCircle className="h-3.5 w-3.5" />
-                  Incomplete Setup
-                </span>
-              )}
+            <div className="flex flex-col items-end gap-2">
+              <button
+                type="button"
+                onClick={() => setLocation("/liens")}
+                className="inline-flex items-center gap-1 text-[12px] transition-colors hover:opacity-80"
+                style={{ color: "var(--text-dim)" }}
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                Back to Projects
+              </button>
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                {activeHolds.length > 0 && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 text-red-700 px-3 py-1 text-xs font-medium">
+                    <Shield className="h-3.5 w-3.5" />
+                    {activeHolds.length} Hold{activeHolds.length !== 1 ? "s" : ""}
+                  </span>
+                )}
+                {project.completionChecklistComplete ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 text-green-700 px-3 py-1 text-xs font-medium">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Setup Complete
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 text-amber-700 px-3 py-1 text-xs font-medium">
+                    <XCircle className="h-3.5 w-3.5" />
+                    Incomplete Setup
+                  </span>
+                )}
+              </div>
             </div>
           }
         />
 
         <WorkspaceTabs
           tabs={[
-            { key: "deadlines", label: "Deadlines", Icon: Calendar },
-            { key: "filing", label: "Filing", Icon: Gavel },
+            { key: "deadlines", label: "Lien Streams", Icon: GitBranch },
+            { key: "filing", label: "Filing Workspace", Icon: Gavel },
           ]}
           active={tab}
           onChange={changeTab}
