@@ -18,14 +18,18 @@ import { useToast } from "@/hooks/use-toast";
 import {
   AlertTriangle,
   ArrowLeft,
+  Calendar,
   CheckCircle2,
-  Plus,
-  Trash2,
-  Users,
-  XCircle,
-  Building2,
+  Clock,
   GitBranch,
   Info,
+  Plus,
+  RefreshCw,
+  Shield,
+  Trash2,
+  Users,
+  Building2,
+  XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -80,6 +84,36 @@ interface ProjectDetailResponse {
   streams: LienStream[];
   subSystemType: SubSystemType | null;
   checklist: { complete: boolean; missing: ChecklistItem[] };
+}
+
+interface Deadline {
+  id: string;
+  ruleId: string;
+  ruleKind: string;
+  computedDate: string;
+  adjustedDate: string;
+  satisfiedAt: string | null;
+  sourceData: Record<string, unknown>;
+  rule?: {
+    statuteCitation: string;
+    description: string;
+    ruleKind: string;
+  } | null;
+}
+
+interface WorkMonth {
+  id: string;
+  month: string;
+  derivedOverdue: boolean;
+  clearedFlag: boolean;
+  invoiceLinkId: string | null;
+  deadlines: Deadline[];
+}
+
+interface StreamWithWorkMonths {
+  stream: LienStream;
+  workMonths: WorkMonth[];
+  summary?: { workMonthsProcessed: number; deadlinesComputed: number };
 }
 
 // ---------------------------------------------------------------------------
@@ -143,6 +177,53 @@ const STREAM_STATUS_COLORS: Record<string, string> = {
   lapsed: "bg-red-200 text-red-900",
 };
 
+const RULE_KIND_LABELS: Record<string, string> = {
+  notice: "Pre-Lien Notice",
+  filing: "Lien Filing",
+  retainage: "Retainage Notice",
+  post_filing_notice: "Post-Filing Notice",
+  enforcement: "Enforcement Deadline",
+  release: "Release",
+};
+
+const RULE_KIND_COLORS: Record<string, string> = {
+  notice: "bg-amber-50 border-amber-200 text-amber-800",
+  filing: "bg-red-50 border-red-200 text-red-800",
+  retainage: "bg-orange-50 border-orange-200 text-orange-700",
+  post_filing_notice: "bg-purple-50 border-purple-200 text-purple-800",
+  enforcement: "bg-red-100 border-red-300 text-red-900",
+  release: "bg-green-50 border-green-200 text-green-700",
+};
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function formatMonth(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function deadlineUrgency(adjustedDate: string): "overdue" | "urgent" | "upcoming" | "future" {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const dl = new Date(adjustedDate);
+  dl.setUTCHours(0, 0, 0, 0);
+  const diffDays = Math.floor((dl.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) return "overdue";
+  if (diffDays <= 7) return "urgent";
+  if (diffDays <= 30) return "upcoming";
+  return "future";
+}
+
 // ---------------------------------------------------------------------------
 // Checklist panel
 // ---------------------------------------------------------------------------
@@ -191,6 +272,213 @@ function ChecklistPanel({
 }
 
 // ---------------------------------------------------------------------------
+// Stream deadlines panel
+// ---------------------------------------------------------------------------
+
+function StreamDeadlinesPanel({
+  streamId,
+  projectId,
+}: {
+  streamId: string;
+  projectId: string;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["stream-work-months", streamId],
+    queryFn: () => apiFetch<StreamWithWorkMonths>(`/streams/${streamId}/work-months`),
+  });
+
+  const recompute = useMutation({
+    mutationFn: () =>
+      apiFetch<StreamWithWorkMonths>(`/streams/${streamId}/recompute`, { method: "POST" }),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ["stream-work-months", streamId] });
+      toast({
+        title: "Deadlines recomputed",
+        description: `${result.summary?.workMonthsProcessed ?? 0} work months, ${result.summary?.deadlinesComputed ?? 0} deadlines.`,
+      });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Recompute failed", description: err.message, variant: "destructive" }),
+  });
+
+  const clearInvoice = useMutation({
+    mutationFn: (invoiceId: string) =>
+      apiFetch(`/invoices/${invoiceId}/clear`, {
+        method: "POST",
+        body: JSON.stringify({ clearedFlag: true }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["stream-work-months", streamId] });
+      qc.invalidateQueries({ queryKey: ["project", projectId] });
+      toast({ title: "Invoice marked cleared" });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Clear failed", description: err.message, variant: "destructive" }),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="py-3 text-xs text-muted-foreground">Loading deadlines…</div>
+    );
+  }
+
+  if (isError || !data) {
+    return (
+      <div className="py-2 text-xs text-destructive">Could not load deadline data.</div>
+    );
+  }
+
+  const { workMonths } = data;
+
+  return (
+    <div className="mt-2 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Work Months & Deadlines
+        </span>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs gap-1"
+          disabled={recompute.isPending}
+          onClick={() => recompute.mutate()}
+        >
+          <RefreshCw className={cn("h-3 w-3", recompute.isPending && "animate-spin")} />
+          Recompute
+        </Button>
+      </div>
+
+      {workMonths.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-1">
+          No work months derived yet. Click Recompute to derive from timesheets.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {workMonths.map((wm) => (
+            <div key={wm.id} className="rounded-lg border bg-card p-3 space-y-2">
+              {/* Work month header */}
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-sm font-medium">{formatMonth(wm.month)}</span>
+                  {wm.derivedOverdue && !wm.clearedFlag && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 text-red-700 px-2 py-0.5 text-xs font-medium">
+                      <AlertTriangle className="h-3 w-3" />
+                      Overdue
+                    </span>
+                  )}
+                  {wm.clearedFlag && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-medium">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Cleared
+                    </span>
+                  )}
+                </div>
+                {wm.invoiceLinkId && !wm.clearedFlag && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 text-xs text-green-700 hover:text-green-800 hover:bg-green-50 px-2"
+                    disabled={clearInvoice.isPending}
+                    onClick={() => clearInvoice.mutate(wm.invoiceLinkId!)}
+                  >
+                    Mark Cleared
+                  </Button>
+                )}
+              </div>
+
+              {/* Deadlines */}
+              {wm.deadlines.length === 0 ? (
+                <p className="text-xs text-muted-foreground pl-5">
+                  No deadlines computed — run Recompute above.
+                </p>
+              ) : (
+                <div className="space-y-1.5 pl-1">
+                  {wm.deadlines.map((dl) => {
+                    const urgency = deadlineUrgency(dl.adjustedDate);
+                    const isSatisfied = !!dl.satisfiedAt;
+
+                    return (
+                      <div
+                        key={dl.id}
+                        className={cn(
+                          "rounded border px-3 py-2 flex items-start justify-between gap-3",
+                          isSatisfied
+                            ? "bg-gray-50 border-gray-200 opacity-60"
+                            : RULE_KIND_COLORS[dl.ruleKind] ?? "bg-gray-50 border-gray-200",
+                        )}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-semibold">
+                              {RULE_KIND_LABELS[dl.ruleKind] ?? dl.ruleKind}
+                            </span>
+                            {dl.rule?.statuteCitation && (
+                              <span className="text-xs opacity-70 font-mono">
+                                {dl.rule.statuteCitation}
+                              </span>
+                            )}
+                            {isSatisfied && (
+                              <Badge variant="outline" className="text-xs h-4 px-1 text-green-700 border-green-300">
+                                Satisfied
+                              </Badge>
+                            )}
+                          </div>
+                          {dl.rule?.description && (
+                            <p className="text-xs opacity-70 mt-0.5 truncate">{dl.rule.description}</p>
+                          )}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div
+                            className={cn(
+                              "text-xs font-semibold tabular-nums",
+                              !isSatisfied && urgency === "overdue" && "text-red-700",
+                              !isSatisfied && urgency === "urgent" && "text-orange-700",
+                              !isSatisfied && urgency === "upcoming" && "text-amber-700",
+                              (isSatisfied || urgency === "future") && "text-muted-foreground",
+                            )}
+                          >
+                            {formatDate(dl.adjustedDate)}
+                          </div>
+                          {dl.computedDate !== dl.adjustedDate && (
+                            <div className="text-xs text-muted-foreground line-through">
+                              {formatDate(dl.computedDate)}
+                            </div>
+                          )}
+                          {!isSatisfied && (
+                            <div
+                              className={cn(
+                                "text-xs mt-0.5",
+                                urgency === "overdue" && "text-red-600 font-medium",
+                                urgency === "urgent" && "text-orange-600",
+                                urgency === "upcoming" && "text-amber-600",
+                                urgency === "future" && "text-muted-foreground",
+                              )}
+                            >
+                              {urgency === "overdue" && "Past due"}
+                              {urgency === "urgent" && "≤7 days"}
+                              {urgency === "upcoming" && "≤30 days"}
+                              {urgency === "future" && "Upcoming"}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
@@ -204,6 +492,15 @@ export default function ProjectDetailPage() {
     queryKey: ["project", id],
     queryFn: () => apiFetch<ProjectDetailResponse>(`/projects/${id}`),
     retry: false,
+    enabled: !!id,
+  });
+
+  const { data: holdsData } = useQuery({
+    queryKey: ["project-holds", id],
+    queryFn: () =>
+      apiFetch<{ holds: { id: string; holdType: string; reason: string; setAt: string }[] }>(
+        `/holds?projectId=${id}`,
+      ),
     enabled: !!id,
   });
 
@@ -237,6 +534,9 @@ export default function ProjectDetailPage() {
     cachedLegalName: "",
     cachedMailingAddress: "",
   });
+
+  // New stream form state
+  const [newStream, setNewStream] = React.useState({ workStream: "" });
 
   const patchProject = useMutation({
     mutationFn: (body: object) =>
@@ -274,6 +574,17 @@ export default function ProjectDetailPage() {
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
+  const openStream = useMutation({
+    mutationFn: (body: { lienProjectId: string; workStream: string }) =>
+      apiFetch("/streams/open", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["project", id] });
+      toast({ title: "Stream opened" });
+      setNewStream({ workStream: "" });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
   if (isLoading) {
     return (
       <Screen>
@@ -304,6 +615,8 @@ export default function ProjectDetailPage() {
     contractStartDate: project.contractStartDate ? project.contractStartDate.slice(0, 10) : "",
   };
 
+  const activeHolds = holdsData?.holds ?? [];
+
   function handleSaveSetup() {
     patchProject.mutate({
       contractorTier: form.contractorTier,
@@ -312,6 +625,8 @@ export default function ProjectDetailPage() {
       contractStartDate: form.contractStartDate || null,
     });
   }
+
+  const existingStreamTypes = new Set(streams.map((s) => s.workStream));
 
   return (
     <Screen>
@@ -356,7 +671,13 @@ export default function ProjectDetailPage() {
               )}
             </div>
           </div>
-          <div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {activeHolds.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 text-red-700 px-3 py-1 text-xs font-medium">
+                <Shield className="h-3.5 w-3.5" />
+                {activeHolds.length} Hold{activeHolds.length !== 1 ? "s" : ""}
+              </span>
+            )}
             {project.completionChecklistComplete ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 text-green-700 px-3 py-1 text-xs font-medium">
                 <CheckCircle2 className="h-3.5 w-3.5" />
@@ -370,6 +691,31 @@ export default function ProjectDetailPage() {
             )}
           </div>
         </div>
+
+        {/* Active holds banner */}
+        {activeHolds.length > 0 && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-red-600 shrink-0" />
+              <span className="text-sm font-medium text-red-800">Active Holds</span>
+            </div>
+            {activeHolds.map((hold) => (
+              <div key={hold.id} className="flex items-center gap-2 ml-6">
+                <span
+                  className={cn(
+                    "inline-flex rounded px-1.5 py-0.5 text-xs font-medium",
+                    hold.holdType === "schedule_hold"
+                      ? "bg-red-100 text-red-700"
+                      : "bg-orange-100 text-orange-700",
+                  )}
+                >
+                  {hold.holdType === "schedule_hold" ? "Schedule Hold" : "Material Hold"}
+                </span>
+                <span className="text-xs text-red-700">{hold.reason}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Checklist */}
         <ChecklistPanel checklist={checklist} contractorTier={project.contractorTier} />
@@ -451,20 +797,21 @@ export default function ProjectDetailPage() {
 
         <Separator />
 
-        {/* Lien Streams */}
-        {streams.length > 0 && (
-          <>
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <GitBranch className="h-4 w-4 text-primary" />
-                <h2 className="text-sm font-semibold">Lien Streams</h2>
-              </div>
-              <div className="space-y-2">
-                {streams.map((s) => (
-                  <div
-                    key={s.id}
-                    className="flex items-center gap-3 rounded-lg border bg-muted/30 px-4 py-2.5"
-                  >
+        {/* Lien Streams + Deadlines */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <GitBranch className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-semibold">Lien Streams</h2>
+          </div>
+
+          {streams.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No streams opened yet.</p>
+          ) : (
+            <div className="space-y-4">
+              {streams.map((s) => (
+                <div key={s.id} className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                  {/* Stream header */}
+                  <div className="flex items-center gap-3">
                     <div className="flex-1">
                       <span className="text-sm font-medium capitalize">{s.workStream}</span>
                       <span className="text-xs text-muted-foreground ml-2">
@@ -480,12 +827,58 @@ export default function ProjectDetailPage() {
                       {STREAM_STATUS_LABELS[s.status] ?? s.status}
                     </span>
                   </div>
-                ))}
-              </div>
+
+                  {/* Deadlines sub-panel */}
+                  <StreamDeadlinesPanel streamId={s.id} projectId={id!} />
+                </div>
+              ))}
             </div>
-            <Separator />
-          </>
-        )}
+          )}
+
+          {/* Open new stream */}
+          {(project.lienWorkflowType !== "none") && (
+            <div className="rounded-lg border border-dashed bg-muted/10 p-3 space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Open Stream
+              </p>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={newStream.workStream}
+                  onValueChange={(v) => setNewStream({ workStream: v })}
+                >
+                  <SelectTrigger className="h-8 text-xs w-44">
+                    <SelectValue placeholder="Select stream…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {!existingStreamTypes.has("construction") && (
+                      <SelectItem value="construction">Construction</SelectItem>
+                    )}
+                    {!existingStreamTypes.has("design") && (
+                      <SelectItem value="design">Design</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs"
+                  disabled={!newStream.workStream || openStream.isPending}
+                  onClick={() =>
+                    openStream.mutate({ lienProjectId: id!, workStream: newStream.workStream })
+                  }
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Open
+                </Button>
+              </div>
+              {existingStreamTypes.size === 2 && (
+                <p className="text-xs text-muted-foreground">Both streams are already open.</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <Separator />
 
         {/* Parties */}
         <div className="space-y-4">

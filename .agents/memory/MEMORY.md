@@ -2,3 +2,4 @@
 - [Seed runner](seed-runner.md) — `tsx` is not in PATH; run TypeScript seed scripts with `pnpm dlx tsx <file>` from the package dir.
 - [lib/db declarations](lib-db-build.md) — run `pnpm --filter @workspace/db exec tsc -p tsconfig.json` before typechecking api-server to generate .d.ts so TS project-references resolve.
 - [Replit proxy prefix passthrough](replit-proxy-prefix.md) — Replit artifact-router does NOT strip path prefixes; all API server routes must include /api/* to match what the proxy delivers.
+- [Phase 3 deadline engine](phase3-deadline-engine.md) — Texas § 53.003(e) business-day engine verified: Mar 2026 notice→Jun 15, retainage Feb 14(Sat) skips Presidents' Day(Feb 16)→Feb 17.

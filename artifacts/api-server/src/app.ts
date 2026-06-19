@@ -7,6 +7,10 @@ import externalRouter from "./routes/external";
 import apiRouter from "./routes/api";
 import configRouter from "./routes/config";
 import projectsRouter from "./routes/projects";
+import streamsRouter from "./routes/streams";
+import deadlinesRouter from "./routes/deadlines";
+import invoicesRouter from "./routes/invoices";
+import holdsRouter from "./routes/holds";
 import devRouter from "./routes/dev";
 import { logger } from "./lib/logger";
 import { parseSession } from "./lib/session";
@@ -46,6 +50,10 @@ if (process.env.NODE_ENV !== "production") {
 
 app.use("/api/config", configRouter);        // GET/POST /api/config/*              (session)
 app.use("/api/projects", projectsRouter);   // GET/POST /api/projects/*            (session)
+app.use("/api", streamsRouter);             // POST /api/streams/open, PATCH /api/streams/:id/*
+app.use("/api", deadlinesRouter);           // GET /api/deadlines/:workMonthId
+app.use("/api", invoicesRouter);            // GET/POST /api/invoices/*
+app.use("/api", holdsRouter);               // GET/POST /api/holds/*
 app.use("/api", apiRouter);                 // GET /api/org, etc.                  (session, catch-all)
 
 export default app;
