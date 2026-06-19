@@ -8,6 +8,7 @@ import {
   ChevronLeft, Bell, Menu, X, Search,
   Sun, Moon, PanelRightClose, PanelRightOpen,
   PanelLeftClose, PanelLeftOpen, FileSignature, Gavel, LogOut,
+  ChevronDown,
 } from "lucide-react";
 
 /* ─── Panel context (inner left + right) ─────────────────────────────────── */
@@ -50,6 +51,36 @@ export function Panel({
       </div>
       {children}
     </>
+  );
+}
+
+/* ─── Collapsible card (tablet panel surface) ────────────────────────────── */
+function CollapsibleCard({
+  label, Icon, defaultOpen = false, children,
+}: {
+  label: string; Icon: React.ComponentType<{ className?: string }>; defaultOpen?: boolean; children?: React.ReactNode;
+}) {
+  const [open, setOpen] = React.useState(defaultOpen);
+  return (
+    <section className="overflow-hidden rounded-lg border" style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors"
+        aria-expanded={open}
+        style={{ color: "var(--text-base)" }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+      >
+        <Icon className="h-[18px] w-[18px] shrink-0" />
+        <span className="flex-1 text-[13.5px] font-semibold">{label}</span>
+        <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="border-t" style={{ borderColor: "var(--helm-border)" }}>
+          {children}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -128,7 +159,7 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { isDesktop, isMobile, width } = useResponsive();
+  const { isDesktop, isTablet, isMobile, width } = useResponsive();
   const { user, isLoading, isAuthenticated, login, logout } = useAuth();
   const [location] = useLocation();
   const [collapsed, setCollapsed] = React.useState(false);
@@ -138,11 +169,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [left, setLeft] = React.useState<React.ReactNode>(null);
   const [rightOpen, setRightOpen] = React.useState(true);
   const [leftOpen, setLeftOpen] = React.useState(true);
+  const [mobilePanel, setMobilePanel] = React.useState<null | "left" | "right">(null);
 
   React.useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
     document.body.classList.toggle("dark", theme === "dark");
   }, [theme]);
+
+  /* Close the mobile panel overlay when leaving phone width or when the
+     corresponding panel content unregisters. */
+  React.useEffect(() => {
+    if (!isMobile) setMobilePanel(null);
+  }, [isMobile]);
+  React.useEffect(() => {
+    if (mobilePanel === "left" && !left) setMobilePanel(null);
+    if (mobilePanel === "right" && !right) setMobilePanel(null);
+  }, [mobilePanel, left, right]);
 
   if (isLoading) {
     return (
@@ -165,14 +207,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   /* Inner left panel (DD-UI: LP · content · RP) is now page-registered via
      useLeftPanel — pages decide its content. */
+  const hasLeftPanel = !!left;
+  const hasRightPanel = !!right;
+
+  /* Desktop: side columns (left fixed column, right column or stacked). */
   const sidebarW = isDesktop ? (collapsed ? 70 : 236) : 0;
-  const hasLeft = !!left && leftOpen && isDesktop;
-  const leftW = hasLeft ? 208 : 0;
+  const leftCol = hasLeftPanel && leftOpen && isDesktop;
+  const leftW = leftCol ? 208 : 0;
   const avail = width - sidebarW - leftW;
   const rightFits = avail - 314 >= 470;
-  const hasRight = !!right && rightOpen && !isMobile;
-  const rightCol = hasRight && rightFits && isDesktop;
-  const rightStacked = hasRight && !rightCol;
+  const rightCol = hasRightPanel && rightOpen && isDesktop && rightFits;
+  const rightStacked = hasRightPanel && rightOpen && isDesktop && !rightFits;
+
+  /* Tablet: inline collapsible cards (left above content, right below). */
+  const leftCard = hasLeftPanel && isTablet;
+  const rightCard = hasRightPanel && isTablet;
 
   const ctx = { setRight, setLeft };
 
@@ -375,14 +424,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="grid flex-1 items-start gap-4 p-4 md:gap-[18px] md:p-[18px]"
             style={{
               gridTemplateColumns: [
-                hasLeft ? "208px" : null,
+                leftCol ? "208px" : null,
                 "minmax(0,1fr)",
                 rightCol ? "296px" : null,
               ].filter(Boolean).join(" "),
               paddingBottom: isMobile ? 80 : undefined,
             }}
           >
-            {hasLeft && (
+            {leftCol && (
               <aside
                 className="sticky top-[120px] overflow-hidden rounded-lg border"
                 style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
@@ -391,9 +440,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </aside>
             )}
             <div className="flex min-w-0 flex-col gap-4">
+              {/* Tablet: left panel as collapsible card above content */}
+              {leftCard && (
+                <CollapsibleCard label="Filters & Navigation" Icon={PanelLeftOpen}>
+                  {left}
+                </CollapsibleCard>
+              )}
               {children}
+              {/* Tablet: right panel as collapsible card below content */}
+              {rightCard && (
+                <CollapsibleCard label="Details & Context" Icon={PanelRightOpen}>
+                  {right}
+                </CollapsibleCard>
+              )}
             </div>
-            {hasRight && (
+            {(rightCol || rightStacked) && (
               <div
                 className={cn(
                   "overflow-hidden rounded-lg border",
@@ -419,6 +480,52 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </span>
           </footer>
         </main>
+
+        {/* ─── Phone floating panel buttons ──────────────────────────── */}
+        {isMobile && hasLeftPanel && (
+          <button
+            onClick={() => setMobilePanel("left")}
+            className="fixed left-3 z-40 flex items-center gap-1.5 rounded-full border px-3.5 py-2.5 shadow-lg"
+            style={{ bottom: 74, background: "var(--surface-3)", borderColor: "var(--helm-border)", color: "var(--text-base)" }}
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+            <span className="text-[12px] font-semibold">Filters</span>
+          </button>
+        )}
+        {isMobile && hasRightPanel && (
+          <button
+            onClick={() => setMobilePanel("right")}
+            className="fixed right-3 z-40 flex items-center gap-1.5 rounded-full border px-3.5 py-2.5 shadow-lg"
+            style={{ bottom: 74, background: "var(--surface-3)", borderColor: "var(--helm-border)", color: "var(--text-base)" }}
+          >
+            <PanelRightOpen className="h-4 w-4" />
+            <span className="text-[12px] font-semibold">Details</span>
+          </button>
+        )}
+
+        {/* ─── Phone panel overlay (bottom sheet) ─────────────────────── */}
+        {isMobile && mobilePanel && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" onClick={() => setMobilePanel(null)}>
+            <div
+              className="absolute inset-x-0 bottom-0 flex max-h-[80vh] flex-col rounded-t-2xl border-t"
+              style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex shrink-0 items-center justify-between border-b px-4 py-3" style={{ borderColor: "var(--helm-border)" }}>
+                <span className="flex items-center gap-2 text-[14px] font-semibold" style={{ color: "var(--text-base)" }}>
+                  {mobilePanel === "left" ? <PanelLeftOpen className="h-[18px] w-[18px]" /> : <PanelRightOpen className="h-[18px] w-[18px]" />}
+                  {mobilePanel === "left" ? "Filters & Navigation" : "Details & Context"}
+                </span>
+                <button onClick={() => setMobilePanel(null)} style={{ color: "var(--text-dim)" }}>
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="overflow-y-auto overscroll-contain">
+                {mobilePanel === "left" ? left : right}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ─── Mobile bottom tab bar ─────────────────────────────────── */}
         {isMobile && (
