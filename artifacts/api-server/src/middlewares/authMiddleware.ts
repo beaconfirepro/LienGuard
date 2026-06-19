@@ -1,6 +1,5 @@
 import * as oidc from "openid-client";
 import { type Request, type Response, type NextFunction } from "express";
-import type { AuthUser } from "@workspace/api-zod";
 import type { UserRole } from "@workspace/db";
 import {
   clearSession,
@@ -13,7 +12,12 @@ import {
 
 declare global {
   namespace Express {
-    interface User extends AuthUser {
+    interface User {
+      id: string;
+      email: string | null;
+      firstName: string | null;
+      lastName: string | null;
+      profileImageUrl: string | null;
       role: UserRole | null;
     }
 

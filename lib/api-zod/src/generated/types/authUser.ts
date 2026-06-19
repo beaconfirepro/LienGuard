@@ -5,6 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AuthUserRole } from './authUserRole';
+import type { AuthUserTheme } from './authUserTheme';
 
 export interface AuthUser {
   id: string;
@@ -16,4 +18,24 @@ export interface AuthUser {
   lastName: string | null;
   /** @nullable */
   profileImageUrl: string | null;
+  /**
+     * App-managed role, read-only. Assigned in the database.
+     * @nullable
+     */
+  role: AuthUserRole;
+  /**
+     * User-chosen display name, separate from the synced first/last name.
+     * @nullable
+     */
+  displayName: string | null;
+  /**
+     * Effective avatar URL to display (uploaded photo if present, otherwise the synced profile image).
+     * @nullable
+     */
+  avatarUrl: string | null;
+  /** True when the user has uploaded a personal photo. */
+  hasCustomAvatar: boolean;
+  theme: AuthUserTheme;
+  language: string;
+  currency: string;
 }

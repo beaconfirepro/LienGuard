@@ -28,6 +28,9 @@ export const userRoleEnum = pgEnum("user_role", [
   "coordinator",
 ]);
 
+// User-facing theme preference. "system" follows the OS color scheme.
+export const userThemeEnum = pgEnum("user_theme", ["light", "dark", "system"]);
+
 // (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
 export const usersTable = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -37,6 +40,16 @@ export const usersTable = pgTable("users", {
   profileImageUrl: varchar("profile_image_url"),
   // App-specific role (nullable). Assigned directly in the DB for now.
   role: userRoleEnum("role"),
+  // ── Per-user, editable profile & preferences ──────────────────────────────
+  // `displayName` is a user-chosen name kept SEPARATE from the Replit-synced
+  // first/last name so the login upsert never overwrites it.
+  displayName: varchar("display_name"),
+  // `avatarUrl` is a user-uploaded photo (object-storage path) kept SEPARATE
+  // from the Replit-synced `profileImageUrl`; the app prefers it when present.
+  avatarUrl: varchar("avatar_url"),
+  theme: userThemeEnum("theme").notNull().default("system"),
+  language: varchar("language").notNull().default("en"),
+  currency: varchar("currency").notNull().default("USD"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -44,3 +57,4 @@ export const usersTable = pgTable("users", {
 export type UpsertUser = typeof usersTable.$inferInsert;
 export type User = typeof usersTable.$inferSelect;
 export type UserRole = (typeof userRoleEnum.enumValues)[number];
+export type UserTheme = (typeof userThemeEnum.enumValues)[number];

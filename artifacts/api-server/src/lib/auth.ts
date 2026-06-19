@@ -3,15 +3,24 @@ import crypto from "crypto";
 import { type Request, type Response } from "express";
 import { db, sessionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import type { AuthUser } from "@workspace/api-zod";
 import type { UserRole } from "@workspace/db";
 
 export const ISSUER_URL = process.env.ISSUER_URL ?? "https://replit.com/oidc";
 export const SESSION_COOKIE = "sid";
 export const SESSION_TTL = 7 * 24 * 60 * 60 * 1000;
 
-// The Replit identity (AuthUser) plus the app-managed role loaded from the DB.
-export type AuthedUser = AuthUser & { role: UserRole | null };
+// The session snapshot of the Replit identity plus the app-managed role.
+// Per-user preferences and the uploaded avatar are intentionally NOT stored in
+// the session — they are always read fresh from the DB so edits take effect
+// immediately without re-issuing the session.
+export type AuthedUser = {
+  id: string;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  profileImageUrl: string | null;
+  role: UserRole | null;
+};
 
 export interface SessionData {
   user: AuthedUser;

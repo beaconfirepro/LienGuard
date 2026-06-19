@@ -7,6 +7,7 @@ import {
   LogoutMobileSessionResponse,
 } from "@workspace/api-zod";
 import { db, usersTable } from "@workspace/db";
+import { ensureUserRow, buildAuthUserResponse } from "../lib/profile";
 import {
   clearSession,
   getOidcConfig,
@@ -85,11 +86,16 @@ async function upsertUser(claims: Record<string, unknown>) {
   return user;
 }
 
-router.get("/auth/user", (req: Request, res: Response) => {
+router.get("/auth/user", async (req: Request, res: Response) => {
+  if (!req.isAuthenticated()) {
+    res.json(GetCurrentAuthUserResponse.parse({ user: null }));
+    return;
+  }
+  // Read the persisted row so preferences and the uploaded avatar are always
+  // fresh (the session only carries an identity snapshot).
+  const row = await ensureUserRow(req.user);
   res.json(
-    GetCurrentAuthUserResponse.parse({
-      user: req.isAuthenticated() ? req.user : null,
-    }),
+    GetCurrentAuthUserResponse.parse({ user: buildAuthUserResponse(row) }),
   );
 });
 

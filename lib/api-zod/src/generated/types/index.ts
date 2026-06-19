@@ -9,6 +9,8 @@
 export * from './authorizationSessionHeaderParameter';
 export * from './authUser';
 export * from './authUserEnvelope';
+export * from './authUserRole';
+export * from './authUserTheme';
 export * from './beginBrowserLoginParams';
 export * from './errorEnvelope';
 export * from './handleBrowserLoginCallbackParams';
@@ -16,3 +18,8 @@ export * from './healthStatus';
 export * from './logoutSuccess';
 export * from './mobileTokenExchangeRequest';
 export * from './mobileTokenExchangeSuccess';
+export * from './setAvatarRequest';
+export * from './updateProfileRequest';
+export * from './updateProfileRequestTheme';
+export * from './uploadUrlRequest';
+export * from './uploadUrlResponse';

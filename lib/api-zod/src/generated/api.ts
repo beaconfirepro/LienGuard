@@ -30,7 +30,14 @@ export const GetCurrentAuthUserResponse = zod.object({
   "email": zod.string().email().nullable(),
   "firstName": zod.string().nullable(),
   "lastName": zod.string().nullable(),
-  "profileImageUrl": zod.string().nullable()
+  "profileImageUrl": zod.string().nullable(),
+  "role": zod.union([zod.literal('admin'),zod.literal('pm'),zod.literal('finance'),zod.literal('coordinator'),zod.literal(null)]).nullable().describe('App-managed role, read-only. Assigned in the database.'),
+  "displayName": zod.string().nullable().describe('User-chosen display name, separate from the synced first\/last name.'),
+  "avatarUrl": zod.string().nullable().describe('Effective avatar URL to display (uploaded photo if present, otherwise the synced profile image).'),
+  "hasCustomAvatar": zod.boolean().describe('True when the user has uploaded a personal photo.'),
+  "theme": zod.enum(['light', 'dark', 'system']),
+  "language": zod.string(),
+  "currency": zod.string()
 }),zod.null()])
 })
 
@@ -93,6 +100,171 @@ export const LogoutMobileSessionHeader = zod.object({
 
 export const LogoutMobileSessionResponse = zod.object({
   "success": zod.boolean()
+})
+
+
+/**
+ * Updates the authenticated user's display name and preferences (theme,
+language, currency). Email and role are read-only and cannot be changed
+here. Returns the refreshed auth user.
+
+ * @summary Update the current user's editable profile and preferences
+ */
+export const UpdateMyProfileHeader = zod.object({
+  "Authorization": zod.string().optional().describe('Opaque session token — `Bearer <sid>`.')
+})
+
+export const updateMyProfileBodyDisplayNameMax = 120;
+
+export const updateMyProfileBodyLanguageMin = 2;
+export const updateMyProfileBodyLanguageMax = 10;
+
+export const updateMyProfileBodyCurrencyMin = 3;
+export const updateMyProfileBodyCurrencyMax = 3;
+
+
+
+export const UpdateMyProfileBody = zod.object({
+  "displayName": zod.string().max(updateMyProfileBodyDisplayNameMax).nullish(),
+  "theme": zod.enum(['light', 'dark', 'system']).optional(),
+  "language": zod.string().min(updateMyProfileBodyLanguageMin).max(updateMyProfileBodyLanguageMax).optional(),
+  "currency": zod.string().min(updateMyProfileBodyCurrencyMin).max(updateMyProfileBodyCurrencyMax).optional()
+})
+
+export const UpdateMyProfileResponse = zod.object({
+  "user": zod.union([zod.object({
+  "id": zod.string(),
+  "email": zod.string().email().nullable(),
+  "firstName": zod.string().nullable(),
+  "lastName": zod.string().nullable(),
+  "profileImageUrl": zod.string().nullable(),
+  "role": zod.union([zod.literal('admin'),zod.literal('pm'),zod.literal('finance'),zod.literal('coordinator'),zod.literal(null)]).nullable().describe('App-managed role, read-only. Assigned in the database.'),
+  "displayName": zod.string().nullable().describe('User-chosen display name, separate from the synced first\/last name.'),
+  "avatarUrl": zod.string().nullable().describe('Effective avatar URL to display (uploaded photo if present, otherwise the synced profile image).'),
+  "hasCustomAvatar": zod.boolean().describe('True when the user has uploaded a personal photo.'),
+  "theme": zod.enum(['light', 'dark', 'system']),
+  "language": zod.string(),
+  "currency": zod.string()
+}),zod.null()])
+})
+
+
+/**
+ * Stores the uploaded photo (object path or GCS URL) as the user's
+personal avatar. The avatar replaces the synced profile image across the
+app and is not overwritten on next login. Returns the refreshed auth user.
+
+ * @summary Set the current user's uploaded avatar
+ */
+export const SetMyAvatarHeader = zod.object({
+  "Authorization": zod.string().optional().describe('Opaque session token — `Bearer <sid>`.')
+})
+
+
+
+
+export const SetMyAvatarBody = zod.object({
+  "avatarUrl": zod.string().min(1).describe('The uploaded object path (e.g. `\/objects\/uploads\/uuid`) or full GCS URL returned by the upload flow.')
+})
+
+export const SetMyAvatarResponse = zod.object({
+  "user": zod.union([zod.object({
+  "id": zod.string(),
+  "email": zod.string().email().nullable(),
+  "firstName": zod.string().nullable(),
+  "lastName": zod.string().nullable(),
+  "profileImageUrl": zod.string().nullable(),
+  "role": zod.union([zod.literal('admin'),zod.literal('pm'),zod.literal('finance'),zod.literal('coordinator'),zod.literal(null)]).nullable().describe('App-managed role, read-only. Assigned in the database.'),
+  "displayName": zod.string().nullable().describe('User-chosen display name, separate from the synced first\/last name.'),
+  "avatarUrl": zod.string().nullable().describe('Effective avatar URL to display (uploaded photo if present, otherwise the synced profile image).'),
+  "hasCustomAvatar": zod.boolean().describe('True when the user has uploaded a personal photo.'),
+  "theme": zod.enum(['light', 'dark', 'system']),
+  "language": zod.string(),
+  "currency": zod.string()
+}),zod.null()])
+})
+
+
+/**
+ * Clears the user-uploaded photo so the app falls back to the synced
+profile image (or initials). Returns the refreshed auth user.
+
+ * @summary Remove the current user's uploaded avatar
+ */
+export const ClearMyAvatarHeader = zod.object({
+  "Authorization": zod.string().optional().describe('Opaque session token — `Bearer <sid>`.')
+})
+
+export const ClearMyAvatarResponse = zod.object({
+  "user": zod.union([zod.object({
+  "id": zod.string(),
+  "email": zod.string().email().nullable(),
+  "firstName": zod.string().nullable(),
+  "lastName": zod.string().nullable(),
+  "profileImageUrl": zod.string().nullable(),
+  "role": zod.union([zod.literal('admin'),zod.literal('pm'),zod.literal('finance'),zod.literal('coordinator'),zod.literal(null)]).nullable().describe('App-managed role, read-only. Assigned in the database.'),
+  "displayName": zod.string().nullable().describe('User-chosen display name, separate from the synced first\/last name.'),
+  "avatarUrl": zod.string().nullable().describe('Effective avatar URL to display (uploaded photo if present, otherwise the synced profile image).'),
+  "hasCustomAvatar": zod.boolean().describe('True when the user has uploaded a personal photo.'),
+  "theme": zod.enum(['light', 'dark', 'system']),
+  "language": zod.string(),
+  "currency": zod.string()
+}),zod.null()])
+})
+
+
+/**
+ * Returns a presigned GCS URL for direct upload. The client sends JSON
+metadata here, then uploads the file directly to the returned URL.
+
+ * @summary Request a presigned URL for file upload
+ */
+
+
+
+
+
+export const RequestUploadUrlBody = zod.object({
+  "name": zod.string().min(1).describe('Original file name.'),
+  "size": zod.number().min(1).describe('File size in bytes.'),
+  "contentType": zod.string().min(1).describe('MIME type of the file (e.g. `image\/jpeg`).')
+})
+
+
+
+
+
+
+export const RequestUploadUrlResponse = zod.object({
+  "uploadURL": zod.string().url().describe('Presigned GCS URL for PUT upload.'),
+  "objectPath": zod.string().describe('Normalized object path (e.g. `\/objects\/uploads\/uuid`). Store this in your database.'),
+  "metadata": zod.object({
+  "name": zod.string().min(1).describe('Original file name.'),
+  "size": zod.number().min(1).describe('File size in bytes.'),
+  "contentType": zod.string().min(1).describe('MIME type of the file (e.g. `image\/jpeg`).')
+}).optional()
+})
+
+
+/**
+ * Unconditionally public — no authentication or ACL checks.
+Searches PUBLIC_OBJECT_SEARCH_PATHS for the given file path.
+
+ * @summary Serve a public asset from PUBLIC_OBJECT_SEARCH_PATHS
+ */
+export const GetPublicObjectParams = zod.object({
+  "filePath": zod.coerce.string().describe('Relative file path within the public search paths.')
+})
+
+
+/**
+ * Serves object entities uploaded via presigned URLs. These can optionally
+be protected with authentication or ACL checks based on the use case.
+
+ * @summary Serve an object entity from PRIVATE_OBJECT_DIR
+ */
+export const GetStorageObjectParams = zod.object({
+  "objectPath": zod.coerce.string().describe('Object path within the private object dir (e.g. `uploads\/some-uuid`).')
 })
 
 

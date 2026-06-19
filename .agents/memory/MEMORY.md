@@ -16,3 +16,4 @@
 - [NotaryLive v3](notarylive-v3.md) — real v3 API contract + sandbox behavior; no webhook, completion is polled; never reintroduce a webhook completion path.
 - [Rich-text region roundtrip](richtext-region-roundtrip.md) — template regions support b/i/u markup; plain defaults must roundtrip byte-identically or null-storage breaks; tokens-in-format normalize harmlessly.
 - [API test harness](api-test-harness.md) — api-server uses Vitest+Supertest in test/; NODE_ENV=test auto-flips AUTH_BYPASS; pool closed per-file in setup.
+- [Profile & theme architecture](profile-theme-architecture.md) — avatar separate from synced image; prefs read fresh from DB not session; theme = server source-of-truth + localStorage no-flash cache on <html>.

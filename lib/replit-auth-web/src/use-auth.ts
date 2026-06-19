@@ -3,43 +3,54 @@ import type { AuthUser } from "@workspace/api-client-react";
 
 export type { AuthUser };
 
+/** Fire this event (e.g. after saving the profile) to make every `useAuth`
+ * consumer re-fetch the current user. */
+export const AUTH_REFRESH_EVENT = "auth:refresh";
+
+export function refreshAuth(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
+  }
+}
+
 interface AuthState {
   user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   login: () => void;
   logout: () => void;
+  refetch: () => void;
 }
 
 export function useAuth(): AuthState {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/user", { credentials: "include" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { user: AuthUser | null };
+      setUser(data.user ?? null);
+    } catch {
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-
-    fetch("/api/auth/user", { credentials: "include" })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json() as Promise<{ user: AuthUser | null }>;
-      })
-      .then((data) => {
-        if (!cancelled) {
-          setUser(data.user ?? null);
-          setIsLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setUser(null);
-          setIsLoading(false);
-        }
-      });
-
+    const run = () => {
+      if (!cancelled) void load();
+    };
+    run();
+    window.addEventListener(AUTH_REFRESH_EVENT, run);
     return () => {
       cancelled = true;
+      window.removeEventListener(AUTH_REFRESH_EVENT, run);
     };
-  }, []);
+  }, [load]);
 
   const login = useCallback(() => {
     const base = import.meta.env.BASE_URL.replace(/\/+$/, "") || "/";
@@ -56,5 +67,6 @@ export function useAuth(): AuthState {
     isAuthenticated: !!user,
     login,
     logout,
+    refetch: load,
   };
 }

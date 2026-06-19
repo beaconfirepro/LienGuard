@@ -9,6 +9,29 @@ export interface HealthStatus {
   status: string;
 }
 
+/**
+ * App-managed role, read-only. Assigned in the database.
+ * @nullable
+ */
+export type AuthUserRole = typeof AuthUserRole[keyof typeof AuthUserRole] | null;
+
+
+export const AuthUserRole = {
+  admin: 'admin',
+  pm: 'pm',
+  finance: 'finance',
+  coordinator: 'coordinator',
+} as const;
+
+export type AuthUserTheme = typeof AuthUserTheme[keyof typeof AuthUserTheme];
+
+
+export const AuthUserTheme = {
+  light: 'light',
+  dark: 'dark',
+  system: 'system',
+} as const;
+
 export interface AuthUser {
   id: string;
   /** @nullable */
@@ -19,6 +42,88 @@ export interface AuthUser {
   lastName: string | null;
   /** @nullable */
   profileImageUrl: string | null;
+  /**
+     * App-managed role, read-only. Assigned in the database.
+     * @nullable
+     */
+  role: AuthUserRole;
+  /**
+     * User-chosen display name, separate from the synced first/last name.
+     * @nullable
+     */
+  displayName: string | null;
+  /**
+     * Effective avatar URL to display (uploaded photo if present, otherwise the synced profile image).
+     * @nullable
+     */
+  avatarUrl: string | null;
+  /** True when the user has uploaded a personal photo. */
+  hasCustomAvatar: boolean;
+  theme: AuthUserTheme;
+  language: string;
+  currency: string;
+}
+
+export type UpdateProfileRequestTheme = typeof UpdateProfileRequestTheme[keyof typeof UpdateProfileRequestTheme];
+
+
+export const UpdateProfileRequestTheme = {
+  light: 'light',
+  dark: 'dark',
+  system: 'system',
+} as const;
+
+export interface UpdateProfileRequest {
+  /**
+     * @maxLength 120
+     * @nullable
+     */
+  displayName?: string | null;
+  theme?: UpdateProfileRequestTheme;
+  /**
+     * @minLength 2
+     * @maxLength 10
+     */
+  language?: string;
+  /**
+     * @minLength 3
+     * @maxLength 3
+     */
+  currency?: string;
+}
+
+export interface SetAvatarRequest {
+  /**
+     * The uploaded object path (e.g. `/objects/uploads/uuid`) or full GCS URL returned by the upload flow.
+     * @minLength 1
+     */
+  avatarUrl: string;
+}
+
+export interface UploadUrlRequest {
+  /**
+     * Original file name.
+     * @minLength 1
+     */
+  name: string;
+  /**
+     * File size in bytes.
+     * @minimum 1
+     */
+  size: number;
+  /**
+     * MIME type of the file (e.g. `image/jpeg`).
+     * @minLength 1
+     */
+  contentType: string;
+}
+
+export interface UploadUrlResponse {
+  /** Presigned GCS URL for PUT upload. */
+  uploadURL: string;
+  /** Normalized object path (e.g. `/objects/uploads/uuid`). Store this in your database. */
+  objectPath: string;
+  metadata?: UploadUrlRequest;
 }
 
 export interface AuthUserEnvelope {

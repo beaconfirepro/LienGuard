@@ -2,6 +2,7 @@ import * as React from "react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useResponsive } from "@/hooks/use-responsive";
+import { useTheme } from "@/lib/theme";
 import { useAuth } from "@workspace/replit-auth-web";
 import { GlobalSearch } from "./GlobalSearch";
 import { RoleSwitcher } from "./RoleSwitcher";
@@ -10,7 +11,7 @@ import {
   ChevronLeft, Bell, Menu, X,
   Sun, Moon, PanelRightClose, PanelRightOpen,
   PanelLeftClose, PanelLeftOpen, FileSignature, LogOut,
-  ChevronDown,
+  ChevronDown, User,
 } from "lucide-react";
 
 /* ─── Panel context (inner left + right) ─────────────────────────────────── */
@@ -161,9 +162,9 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { isDesktop, isTablet, isMobile, width } = useResponsive();
   const { user, isLoading, isAuthenticated, login, logout } = useAuth();
+  const { resolved: resolvedTheme, setTheme, syncFromServer } = useTheme();
   const [location] = useLocation();
   const [collapsed, setCollapsed] = React.useState(false);
-  const [theme, setTheme] = React.useState<"dark" | "light">("dark");
   const [drawer, setDrawer] = React.useState(false);
   const [right, setRight] = React.useState<React.ReactNode>(null);
   const [left, setLeft] = React.useState<React.ReactNode>(null);
@@ -171,10 +172,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [leftOpen, setLeftOpen] = React.useState(true);
   const [mobilePanel, setMobilePanel] = React.useState<null | "left" | "right">(null);
 
+  // Adopt the server's stored theme once the authenticated user loads, so the
+  // preference follows the account across devices / re-login. The local cache
+  // already prevented a flash on first paint.
+  const syncedThemeRef = React.useRef(false);
   React.useEffect(() => {
-    document.documentElement.classList.toggle("dark", theme === "dark");
-    document.body.classList.toggle("dark", theme === "dark");
-  }, [theme]);
+    if (user?.theme && !syncedThemeRef.current) {
+      syncedThemeRef.current = true;
+      syncFromServer(user.theme);
+    }
+  }, [user?.theme, syncFromServer]);
 
   /* Close the mobile panel overlay when leaving phone width or when the
      corresponding panel content unregisters. */
@@ -337,30 +344,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span className="absolute right-2 top-1.5 h-1.5 w-1.5 rounded-full border-2 bg-[#eb143f]" style={{ borderColor: "var(--surface)" }} />
             </button>
             <button
-              onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+              onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
               className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-md border"
               style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)", color: "var(--text-dim)" }}
-              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              title={resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
             >
-              {theme === "dark" ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+              {resolvedTheme === "dark" ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
             </button>
             <div className="flex shrink-0 items-center gap-2.5">
-              {user?.profileImageUrl ? (
-                <img
-                  src={user.profileImageUrl}
-                  alt={userDisplayName(user)}
-                  className="h-[38px] w-[38px] shrink-0 rounded-full object-cover"
-                />
-              ) : (
-                <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-[#1a1205]" style={{ background: "linear-gradient(135deg,#f59e0b,#f97316)" }}>
-                  {user ? userInitials(user) : "?"}
+              <Link href="/profile">
+                <div className="flex shrink-0 cursor-pointer items-center gap-2.5" title="Profile & preferences">
+                  {user?.avatarUrl ? (
+                    <img
+                      src={user.avatarUrl}
+                      alt={userDisplayName(user)}
+                      className="h-[38px] w-[38px] shrink-0 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-[#1a1205]" style={{ background: "linear-gradient(135deg,#f59e0b,#f97316)" }}>
+                      {user ? userInitials(user) : "?"}
+                    </div>
+                  )}
+                  {user && (
+                    <span className="hidden text-[13px] font-medium lg:block" style={{ color: "var(--text-base)" }}>
+                      {userDisplayName(user)}
+                    </span>
+                  )}
                 </div>
-              )}
-              {user && (
-                <span className="hidden text-[13px] font-medium lg:block" style={{ color: "var(--text-base)" }}>
-                  {userDisplayName(user)}
-                </span>
-              )}
+              </Link>
               <button
                 onClick={logout}
                 className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-md border"
@@ -593,6 +604,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     </div>
                   );
                 })}
+                <Link href="/profile">
+                  <div
+                    className="flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm cursor-pointer"
+                    style={location === "/profile"
+                      ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
+                      : { color: "var(--text-dim)", fontWeight: 500 }}
+                    onClick={() => setDrawer(false)}
+                  >
+                    <User className="h-4 w-4 shrink-0" />My Profile
+                  </div>
+                </Link>
                 <Link href="/settings">
                   <div
                     className="flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm cursor-pointer"

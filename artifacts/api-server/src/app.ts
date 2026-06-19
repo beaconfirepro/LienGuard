@@ -20,6 +20,8 @@ import reportsRouter from "./routes/reports";
 import collectionsRouter from "./routes/collections";
 import authRouter from "./routes/auth";
 import devRouter from "./routes/dev";
+import profileRouter from "./routes/profile";
+import storageRouter from "./routes/storage";
 import { logger } from "./lib/logger";
 import { authMiddleware } from "./middlewares/authMiddleware";
 
@@ -54,6 +56,8 @@ app.use(authMiddleware);
 app.use("/api", healthRouter);          // GET /api/health, GET /api/healthz  (no auth)
 app.use("/api", authRouter);            // GET /api/auth/user, /login, /callback, /logout
 app.use("/api", devRouter);             // GET/POST /api/dev/auth*  (dev login bypass only)
+app.use("/api", profileRouter);         // PATCH /api/profile, PUT/DELETE /api/profile/avatar (session)
+app.use("/api", storageRouter);         // POST /api/storage/uploads/request-url, GET /api/storage/* (object storage)
 app.use("/api", externalRouter);        // GET /api/external/reference         (service-key)
 
 app.use("/api/config", configRouter);        // GET/POST /api/config/*              (session)

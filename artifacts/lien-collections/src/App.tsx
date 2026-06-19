@@ -14,6 +14,7 @@ import AccountDetailPage from "@/pages/account-detail";
 import SendQueuePage from "@/pages/send-queue";
 import WaiversPage from "@/pages/waivers";
 import FilingWorkspacePage from "@/pages/filing-workspace";
+import ProfilePage from "@/pages/profile";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,7 @@ function Router() {
           <Redirect to="/liens?view=streams" />
         </Route>
         <Route path="/settings" component={ConfigPage} />
+        <Route path="/profile" component={ProfilePage} />
         <Route component={NotFound} />
       </Switch>
     </AppShell>
