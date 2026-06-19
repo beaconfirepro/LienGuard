@@ -13,6 +13,7 @@ import CollectionsPage from "@/pages/collections";
 import AccountDetailPage from "@/pages/account-detail";
 import SendQueuePage from "@/pages/send-queue";
 import WaiversPage from "@/pages/waivers";
+import FilingsPage from "@/pages/filings";
 import FilingPage from "@/pages/filing";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ function Router() {
         <Route path="/send-queue" component={SendQueuePage} />
         <Route path="/waivers" component={WaiversPage} />
         <Route path="/filing/:streamId" component={FilingPage} />
+        <Route path="/filing" component={FilingsPage} />
         <Route path="/settings" component={ConfigPage} />
         <Route component={NotFound} />
       </Switch>
