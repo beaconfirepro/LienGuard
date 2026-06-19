@@ -422,6 +422,42 @@ router.post("/waivers/:id/approve-finance", requireSession, async (req, res) => 
 });
 
 // ---------------------------------------------------------------------------
+// POST /waivers/:id/provide-to-gc — mark an approved waiver as handed to the GC
+// Sets providedToGc=true. Only valid once the waiver is fully approved.
+// ---------------------------------------------------------------------------
+
+router.post("/waivers/:id/provide-to-gc", requireSession, async (req, res) => {
+  const { orgId } = getSession(req);
+  const id = req.params["id"] as string;
+
+  const [waiver] = await db
+    .select()
+    .from(waiversTable)
+    .where(and(eq(waiversTable.id, id), eq(waiversTable.orgId, orgId)))
+    .limit(1);
+
+  if (!waiver) {
+    res.status(404).json({ error: "Waiver not found" });
+    return;
+  }
+
+  if (waiver.approvalStatus !== "approved") {
+    res.status(409).json({
+      error: `Only an approved waiver can be handed to the GC (current: '${waiver.approvalStatus}')`,
+    });
+    return;
+  }
+
+  const [updated] = await db
+    .update(waiversTable)
+    .set({ providedToGc: true, updatedAt: new Date() })
+    .where(and(eq(waiversTable.id, id), eq(waiversTable.orgId, orgId)))
+    .returning();
+
+  res.json({ waiver: updated });
+});
+
+// ---------------------------------------------------------------------------
 // POST /waivers/:id/notarize — trigger NotaryLive session
 // ---------------------------------------------------------------------------
 

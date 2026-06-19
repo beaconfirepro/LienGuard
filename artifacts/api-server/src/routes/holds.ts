@@ -38,6 +38,38 @@ router.post("/holds/recompute", async (req, res) => {
 });
 
 /**
+ * POST /holds/:id/clear
+ *
+ * Manually clears an active hold — stamps clearedAt so it drops out of the
+ * active list. Idempotent-ish: clearing an already-cleared hold is a 409.
+ */
+router.post("/holds/:id/clear", async (req, res) => {
+  const { orgId } = getSession(req);
+  const id = req.params["id"] as string;
+
+  const [hold] = await db
+    .select()
+    .from(holdsTable)
+    .where(and(eq(holdsTable.id, id), eq(holdsTable.orgId, orgId)))
+    .limit(1);
+
+  if (!hold) {
+    return res.status(404).json({ error: "Hold not found" });
+  }
+  if (hold.clearedAt) {
+    return res.status(409).json({ error: "Hold is already cleared" });
+  }
+
+  const [updated] = await db
+    .update(holdsTable)
+    .set({ clearedAt: new Date() })
+    .where(and(eq(holdsTable.id, id), eq(holdsTable.orgId, orgId)))
+    .returning();
+
+  return res.json({ hold: updated });
+});
+
+/**
  * GET /holds?type=schedule_hold|material_hold&projectId=&clientId=&includeCleared=true
  */
 router.get("/holds", async (req, res) => {

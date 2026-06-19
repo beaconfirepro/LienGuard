@@ -1038,6 +1038,34 @@ router.post(
 );
 
 // ---------------------------------------------------------------------------
+// POST /collections/accounts/:id/write-off — admin-only write-off
+// Moves the account to written_off status and write_off escalation stage.
+// ---------------------------------------------------------------------------
+router.post(
+  "/accounts/:id/write-off",
+  requireSession,
+  async (req, res) => {
+    const { orgId, role } = getSession(req);
+    if (role !== "admin") {
+      res.status(403).json({ error: "Admin role required" });
+      return;
+    }
+
+    const accountId = req.params["id"] as string;
+    const account = await getAccount(accountId, orgId);
+    if (!account) { res.status(404).json({ error: "Account not found" }); return; }
+
+    const [updated] = await db
+      .update(collectionAccountsTable)
+      .set({ status: "written_off", escalationStage: "write_off" })
+      .where(eq(collectionAccountsTable.id, accountId))
+      .returning();
+
+    res.json({ account: updated });
+  },
+);
+
+// ---------------------------------------------------------------------------
 // GET /collections/sequences — list dunning sequences
 // ---------------------------------------------------------------------------
 router.get("/sequences", requireSession, async (req, res) => {

@@ -365,7 +365,7 @@ cleared, `proj_res`).
 
 | # | Role | Precondition | Steps | Expected result |
 |---|------|--------------|-------|-----------------|
-| USER-A1 | Any | Seeded roles | 1. Call `GET /api/auth/user` while logged in. | Returns the current user with the expected `role`. |
+| USER-A1 | Any | Seeded roles | 1. Call `GET /api/auth/user` while logged in. | Returns the current authenticated user (`id`, `email`, name, avatar). Role is not part of this response payload — it is enforced server-side and verified by the role-gate cases (e.g. WAIV-A3/A5, COLL-A9, CONF-A4, USER-A3). |
 | USER-A2 | Logged out | — | 1. Call a protected `/api/*` route with no session. | `401` (or redirect to login); the app shows the login gate. |
 | USER-A3 | Admin vs others | Role gates above | 1. Re-run WAIV-A2/A3, WAIV-A4/A5, COLL-A8/A9, CONF-A3/A4 across roles. | Allowed role → `200`; disallowed role → `403`; `admin` passes all as the super-role. |
 
