@@ -5,7 +5,7 @@ import { useResponsive } from "@/hooks/use-responsive";
 import {
   LayoutGrid, Landmark, DollarSign, Lock, Settings,
   ChevronLeft, Bell, Menu, X, Search,
-  CalendarDays, Share2, FolderKanban, Sun, Moon,
+  Sun, Moon,
 } from "lucide-react";
 
 /* ─── Right-panel context ────────────────────────────────────────────────── */
@@ -40,13 +40,6 @@ export function Panel({
 }
 
 /* ─── Navigation config ──────────────────────────────────────────────────── */
-const CORE_NAV = [
-  { label: "Dashboard", Icon: LayoutGrid },
-  { label: "Projects", Icon: FolderKanban },
-  { label: "Scheduling", Icon: CalendarDays },
-  { label: "Partner Network", Icon: Share2 },
-];
-
 const MODULE_NAV = [
   { key: "dashboard", label: "Dashboard", to: "/", Icon: LayoutGrid },
   {
@@ -131,7 +124,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               borderColor: "var(--helm-border)",
             }}
           >
-            {/* Logo — placeholder for parent Helm shell */}
+            {/* Logo */}
             <div
               className={cn(
                 "flex h-16 shrink-0 items-center gap-2.5 border-b",
@@ -139,114 +132,63 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               )}
               style={{ borderColor: "var(--helm-border)" }}
             >
-              <div
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded border"
-                style={{ borderColor: "var(--helm-border)", background: "var(--surface-2)" }}
-                title="Host app navigation injected here in production"
-              >
-                <span className="text-[10px] font-bold" style={{ color: "var(--text-muted-color)" }}>H</span>
-              </div>
+              <Landmark className="h-6 w-6 text-amber-500 shrink-0" />
               {!collapsed && (
                 <div className="leading-none">
-                  <div className="text-[12px] font-semibold" style={{ color: "var(--text-muted-color)" }}>← Helm</div>
-                  <div className="mt-0.5 text-[10px] uppercase tracking-[1px]" style={{ color: "var(--text-dim)", opacity: 0.6 }}>host nav placeholder</div>
+                  <div className="text-[15px] font-bold tracking-tight" style={{ color: "var(--text-base)" }}>Lien &amp; Collections</div>
+                  <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[1.5px]" style={{ color: "var(--text-muted-color)" }}>by Beacon</div>
                 </div>
               )}
             </div>
 
             {/* Nav */}
-            <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
-              {/* Helm core nav — placeholder; injected by host shell in production */}
-              {!collapsed && (
-                <div
-                  className="mb-1 rounded-md border px-3 py-2"
-                  style={{ borderColor: "var(--helm-border)", borderStyle: "dashed", opacity: 0.45 }}
-                >
-                  <div className="mb-1.5 text-[9.5px] font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted-color)" }}>Helm navigation</div>
-                  {CORE_NAV.map(({ label, Icon }) => (
-                    <div
-                      key={label}
-                      className="flex items-center gap-2.5 rounded py-1.5 text-[12.5px]"
-                      style={{ color: "var(--text-dim)" }}
-                    >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      <span>{label}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {collapsed && CORE_NAV.map(({ label, Icon }) => (
-                <div
-                  key={label}
-                  title={label}
-                  className="flex items-center justify-center rounded-md py-2.5"
-                  style={{ color: "var(--text-dim)", opacity: 0.4 }}
-                >
-                  <Icon className="h-5 w-5 shrink-0" />
-                </div>
-              ))}
-
-              <div className="mx-1.5 my-2 h-px" style={{ background: "var(--helm-border)" }} />
-
-              {/* Active module label */}
-              <div
-                className={cn(
-                  "flex items-center gap-3 rounded-md py-2.5 text-[14px] font-semibold",
-                  collapsed ? "justify-center px-2.5" : "px-3",
-                )}
-                style={{ color: "var(--text-base)" }}
-              >
-                <Landmark className="h-5 w-5 shrink-0 text-amber-500" />
-                {!collapsed && <span className="whitespace-nowrap">Lien &amp; Collections</span>}
-              </div>
-
-              {/* Sub-nav */}
-              {!collapsed && (
-                <div className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l pl-2.5" style={{ borderColor: "var(--helm-border)" }}>
-                  {MODULE_NAV.map((m) => {
-                    const active =
-                      m.to === "/" ? location === "/" :
-                      m.key === "liens" ? (location.startsWith(m.to) || isLiensSection) :
-                      location.startsWith(m.to);
-                    return (
-                      <div key={m.key}>
-                        <Link href={m.to}>
-                          <div
-                            className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] cursor-pointer"
-                            style={active
-                              ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
-                              : { color: "var(--text-dim)", fontWeight: 500 }}
-                          >
-                            <m.Icon className="h-4 w-4 shrink-0" />{m.label}
-                          </div>
-                        </Link>
-                        {m.sub && active && (
-                          <div
-                            className="ml-2 flex flex-col gap-0.5 border-l py-0.5 pl-2.5"
-                            style={{ borderColor: "var(--helm-border)" }}
-                          >
-                            {m.sub.map((s) => {
-                              const sa = location === s.to;
-                              return (
-                                <Link key={s.to} href={s.to}>
-                                  <div
-                                    className="rounded-md px-2.5 py-1.5 text-left text-[12.5px] cursor-pointer"
-                                    style={sa
-                                      ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
-                                      : { color: "var(--text-dim)", fontWeight: 500 }}
-                                  >
-                                    {s.label}
-                                  </div>
-                                </Link>
-                              );
-                            })}
-                          </div>
+            <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-3">
+              {MODULE_NAV.map((m) => {
+                const active =
+                  m.to === "/" ? location === "/" :
+                  m.key === "liens" ? (location.startsWith(m.to) || isLiensSection) :
+                  location.startsWith(m.to);
+                return (
+                  <div key={m.key}>
+                    <Link href={m.to}>
+                      <div
+                        className={cn(
+                          "flex items-center gap-3 rounded-md py-2.5 text-[13.5px] cursor-pointer",
+                          collapsed ? "justify-center px-2.5" : "px-3",
                         )}
+                        style={active
+                          ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
+                          : { color: "var(--text-dim)", fontWeight: 500 }}
+                      >
+                        <m.Icon className="h-[18px] w-[18px] shrink-0" />
+                        {!collapsed && <span className="whitespace-nowrap">{m.label}</span>}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                    </Link>
+                    {!collapsed && m.sub && active && (
+                      <div
+                        className="ml-4 mt-0.5 flex flex-col gap-0.5 border-l pb-1 pl-3"
+                        style={{ borderColor: "var(--helm-border)" }}
+                      >
+                        {m.sub.map((s) => {
+                          const sa = location === s.to;
+                          return (
+                            <Link key={s.to} href={s.to}>
+                              <div
+                                className="rounded-md px-2 py-1.5 text-[12.5px] cursor-pointer"
+                                style={sa
+                                  ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
+                                  : { color: "var(--text-dim)", fontWeight: 500 }}
+                              >
+                                {s.label}
+                              </div>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </nav>
 
             {/* Footer */}
