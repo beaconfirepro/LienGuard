@@ -1,14 +1,24 @@
 /**
  * holdEngine.ts
  *
- * Recomputes Schedule Hold and Material Hold flags for an org.
+ * Recomputes payment holds for an org. Holds are **bill-based**: each hold
+ * withholds payment on one specific vendor bill (supplier invoice), connected by
+ * the vendor bill reference (invoiceLinks.id / qboSupplierInvoiceId). We only ever
+ * hold uncleared vendor bills — bills already paid/settled are never held (e.g. if
+ * the design scope has been paid, its design vendor bills are not held).
  *
- * Schedule Hold (hold_type=schedule_hold, scoped to LienProject):
- *   Any project with ≥1 non-supplier, uncleared invoice whose dueDate < now.
+ * Two triggers decide which vendor bills get held:
  *
- * Material Hold (hold_type=material_hold, scoped to LinkedClient):
- *   Any client whose CollectionAccount.totalOverdue > MATERIAL_HOLD_THRESHOLD_USD.
- *   Threshold defaults to $0 (any overdue); set env var to override.
+ * Schedule Hold (hold_type=schedule_hold):
+ *   Hold each uncleared vendor bill on a project that has ≥1 non-supplier,
+ *   uncleared invoice whose dueDate < now (a past-due receivable on that project).
+ *
+ * Material Hold (hold_type=material_hold):
+ *   Hold each uncleared vendor bill for a client whose CollectionAccount.totalOverdue
+ *   exceeds MATERIAL_HOLD_THRESHOLD_USD (default $0 — any overdue).
+ *
+ * The engine only manages bill-based holds (supplierInvoiceId set). Legacy/manual
+ * holds with a null supplierInvoiceId (project- or client-wide) are left untouched.
  *
  * The entire pass runs in a single DB transaction: either all changes commit
  * or none do, preventing partial hold state on failure.
@@ -18,10 +28,9 @@ import { db } from "@workspace/db";
 import {
   holdsTable,
   invoiceLinksTable,
-  lienProjectsTable,
   collectionAccountsTable,
 } from "@workspace/db";
-import { eq, and, isNull, lt } from "drizzle-orm";
+import { eq, and, isNull, lt, isNotNull } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 /** USD threshold above which a client's overdue balance triggers a Material Hold. */
@@ -42,6 +51,8 @@ export interface HoldRecomputeResult {
   cleared: number;
 }
 
+type HoldType = "schedule_hold" | "material_hold";
+
 export async function recomputeHolds(orgId: string): Promise<HoldRecomputeResult> {
   const now = new Date();
   const materialThreshold = getMaterialHoldThreshold();
@@ -50,9 +61,10 @@ export async function recomputeHolds(orgId: string): Promise<HoldRecomputeResult
 
   await db.transaction(async (tx) => {
     // -------------------------------------------------------------------------
-    // Schedule Holds — per project
+    // Triggers
     // -------------------------------------------------------------------------
 
+    // Projects with a past-due receivable (non-supplier, uncleared, dueDate < now).
     const overdueInvoiceRows = await tx
       .select({ lienProjectId: invoiceLinksTable.lienProjectId })
       .from(invoiceLinksTable)
@@ -71,50 +83,7 @@ export async function recomputeHolds(orgId: string): Promise<HoldRecomputeResult
         .filter((id): id is string => id !== null && id !== undefined),
     );
 
-    const allProjects = await tx
-      .select({ id: lienProjectsTable.id })
-      .from(lienProjectsTable)
-      .where(eq(lienProjectsTable.orgId, orgId));
-
-    for (const project of allProjects) {
-      const hasOverdue = overdueProjectIds.has(project.id);
-
-      const existing = await tx
-        .select({ id: holdsTable.id })
-        .from(holdsTable)
-        .where(
-          and(
-            eq(holdsTable.orgId, orgId),
-            eq(holdsTable.holdType, "schedule_hold"),
-            eq(holdsTable.lienProjectId, project.id),
-            isNull(holdsTable.clearedAt),
-          ),
-        )
-        .limit(1);
-
-      if (hasOverdue && existing.length === 0) {
-        await tx.insert(holdsTable).values({
-          id: randomUUID(),
-          orgId,
-          holdType: "schedule_hold",
-          lienProjectId: project.id,
-          reason: "Invoice past due per payment terms",
-          setAt: now,
-        });
-        set++;
-      } else if (!hasOverdue && existing.length > 0) {
-        await tx
-          .update(holdsTable)
-          .set({ clearedAt: now, updatedAt: now })
-          .where(eq(holdsTable.id, existing[0].id));
-        cleared++;
-      }
-    }
-
-    // -------------------------------------------------------------------------
-    // Material Holds — per linked client
-    // -------------------------------------------------------------------------
-
+    // Clients whose overdue balance exceeds the material-hold threshold.
     const accounts = await tx
       .select({
         linkedClientId: collectionAccountsTable.linkedClientId,
@@ -123,43 +92,109 @@ export async function recomputeHolds(orgId: string): Promise<HoldRecomputeResult
       .from(collectionAccountsTable)
       .where(eq(collectionAccountsTable.orgId, orgId));
 
-    for (const acct of accounts) {
-      const overdueBalance = parseFloat(acct.totalOverdue ?? "0");
-      const isOverdue = overdueBalance > materialThreshold;
+    const overThresholdClientIds = new Set(
+      accounts
+        .filter((a) => parseFloat(a.totalOverdue ?? "0") > materialThreshold)
+        .map((a) => a.linkedClientId),
+    );
 
-      const existing = await tx
-        .select({ id: holdsTable.id })
-        .from(holdsTable)
-        .where(
-          and(
-            eq(holdsTable.orgId, orgId),
-            eq(holdsTable.holdType, "material_hold"),
-            eq(holdsTable.linkedClientId, acct.linkedClientId),
-            isNull(holdsTable.clearedAt),
-          ),
-        )
-        .limit(1);
+    const clientOverdueAmount = new Map(
+      accounts.map((a) => [a.linkedClientId, parseFloat(a.totalOverdue ?? "0")]),
+    );
 
-      if (isOverdue && existing.length === 0) {
-        await tx.insert(holdsTable).values({
-          id: randomUUID(),
-          orgId,
-          holdType: "material_hold",
-          linkedClientId: acct.linkedClientId,
-          reason: `Client overdue balance $${overdueBalance.toLocaleString("en-US", {
+    // -------------------------------------------------------------------------
+    // Vendor bills (supplier invoices) — the things we actually hold
+    // -------------------------------------------------------------------------
+
+    const vendorBills = await tx
+      .select({
+        id: invoiceLinksTable.id,
+        lienProjectId: invoiceLinksTable.lienProjectId,
+        linkedClientId: invoiceLinksTable.linkedClientId,
+        clearedFlag: invoiceLinksTable.clearedFlag,
+      })
+      .from(invoiceLinksTable)
+      .where(
+        and(
+          eq(invoiceLinksTable.orgId, orgId),
+          eq(invoiceLinksTable.isSupplierInvoice, true),
+        ),
+      );
+
+    // Index of currently active bill-based holds keyed by `${holdType}|${billId}`.
+    const activeBillHolds = await tx
+      .select({
+        id: holdsTable.id,
+        holdType: holdsTable.holdType,
+        supplierInvoiceId: holdsTable.supplierInvoiceId,
+      })
+      .from(holdsTable)
+      .where(
+        and(
+          eq(holdsTable.orgId, orgId),
+          isNull(holdsTable.clearedAt),
+          isNotNull(holdsTable.supplierInvoiceId),
+        ),
+      );
+
+    const activeByKey = new Map<string, string>();
+    for (const h of activeBillHolds) {
+      activeByKey.set(`${h.holdType}|${h.supplierInvoiceId}`, h.id);
+    }
+
+    // Track which active holds remain justified this pass so we can clear the rest.
+    const stillJustified = new Set<string>();
+
+    const ensureHold = async (
+      holdType: HoldType,
+      bill: { id: string; lienProjectId: string | null; linkedClientId: string | null },
+      reason: string,
+    ) => {
+      const key = `${holdType}|${bill.id}`;
+      stillJustified.add(key);
+      if (activeByKey.has(key)) return; // already held
+      await tx.insert(holdsTable).values({
+        id: randomUUID(),
+        orgId,
+        holdType,
+        lienProjectId: bill.lienProjectId,
+        linkedClientId: bill.linkedClientId,
+        supplierInvoiceId: bill.id,
+        reason,
+        setAt: now,
+      });
+      set++;
+    };
+
+    for (const bill of vendorBills) {
+      if (bill.clearedFlag) continue; // never hold an already-paid vendor bill
+
+      if (bill.lienProjectId && overdueProjectIds.has(bill.lienProjectId)) {
+        await ensureHold("schedule_hold", bill, "Vendor payment withheld — project has a past-due receivable");
+      }
+
+      if (bill.linkedClientId && overThresholdClientIds.has(bill.linkedClientId)) {
+        const overdue = clientOverdueAmount.get(bill.linkedClientId) ?? 0;
+        await ensureHold(
+          "material_hold",
+          bill,
+          `Vendor payment withheld — client overdue balance $${overdue.toLocaleString("en-US", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })} exceeds threshold $${materialThreshold.toFixed(2)}`,
-          setAt: now,
-        });
-        set++;
-      } else if (!isOverdue && existing.length > 0) {
-        await tx
-          .update(holdsTable)
-          .set({ clearedAt: now, updatedAt: now })
-          .where(eq(holdsTable.id, existing[0].id));
-        cleared++;
+        );
       }
+    }
+
+    // Clear bill-based holds that are no longer justified (bill paid, project no
+    // longer overdue, or client back under threshold).
+    for (const [key, holdId] of activeByKey) {
+      if (stillJustified.has(key)) continue;
+      await tx
+        .update(holdsTable)
+        .set({ clearedAt: now, updatedAt: now })
+        .where(eq(holdsTable.id, holdId));
+      cleared++;
     }
   });
 

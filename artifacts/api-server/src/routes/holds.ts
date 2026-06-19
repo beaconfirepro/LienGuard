@@ -13,6 +13,7 @@ import {
   holdsTable,
   lienProjectsTable,
   linkedClientsTable,
+  invoiceLinksTable,
 } from "@workspace/db";
 import { eq, and, isNull } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
@@ -103,6 +104,7 @@ router.get("/holds", async (req, res) => {
       holdType: holdsTable.holdType,
       lienProjectId: holdsTable.lienProjectId,
       linkedClientId: holdsTable.linkedClientId,
+      supplierInvoiceId: holdsTable.supplierInvoiceId,
       reason: holdsTable.reason,
       setAt: holdsTable.setAt,
       clearedAt: holdsTable.clearedAt,
@@ -111,10 +113,15 @@ router.get("/holds", async (req, res) => {
       hubspotProjectId: lienProjectsTable.hubspotProjectId,
       clientName: linkedClientsTable.cachedName,
       hubspotCompanyId: linkedClientsTable.hubspotCompanyId,
+      // Vendor bill the hold withholds payment on (bill-based connection).
+      supplierBillRef: invoiceLinksTable.qboSupplierInvoiceId,
+      supplierBillAmount: invoiceLinksTable.amount,
+      supplierBillDueDate: invoiceLinksTable.dueDate,
     })
     .from(holdsTable)
     .leftJoin(lienProjectsTable, eq(holdsTable.lienProjectId, lienProjectsTable.id))
     .leftJoin(linkedClientsTable, eq(holdsTable.linkedClientId, linkedClientsTable.id))
+    .leftJoin(invoiceLinksTable, eq(holdsTable.supplierInvoiceId, invoiceLinksTable.id))
     .where(and(...conditions));
 
   return res.json({ holds });

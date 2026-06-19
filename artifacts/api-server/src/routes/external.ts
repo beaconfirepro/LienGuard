@@ -13,6 +13,7 @@ import {
   noticesTable,
   linkedClientsTable,
   collectionAccountsTable,
+  invoiceLinksTable,
 } from "@workspace/db";
 import { eq, isNull, and, inArray, not } from "drizzle-orm";
 import { requireServiceKey } from "../lib/serviceKey";
@@ -73,6 +74,7 @@ router.get("/external/holds", requireServiceKey, async (_req, res) => {
         holdType: holdsTable.holdType,
         lienProjectId: holdsTable.lienProjectId,
         linkedClientId: holdsTable.linkedClientId,
+        supplierInvoiceId: holdsTable.supplierInvoiceId,
         reason: holdsTable.reason,
         setAt: holdsTable.setAt,
         createdAt: holdsTable.createdAt,
@@ -80,10 +82,15 @@ router.get("/external/holds", requireServiceKey, async (_req, res) => {
         clientName: linkedClientsTable.cachedName,
         hubspotProjectId: lienProjectsTable.hubspotProjectId,
         hubspotCompanyId: linkedClientsTable.hubspotCompanyId,
+        // Vendor bill reference Helm Core blocks payment on (bill-based hold).
+        supplierBillRef: invoiceLinksTable.qboSupplierInvoiceId,
+        supplierBillAmount: invoiceLinksTable.amount,
+        supplierBillDueDate: invoiceLinksTable.dueDate,
       })
       .from(holdsTable)
       .leftJoin(lienProjectsTable, eq(holdsTable.lienProjectId, lienProjectsTable.id))
       .leftJoin(linkedClientsTable, eq(holdsTable.linkedClientId, linkedClientsTable.id))
+      .leftJoin(invoiceLinksTable, eq(holdsTable.supplierInvoiceId, invoiceLinksTable.id))
       .where(isNull(holdsTable.clearedAt));
 
     res.json({ holds: activeHolds });

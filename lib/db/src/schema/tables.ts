@@ -720,11 +720,18 @@ export const holdsTable = pgTable(
     holdType: holdTypeEnum("hold_type").notNull(),
     lienProjectId: text("lien_project_id"),
     linkedClientId: text("linked_client_id"),
+    // The specific vendor bill (supplier invoice) this hold withholds payment on.
+    // Null = legacy/manual project- or client-wide hold. Bill-based holds set this
+    // so the connection is on the vendor bill reference (qboSupplierInvoiceId).
+    supplierInvoiceId: text("supplier_invoice_id"),
     reason: text("reason").notNull(),
     setAt: timestamp("set_at", { withTimezone: true }).notNull().defaultNow(),
     clearedAt: timestamp("cleared_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index("holds_org_id_idx").on(t.orgId)],
+  (t) => [
+    index("holds_org_id_idx").on(t.orgId),
+    index("holds_supplier_invoice_id_idx").on(t.supplierInvoiceId),
+  ],
 );
