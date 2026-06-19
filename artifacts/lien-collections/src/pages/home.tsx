@@ -269,7 +269,7 @@ export default function HomePage() {
       ) : isError ? (
         <div className="rounded-lg border px-4 py-6 text-center text-[12px]" style={{ background: "rgba(235,20,63,.06)", borderColor: "rgba(235,20,63,.3)", color: "#eb143f" }}>
           {String((error as Error)?.message ?? "").includes("401")
-            ? "Not authenticated — visit /api/dev/session to establish a dev session."
+            ? "Your session has expired — please refresh the page to sign in again."
             : `Failed to load: ${(error as Error)?.message}`}
         </div>
       ) : filtered.length === 0 ? (

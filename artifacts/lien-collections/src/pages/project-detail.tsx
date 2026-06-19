@@ -2206,7 +2206,7 @@ export default function ProjectDetailPage() {
       <Screen>
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center text-sm text-destructive">
           {(error as Error)?.message?.includes("401")
-            ? "Not authenticated — visit /api/dev/session to establish a dev session."
+            ? "Your session has expired — please refresh the page to sign in again."
             : `Failed to load project: ${(error as Error)?.message}`}
         </div>
       </Screen>

@@ -242,11 +242,8 @@ export default function SendQueuePage() {
           color: "var(--text-muted-color)",
         }}
       >
-        Unable to load send queue. Visit{" "}
-        <a href="/api/dev/session" className="underline">
-          /api/dev/session
-        </a>{" "}
-        first.
+        Unable to load send queue. Your session may have expired — please
+        refresh the page to sign in again.
       </div>
     );
   }
