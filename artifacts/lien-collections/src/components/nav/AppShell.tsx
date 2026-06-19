@@ -3,9 +3,10 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useResponsive } from "@/hooks/use-responsive";
 import { useAuth } from "@workspace/replit-auth-web";
+import { GlobalSearch } from "./GlobalSearch";
 import {
   LayoutGrid, Landmark, DollarSign, Lock, Settings,
-  ChevronLeft, Bell, Menu, X, Search,
+  ChevronLeft, Bell, Menu, X,
   Sun, Moon, PanelRightClose, PanelRightOpen,
   PanelLeftClose, PanelLeftOpen, FileSignature, Gavel, LogOut,
   ChevronDown,
@@ -326,14 +327,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </button>
             )}
             <div className="min-w-0 flex-1" />
-            <div className="relative hidden w-56 lg:block">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: "var(--text-muted-color)" }} />
-              <input
-                placeholder="Search projects…"
-                className="w-full rounded-md border py-2 pl-9 pr-3 text-[13px] outline-none"
-                style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)", color: "var(--text-base)" }}
-              />
-            </div>
+            <GlobalSearch className="relative hidden w-56 lg:block" />
             <span className="hidden shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10.5px] font-semibold tracking-wide sm:flex" style={{ background: "rgba(20,235,163,.12)", color: "#14eba3" }}>
               <span className="h-1.5 w-1.5 rounded-full bg-[#14eba3]" />PROD
             </span>
@@ -572,6 +566,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <button onClick={() => setDrawer(false)} style={{ color: "var(--text-dim)" }}>
                   <X className="h-5 w-5" />
                 </button>
+              </div>
+              <div className="border-b p-3" style={{ borderColor: "var(--helm-border)" }}>
+                <GlobalSearch className="relative w-full" onNavigate={() => setDrawer(false)} />
               </div>
               <nav className="flex flex-1 flex-col gap-1 p-3">
                 {MODULE_NAV.map((m) => {

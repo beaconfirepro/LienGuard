@@ -12,7 +12,7 @@ import {
   lienRulesTable,
   timesheetLinksTable,
 } from "@workspace/db";
-import { eq, and, inArray, max } from "drizzle-orm";
+import { eq, and, inArray, max, or, ilike } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { hubspotClient } from "../lib/clients/hubspot";
 
@@ -270,6 +270,130 @@ router.get("/", async (req, res) => {
   const paginated = filtered.slice(offset, offset + limit);
 
   res.json({ projects: paginated, total, page, limit });
+});
+
+// ---------------------------------------------------------------------------
+// GET /projects/search
+// Query params: q (substring), limit (default 8, max 25)
+// Lightweight global search: matches project name, HubSpot id, or any linked
+// party legal name (e.g. owner / GC / hiring party). Org-scoped.
+// NOTE: must be declared before GET /:id so "search" isn't captured as an id.
+// ---------------------------------------------------------------------------
+router.get("/search", async (req, res) => {
+  const { orgId } = getSession(req);
+  const { q: qRaw, limit: limitRaw } = req.query as Record<
+    string,
+    string | undefined
+  >;
+
+  const q = (qRaw ?? "").trim();
+  const limit = Math.min(25, Math.max(1, parseInt(limitRaw ?? "8", 10) || 8));
+
+  if (q.length === 0) {
+    res.json({ results: [] });
+    return;
+  }
+
+  const pattern = `%${q}%`;
+
+  // Parties whose legal name matches — so searching a client/GC name surfaces
+  // the project. Map party -> project for org-scoped projects only.
+  const partyMatches = await db
+    .select({
+      lienProjectId: projectPartyLinksTable.lienProjectId,
+      cachedLegalName: projectPartyLinksTable.cachedLegalName,
+      partyRelationType: projectPartyLinksTable.partyRelationType,
+    })
+    .from(projectPartyLinksTable)
+    .where(
+      and(
+        eq(projectPartyLinksTable.orgId, orgId),
+        ilike(projectPartyLinksTable.cachedLegalName, pattern),
+      ),
+    );
+  const partyProjectIds = partyMatches.map((p) => p.lienProjectId);
+
+  const matched = await db
+    .select({
+      id: lienProjectsTable.id,
+      cachedProjectName: lienProjectsTable.cachedProjectName,
+      hubspotProjectId: lienProjectsTable.hubspotProjectId,
+      cachedHubspotStatus: lienProjectsTable.cachedHubspotStatus,
+      lienWorkflowType: lienProjectsTable.lienWorkflowType,
+    })
+    .from(lienProjectsTable)
+    .where(
+      and(
+        eq(lienProjectsTable.orgId, orgId),
+        or(
+          ilike(lienProjectsTable.cachedProjectName, pattern),
+          ilike(lienProjectsTable.hubspotProjectId, pattern),
+          partyProjectIds.length > 0
+            ? inArray(lienProjectsTable.id, partyProjectIds)
+            : undefined,
+        ),
+      ),
+    );
+
+  // Pick a representative client name per project (prefer hiring party / GC).
+  const PARTY_PRIORITY: Record<string, number> = {
+    hiring_party: 0,
+    original_contractor: 1,
+    owner: 2,
+  };
+  const clientByProject = new Map<string, string>();
+  for (const party of partyMatches) {
+    const existing = clientByProject.get(party.lienProjectId);
+    if (existing === undefined) {
+      clientByProject.set(party.lienProjectId, party.cachedLegalName);
+    }
+  }
+  // Also resolve a primary client name for matched projects regardless of which
+  // field matched, so result rows can show context.
+  const matchedIds = matched.map((m) => m.id);
+  if (matchedIds.length > 0) {
+    const allParties = await db
+      .select({
+        lienProjectId: projectPartyLinksTable.lienProjectId,
+        cachedLegalName: projectPartyLinksTable.cachedLegalName,
+        partyRelationType: projectPartyLinksTable.partyRelationType,
+      })
+      .from(projectPartyLinksTable)
+      .where(
+        and(
+          eq(projectPartyLinksTable.orgId, orgId),
+          inArray(projectPartyLinksTable.lienProjectId, matchedIds),
+        ),
+      );
+    const bestByProject = new Map<string, { name: string; rank: number }>();
+    for (const party of allParties) {
+      const rank = PARTY_PRIORITY[party.partyRelationType] ?? 99;
+      const existing = bestByProject.get(party.lienProjectId);
+      if (!existing || rank < existing.rank) {
+        bestByProject.set(party.lienProjectId, {
+          name: party.cachedLegalName,
+          rank,
+        });
+      }
+    }
+    for (const [pid, best] of bestByProject) {
+      clientByProject.set(pid, best.name);
+    }
+  }
+
+  const results = matched
+    .map((m) => ({
+      id: m.id,
+      projectName: m.cachedProjectName ?? m.hubspotProjectId,
+      hubspotProjectId: m.hubspotProjectId,
+      clientName: clientByProject.get(m.id) ?? null,
+      status: m.cachedHubspotStatus,
+      lienWorkflowType: m.lienWorkflowType,
+    }))
+    .sort((a, b) => a.projectName.localeCompare(b.projectName))
+    .slice(0, limit);
+
+  res.json({ results });
 });
 
 // ---------------------------------------------------------------------------
