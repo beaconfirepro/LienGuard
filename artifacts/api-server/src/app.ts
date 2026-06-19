@@ -6,6 +6,7 @@ import healthRouter from "./routes/health";
 import externalRouter from "./routes/external";
 import apiRouter from "./routes/api";
 import configRouter from "./routes/config";
+import projectsRouter from "./routes/projects";
 import devRouter from "./routes/dev";
 import { logger } from "./lib/logger";
 import { parseSession } from "./lib/session";
@@ -43,7 +44,8 @@ if (process.env.NODE_ENV !== "production") {
   logger.info("Dev session routes mounted at /api/dev (non-production only)");
 }
 
-app.use("/api/config", configRouter);   // GET/POST /api/config/*              (session)
-app.use("/api", apiRouter);             // GET /api/org, etc.                  (session, catch-all)
+app.use("/api/config", configRouter);        // GET/POST /api/config/*              (session)
+app.use("/api/projects", projectsRouter);   // GET/POST /api/projects/*            (session)
+app.use("/api", apiRouter);                 // GET /api/org, etc.                  (session, catch-all)
 
 export default app;
