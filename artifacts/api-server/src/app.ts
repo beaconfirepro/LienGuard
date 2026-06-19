@@ -2,7 +2,9 @@ import express, { type Express } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
-import router from "./routes";
+import healthRouter from "./routes/health";
+import externalRouter from "./routes/external";
+import apiRouter from "./routes/api";
 import { logger } from "./lib/logger";
 import { parseSession } from "./lib/session";
 
@@ -13,16 +15,10 @@ app.use(
     logger,
     serializers: {
       req(req) {
-        return {
-          id: req.id,
-          method: req.method,
-          url: req.url?.split("?")[0],
-        };
+        return { id: req.id, method: req.method, url: req.url?.split("?")[0] };
       },
       res(res) {
-        return {
-          statusCode: res.statusCode,
-        };
+        return { statusCode: res.statusCode };
       },
     },
   }),
@@ -34,6 +30,8 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use(parseSession);
 
-app.use("/api", router);
+app.use(healthRouter);
+app.use(externalRouter);
+app.use("/api", apiRouter);
 
 export default app;
