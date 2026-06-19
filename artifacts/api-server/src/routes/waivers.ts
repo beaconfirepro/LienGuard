@@ -308,12 +308,13 @@ router.post("/waivers/:id/approve-pm", requireSession, async (req, res) => {
     return;
   }
 
-  // Role gate — only PM or admin may approve.
+  // Role gate — only PM or admin (super-role) may approve.
+  // Missing role → 403; role must be explicitly set in the session.
   const session = getSession(req);
-  const canApprovePm = !session.role || session.role === "pm" || session.role === "admin";
-  if (!canApprovePm) {
+  if (session.role !== "pm" && session.role !== "admin") {
     res.status(403).json({
-      error: `Your role ('${session.role}') is not authorized to approve PM gates. Required: pm or admin.`,
+      error: `Insufficient role: PM gate requires role 'pm'. Your role: '${session.role ?? "(none)"}'. Contact your administrator.`,
+      requiredRoles: ["pm", "admin"],
     });
     return;
   }
@@ -380,12 +381,13 @@ router.post("/waivers/:id/approve-finance", requireSession, async (req, res) => 
     return;
   }
 
-  // Role gate — only Finance or admin may approve.
+  // Role gate — only Finance or admin (super-role) may approve.
+  // Missing role → 403; role must be explicitly set in the session.
   const session = getSession(req);
-  const canApproveFinance = !session.role || session.role === "finance" || session.role === "admin";
-  if (!canApproveFinance) {
+  if (session.role !== "finance" && session.role !== "admin") {
     res.status(403).json({
-      error: `Your role ('${session.role}') is not authorized to approve Finance gates. Required: finance or admin.`,
+      error: `Insufficient role: Finance gate requires role 'finance'. Your role: '${session.role ?? "(none)"}'. Contact your administrator.`,
+      requiredRoles: ["finance", "admin"],
     });
     return;
   }
