@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { useResponsive } from "@/hooks/use-responsive";
 import { useAuth } from "@workspace/replit-auth-web";
 import { GlobalSearch } from "./GlobalSearch";
+import { RoleSwitcher } from "./RoleSwitcher";
 import {
   LayoutGrid, Landmark, DollarSign, Lock, Settings,
   ChevronLeft, Bell, Menu, X,
@@ -328,6 +329,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             )}
             <div className="min-w-0 flex-1" />
             <GlobalSearch className="relative hidden w-56 lg:block" />
+            <RoleSwitcher />
             <span className="hidden shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10.5px] font-semibold tracking-wide sm:flex" style={{ background: "rgba(20,235,163,.12)", color: "#14eba3" }}>
               <span className="h-1.5 w-1.5 rounded-full bg-[#14eba3]" />PROD
             </span>

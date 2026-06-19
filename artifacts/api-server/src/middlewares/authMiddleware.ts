@@ -30,34 +30,98 @@ declare global {
 }
 
 // ── TEMPORARY LOGIN BYPASS ───────────────────────────────────────────────
-// When AUTH_BYPASS=1 every request is treated as an authenticated admin so we
+// When AUTH_BYPASS=1 every request is treated as an authenticated user so we
 // can use the app without going through the real Replit Auth / OIDC flow during
 // development. This is a full authorization bypass, so it is triple-guarded:
 //   1. opt-in via AUTH_BYPASS=1 (set development-scoped only),
 //   2. refuses to activate when NODE_ENV === "production",
 //   3. refuses to activate inside a Replit deployment (REPLIT_DEPLOYMENT set).
 // Remove this block (and the AUTH_BYPASS env var) to restore normal login.
-const AUTH_BYPASS =
+//
+// Role switching: the bypass defaults to admin but honours the `dev_role`
+// cookie (admin | pm | finance | coordinator). This lets a non-technical tester
+// assume any role from inside the app (via the dev role switcher) so role gates
+// can be verified both positively (allowed → works) and negatively
+// (disallowed → 403) without editing the database by hand. Each role maps to
+// the matching seeded user so approval attributions look correct.
+export const AUTH_BYPASS =
   process.env.AUTH_BYPASS === "1" &&
   process.env.NODE_ENV !== "production" &&
   !process.env.REPLIT_DEPLOYMENT;
 
+export const DEV_ROLE_COOKIE = "dev_role";
+
 if (AUTH_BYPASS) {
   // eslint-disable-next-line no-console
   console.warn(
-    "⚠️  AUTH_BYPASS is ACTIVE — every request is authenticated as admin. " +
-      "This must NEVER run in a deployed/production environment.",
+    "⚠️  AUTH_BYPASS is ACTIVE — every request is authenticated and the role " +
+      "can be switched in-app via the dev_role cookie. This must NEVER run in " +
+      "a deployed/production environment.",
   );
 }
 
-const BYPASS_USER: Express.User = {
-  id: "dev-bypass-user",
-  email: "dev@local.test",
-  firstName: "Dev",
-  lastName: "Bypass",
-  profileImageUrl: null,
-  role: "admin",
+// One synthetic user per app role, mapped to the seeded per-role test users so
+// that actions attributed to the actor (e.g. PM/finance waiver approvals) carry
+// the right identity. Keep ids/emails in sync with seed-uat.ts.
+const BYPASS_USERS: Record<UserRole, Express.User> = {
+  admin: {
+    id: "user_admin",
+    email: "admin@beacon.test",
+    firstName: "Avery",
+    lastName: "Admin",
+    profileImageUrl: null,
+    role: "admin",
+  },
+  pm: {
+    id: "user_pm",
+    email: "pm@beacon.test",
+    firstName: "Pat",
+    lastName: "Project-Manager",
+    profileImageUrl: null,
+    role: "pm",
+  },
+  finance: {
+    id: "user_finance",
+    email: "finance@beacon.test",
+    firstName: "Robin",
+    lastName: "Finance",
+    profileImageUrl: null,
+    role: "finance",
+  },
+  coordinator: {
+    id: "user_coord",
+    email: "coordinator@beacon.test",
+    firstName: "Casey",
+    lastName: "Coordinator",
+    profileImageUrl: null,
+    role: "coordinator",
+  },
 };
+
+const DEFAULT_BYPASS_ROLE: UserRole = "admin";
+
+export function isBypassRole(value: unknown): value is UserRole {
+  return typeof value === "string" && value in BYPASS_USERS;
+}
+
+// Ordered options the dev role switcher renders. The label/name match the
+// seeded users in the UAT plan.
+export const BYPASS_ROLE_OPTIONS: ReadonlyArray<{
+  role: UserRole;
+  label: string;
+  name: string;
+}> = [
+  { role: "admin", label: "Tenant Admin", name: "Avery Admin" },
+  { role: "coordinator", label: "Project Coordinator", name: "Casey Coordinator" },
+  { role: "pm", label: "Project Manager", name: "Pat Project-Manager" },
+  { role: "finance", label: "Finance Manager", name: "Robin Finance" },
+];
+
+function resolveBypassUser(req: Request): Express.User {
+  const raw = req.cookies?.[DEV_ROLE_COOKIE];
+  const role = isBypassRole(raw) ? raw : DEFAULT_BYPASS_ROLE;
+  return BYPASS_USERS[role];
+}
 
 async function refreshIfExpired(
   sid: string,
@@ -96,7 +160,7 @@ export async function authMiddleware(
   } as Request["isAuthenticated"];
 
   if (AUTH_BYPASS) {
-    req.user = BYPASS_USER;
+    req.user = resolveBypassUser(req);
     next();
     return;
   }

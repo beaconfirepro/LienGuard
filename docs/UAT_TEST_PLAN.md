@@ -71,21 +71,36 @@ role:
 | Project Manager (PM) | `user_pm` | pm@beacon.test | Pat Project-Manager |
 | Finance Manager | `user_finance` | finance@beacon.test | Robin Finance |
 
-**Two ways to test as a role:**
+**Three ways to test as a role:**
 
-1. **Dev auth bypass (fastest, admin only).** When `AUTH_BYPASS=1` is set
-   (development only), every request is treated as an authenticated **admin**.
-   This is ideal for testing all admin-allowed flows and for automated runs,
-   because the `admin` role is a super-role that passes every role gate. It
-   **cannot** be used to verify that a *non-admin* is correctly *blocked*.
-2. **Real login per role (for negative/role-gate tests).** Log in via Replit
-   Auth, then set that signed-in user's `role` to the role under test (the
-   seeded users above show the intended role values). Use this to confirm a PM
-   can approve a PM-gated waiver but a coordinator gets a 403, etc.
+1. **In-app role switcher (recommended — no developer help needed).** When the
+   dev login bypass is active (`AUTH_BYPASS=1`, development only), a **role
+   picker** appears in the top header (the orange "Tenant Admin ▾" control next
+   to the search box). Open it and choose **Tenant Admin**, **Project
+   Coordinator**, **Project Manager**, or **Finance Manager**. The app reloads
+   signed in as that role's seeded user (Avery/Casey/Pat/Robin), so you can
+   exercise every role-gated action — both the *allowed* path (it works) and the
+   *blocked* path (you get a 403 / the control is hidden) — without touching the
+   database. Switch back to Tenant Admin at any time.
+2. **Dev auth bypass default (fastest, admin).** With `AUTH_BYPASS=1` and no
+   role chosen in the switcher, every request is treated as an authenticated
+   **admin**. Ideal for admin-allowed flows and automated runs, because `admin`
+   is a super-role that passes every gate. On its own (without switching) it
+   **cannot** verify that a *non-admin* is correctly *blocked*.
+3. **Real login per role.** Log in via Replit Auth, then set that signed-in
+   user's `role` to the role under test (the seeded users above show the intended
+   role values). Equivalent to option 1 but requires DB access.
+
+> **How the switcher works:** it calls `GET /api/dev/auth` to learn the
+> available roles and `POST /api/dev/auth/role` to assume one (sets the
+> `dev_role` cookie). Both endpoints are **only** available while the dev bypass
+> is active and return 404 / report disabled in any deployed environment, so the
+> switcher never appears in production.
 
 > **Automated role-gate testing:** an automated agent verifies role gates by
-> driving the API with a session whose role is set to the value under test (the
-> "auth override"), asserting `200` for the allowed role and `403` for a
+> driving the API with a session whose role is set to the value under test
+> (POST `/api/dev/auth/role` with `{ "role": "pm" }`, then reuse the returned
+> `dev_role` cookie), asserting `200` for the allowed role and `403` for a
 > disallowed one. The expected role for each gated action is listed in the test
 > case.
 

@@ -19,6 +19,7 @@ import filingRouter from "./routes/filing";
 import reportsRouter from "./routes/reports";
 import collectionsRouter from "./routes/collections";
 import authRouter from "./routes/auth";
+import devRouter from "./routes/dev";
 import { logger } from "./lib/logger";
 import { authMiddleware } from "./middlewares/authMiddleware";
 
@@ -52,6 +53,7 @@ app.use(authMiddleware);
 // Order matters: more-specific prefixes must be registered BEFORE /api catch-alls.
 app.use("/api", healthRouter);          // GET /api/health, GET /api/healthz  (no auth)
 app.use("/api", authRouter);            // GET /api/auth/user, /login, /callback, /logout
+app.use("/api", devRouter);             // GET/POST /api/dev/auth*  (dev login bypass only)
 app.use("/api", externalRouter);        // GET /api/external/reference         (service-key)
 
 app.use("/api/config", configRouter);        // GET/POST /api/config/*              (session)
