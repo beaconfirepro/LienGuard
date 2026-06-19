@@ -154,6 +154,39 @@ export default function SendQueuePage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["send-queue"] }),
   });
 
+  const [sendResult, setSendResult] = React.useState<
+    { trackingNumber: string; project: string } | null
+  >(null);
+  const [sendError, setSendError] = React.useState<string | null>(null);
+
+  const sendMutation = useMutation({
+    mutationFn: async ({ id }: { id: string; project: string }) => {
+      const res = await fetch(`/api/notices/${id}/send`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+      }
+      return body as { mailing?: { trackingNumber: string | null } };
+    },
+    onSuccess: (data, variables) => {
+      setSendError(null);
+      setSendResult({
+        trackingNumber: data.mailing?.trackingNumber ?? "—",
+        project: variables.project,
+      });
+      queryClient.invalidateQueries({ queryKey: ["send-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["stream-notices"] });
+    },
+    onError: (err: Error) => {
+      setSendResult(null);
+      setSendError(err.message);
+    },
+  });
+
   useRightPanel(
     <Panel title="Send Queue" count={notices.length}>
       <QueueList
@@ -442,16 +475,18 @@ export default function SendQueuePage() {
 
             {selected.status === "approved" && (
               <button
-                className="flex items-center gap-1.5 rounded-md px-4 py-2 text-[13px] font-semibold"
+                disabled={sendMutation.isPending}
+                className="flex items-center gap-1.5 rounded-md px-4 py-2 text-[13px] font-semibold disabled:opacity-60"
                 style={{ background: "#f59e0b", color: "#1a1205" }}
                 onClick={() =>
-                  alert(
-                    "Certified mail sending is wired in Phase 5 (Sending, Waivers & Notarization).",
-                  )
+                  sendMutation.mutate({
+                    id: selected.id,
+                    project: selected.project?.projectName ?? "Notice",
+                  })
                 }
               >
                 <Send className="h-3.5 w-3.5" />
-                Send certified
+                {sendMutation.isPending ? "Sending…" : "Send certified"}
               </button>
             )}
 
@@ -461,10 +496,42 @@ export default function SendQueuePage() {
                 style={{ color: "#14eba3" }}
               >
                 <Check className="h-3.5 w-3.5" />
-                Sent via certified mail
+                {selected.status === "delivered" ? "Delivered" : "Sent via certified mail"}
               </div>
             )}
           </div>
+
+          {/* Send result / error banner */}
+          {sendResult && (
+            <div
+              className="flex items-center justify-between gap-3 rounded-md border px-4 py-3 text-[12.5px]"
+              style={{
+                background: alpha("#14eba3", 0.1),
+                borderColor: alpha("#14eba3", 0.3),
+                color: "#14eba3",
+              }}
+            >
+              <span className="flex items-center gap-1.5">
+                <Check className="h-3.5 w-3.5" />
+                Certified mail dispatched for {sendResult.project}.
+              </span>
+              <span className="font-mono" style={{ color: "var(--text-dim)" }}>
+                Tracking: {sendResult.trackingNumber}
+              </span>
+            </div>
+          )}
+          {sendError && (
+            <div
+              className="rounded-md border px-4 py-3 text-[12.5px]"
+              style={{
+                background: alpha("#ef4444", 0.1),
+                borderColor: alpha("#ef4444", 0.3),
+                color: "#ef4444",
+              }}
+            >
+              Could not send notice: {sendError}
+            </div>
+          )}
         </div>
       </div>
 

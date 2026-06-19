@@ -687,6 +687,66 @@ router.post("/notices/:id/send", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /notices/:id/deliver — manually confirm delivery of a sent notice
+// Used when no Shippo webhook is available (e.g. manual certified-mail send or
+// when a green card / proof comes back). Sets notice.status = delivered.
+// ---------------------------------------------------------------------------
+
+router.post("/notices/:id/deliver", async (req, res) => {
+  const { orgId } = getSession(req);
+  const { id } = req.params;
+  const { deliveredAt, proofUrl } = req.body as {
+    deliveredAt?: string;
+    proofUrl?: string;
+  };
+
+  const [notice] = await db
+    .select()
+    .from(noticesTable)
+    .where(and(eq(noticesTable.id, id), eq(noticesTable.orgId, orgId)))
+    .limit(1);
+
+  if (!notice) {
+    res.status(404).json({ error: "Notice not found" });
+    return;
+  }
+
+  if (notice.status !== "sent") {
+    res.status(409).json({
+      error: `Notice must be in 'sent' status to confirm delivery (current: '${notice.status}')`,
+    });
+    return;
+  }
+
+  const deliveredDate = deliveredAt ? new Date(deliveredAt) : new Date();
+
+  const [updated] = await db
+    .update(noticesTable)
+    .set({ status: "delivered", deliveredAt: deliveredDate, updatedAt: new Date() })
+    .where(and(eq(noticesTable.id, id), eq(noticesTable.orgId, orgId)))
+    .returning();
+
+  // Attach proof URL to the mailing record if one was supplied.
+  let mailing = null;
+  if (proofUrl) {
+    const [existingMailing] = await db
+      .select()
+      .from(mailingRecordsTable)
+      .where(and(eq(mailingRecordsTable.noticeId, id), eq(mailingRecordsTable.orgId, orgId)))
+      .limit(1);
+    if (existingMailing) {
+      [mailing] = await db
+        .update(mailingRecordsTable)
+        .set({ proofUrl, updatedAt: new Date() })
+        .where(eq(mailingRecordsTable.id, existingMailing.id))
+        .returning();
+    }
+  }
+
+  res.json({ notice: updated, mailing });
+});
+
+// ---------------------------------------------------------------------------
 // POST /notices/:id/proof — attach delivery proof URL to MailingRecord
 // ---------------------------------------------------------------------------
 

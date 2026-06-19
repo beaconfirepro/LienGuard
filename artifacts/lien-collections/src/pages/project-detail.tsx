@@ -47,6 +47,7 @@ import {
   Receipt,
   Link as LinkIcon,
   Bell,
+  Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DeadlineCountdown } from "@/components/ui/deadline-countdown";
@@ -155,6 +156,13 @@ interface StreamNotice {
   workMonthId: string | null;
   claimAmount: string;
   monthListed: string;
+  sentAt: string | null;
+  deliveredAt: string | null;
+  mailing: {
+    trackingNumber: string | null;
+    labelUrl: string | null;
+    proofUrl: string | null;
+  } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -524,6 +532,20 @@ function StreamDeadlinesPanel({
       toast({ title: "Clear failed", description: err.message, variant: "destructive" }),
   });
 
+  const markDelivered = useMutation({
+    mutationFn: (noticeId: string) =>
+      apiFetch<{ notice: StreamNotice }>(`/notices/${noticeId}/deliver`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["stream-notices", streamId] });
+      toast({ title: "Delivery confirmed", description: "Notice marked as delivered." });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Could not confirm delivery", description: err.message, variant: "destructive" }),
+  });
+
   if (isLoading) {
     return (
       <div className="py-3 text-xs text-muted-foreground">Loading deadlines…</div>
@@ -717,6 +739,60 @@ function StreamDeadlinesPanel({
                     })}
                   </div>
                 )}
+
+                {/* Send / deliver timeline for sent or delivered notices */}
+                {wmNotices
+                  .filter((n) => n.status === "sent" || n.status === "delivered")
+                  .map((notice) => (
+                    <div
+                      key={`events-${notice.id}`}
+                      className="rounded border border-dashed bg-muted/30 px-3 py-2 space-y-1.5"
+                    >
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        <Send className="h-3 w-3" />
+                        Certified Mail
+                      </div>
+                      <div className="flex items-start gap-2 text-xs">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <span className="font-medium">Sent</span>
+                          {notice.sentAt && (
+                            <span className="text-muted-foreground"> · {formatDate(notice.sentAt)}</span>
+                          )}
+                          {notice.mailing?.trackingNumber && (
+                            <span className="block font-mono text-[11px] text-muted-foreground break-all">
+                              Tracking: {notice.mailing.trackingNumber}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {notice.status === "delivered" ? (
+                        <div className="flex items-start gap-2 text-xs">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0 mt-0.5" />
+                          <div className="min-w-0">
+                            <span className="font-medium text-green-700">Delivered</span>
+                            {notice.deliveredAt && (
+                              <span className="text-muted-foreground"> · {formatDate(notice.deliveredAt)}</span>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 pl-5">
+                          <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="text-xs text-muted-foreground">In transit</span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-xs px-2"
+                            disabled={markDelivered.isPending}
+                            onClick={() => markDelivered.mutate(notice.id)}
+                          >
+                            Mark delivered
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
               </div>
             );
           })}
