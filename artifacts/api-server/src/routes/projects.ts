@@ -10,8 +10,9 @@ import {
   workMonthsTable,
   lienDeadlinesTable,
   lienRulesTable,
+  timesheetLinksTable,
 } from "@workspace/db";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, max } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { hubspotClient } from "../lib/clients/hubspot";
 
@@ -759,6 +760,83 @@ router.delete("/:id/parties/:partyId", async (req, res) => {
   await refreshChecklistComplete(orgId, projectId);
 
   res.status(204).end();
+});
+
+// ---------------------------------------------------------------------------
+// GET /projects/:id/last-timelog
+//
+// Returns each unique Connecteam employee who has timesheet records for this
+// project, with their most recent workDate and display name, sorted
+// descending by last work date. No sync is triggered — reads from cached data.
+// ---------------------------------------------------------------------------
+
+router.get("/:id/last-timelog", async (req, res) => {
+  const { orgId } = getSession(req);
+  const projectId = req.params["id"] as string;
+
+  const [project] = await db
+    .select({ id: lienProjectsTable.id })
+    .from(lienProjectsTable)
+    .where(and(eq(lienProjectsTable.id, projectId), eq(lienProjectsTable.orgId, orgId)))
+    .limit(1);
+
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  // Group by connecteamUserId, picking MAX(workDate) and the associated displayName.
+  // We use a subquery approach: get max workDate per user, then join back to get displayName.
+  const rows = await db
+    .select({
+      connecteamUserId: timesheetLinksTable.connecteamUserId,
+      displayName: timesheetLinksTable.displayName,
+      lastWorkDate: max(timesheetLinksTable.workDate),
+    })
+    .from(timesheetLinksTable)
+    .where(
+      and(
+        eq(timesheetLinksTable.lienProjectId, projectId),
+        eq(timesheetLinksTable.orgId, orgId),
+      ),
+    )
+    .groupBy(timesheetLinksTable.connecteamUserId, timesheetLinksTable.displayName);
+
+  // When a single user has records both with and without a displayName (e.g. seeded rows
+  // before the column was added), we may get duplicate userId rows. Merge them: prefer the
+  // row with a displayName and keep the latest workDate across both.
+  const merged = new Map<string, { connecteamUserId: string; displayName: string | null; lastWorkDate: Date | null }>();
+  for (const row of rows) {
+    const existing = merged.get(row.connecteamUserId);
+    if (!existing) {
+      merged.set(row.connecteamUserId, {
+        connecteamUserId: row.connecteamUserId,
+        displayName: row.displayName,
+        lastWorkDate: row.lastWorkDate ?? null,
+      });
+    } else {
+      // Keep the more recent date
+      const existingMs = existing.lastWorkDate?.getTime() ?? 0;
+      const rowMs = row.lastWorkDate?.getTime() ?? 0;
+      if (rowMs > existingMs) existing.lastWorkDate = row.lastWorkDate ?? null;
+      // Prefer a non-null displayName
+      if (!existing.displayName && row.displayName) existing.displayName = row.displayName;
+    }
+  }
+
+  const result = [...merged.values()]
+    .sort((a, b) => {
+      const aMs = a.lastWorkDate?.getTime() ?? 0;
+      const bMs = b.lastWorkDate?.getTime() ?? 0;
+      return bMs - aMs;
+    })
+    .map((r) => ({
+      connecteamUserId: r.connecteamUserId,
+      displayName: r.displayName ?? r.connecteamUserId,
+      lastWorkDate: r.lastWorkDate ? r.lastWorkDate.toISOString() : null,
+    }));
+
+  res.json({ employees: result });
 });
 
 export default router;

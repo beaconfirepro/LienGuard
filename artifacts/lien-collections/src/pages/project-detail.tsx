@@ -832,6 +832,102 @@ function InvoicesPanel({ projectId }: { projectId: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Last Time on Job panel
+// ---------------------------------------------------------------------------
+
+interface LastTimelogEntry {
+  connecteamUserId: string;
+  displayName: string;
+  lastWorkDate: string | null;
+}
+
+function LastTimeOnJobPanel({ projectId }: { projectId: string }) {
+  const [open, setOpen] = React.useState(true);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["last-timelog", projectId],
+    queryFn: () =>
+      apiFetch<{ employees: LastTimelogEntry[] }>(`/projects/${projectId}/last-timelog`),
+    enabled: !!projectId,
+    staleTime: 60_000,
+  });
+
+  const employees = data?.employees ?? [];
+
+  function daysSince(iso: string): number {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const d = new Date(iso);
+    d.setUTCHours(0, 0, 0, 0);
+    return Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+  }
+
+  function freshnessColor(iso: string): string {
+    const days = daysSince(iso);
+    if (days <= 7) return "text-green-700";
+    if (days <= 30) return "text-amber-700";
+    return "text-red-700";
+  }
+
+  return (
+    <div className="rounded-lg border bg-muted/10">
+      <div className="flex items-center justify-between px-4 py-3">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center gap-2 text-sm font-semibold hover:opacity-80 transition-opacity"
+        >
+          <Clock className="h-4 w-4 text-primary" />
+          Last Time on Job
+          {employees.length > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              {employees.length}
+            </Badge>
+          )}
+        </button>
+      </div>
+
+      {open && (
+        <div className="border-t px-4 pb-4 pt-3">
+          {isLoading ? (
+            <p className="text-xs text-muted-foreground py-2">Loading…</p>
+          ) : employees.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-2">
+              No timesheets synced yet. Run Recompute on a lien stream to pull from Connecteam.
+            </p>
+          ) : (
+            <div className="overflow-x-auto rounded-md border">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b bg-muted/40">
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Employee</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Last Clock-In</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Days Ago</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {employees.map((emp) => (
+                    <tr key={emp.connecteamUserId} className="border-b last:border-0 bg-card">
+                      <td className="px-3 py-2 font-medium">{emp.displayName}</td>
+                      <td className="px-3 py-2 tabular-nums text-muted-foreground">
+                        {emp.lastWorkDate ? formatDate(emp.lastWorkDate) : "—"}
+                      </td>
+                      <td className={cn("px-3 py-2 tabular-nums font-medium", emp.lastWorkDate ? freshnessColor(emp.lastWorkDate) : "text-muted-foreground")}>
+                        {emp.lastWorkDate ? `${daysSince(emp.lastWorkDate)}d` : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
@@ -1236,6 +1332,13 @@ export default function ProjectDetailPage() {
         {/* Invoices (QBO) */}
         <div className="space-y-3">
           <InvoicesPanel projectId={id!} />
+        </div>
+
+        <Separator />
+
+        {/* Last Time on Job */}
+        <div className="space-y-3">
+          <LastTimeOnJobPanel projectId={id!} />
         </div>
 
         <Separator />

@@ -32,6 +32,13 @@ export interface SyncResult {
   reason?: string;
 }
 
+export interface ConnecteamUser {
+  connecteamUserId: string;
+  firstName: string;
+  lastName: string;
+  displayName: string;
+}
+
 export class ConnecteamSyncClient {
   private readonly apiKey: string | null;
 
@@ -41,6 +48,43 @@ export class ConnecteamSyncClient {
 
   isConfigured(): boolean {
     return this.apiKey !== null;
+  }
+
+  /**
+   * Fetch all users (team members) from Connecteam and return a map of
+   * connecteamUserId → displayName. Returns an empty map when the API is
+   * not configured or the call fails (graceful degradation).
+   */
+  async fetchUsers(): Promise<Map<string, string>> {
+    if (!this.apiKey) {
+      return new Map();
+    }
+
+    try {
+      const resp = await fetch(`${CONNECTEAM_BASE}/users`, {
+        headers: { "x-api-key": this.apiKey, "Content-Type": "application/json" },
+      });
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => "");
+        console.warn(`[ConnecteamSyncClient] fetchUsers API ${resp.status}: ${body.slice(0, 200)}`);
+        return new Map();
+      }
+      const data = (await resp.json()) as ConnecteamUsersApiResponse;
+      const users = data.data ?? data.users ?? [];
+      const map = new Map<string, string>();
+      for (const u of users) {
+        const userId = String(u.id ?? u.user_id ?? "");
+        if (!userId) continue;
+        const first = u.first_name ?? u.firstName ?? "";
+        const last = u.last_name ?? u.lastName ?? "";
+        const display = `${first} ${last}`.trim() || userId;
+        map.set(userId, display);
+      }
+      return map;
+    } catch (err) {
+      console.warn(`[ConnecteamSyncClient] fetchUsers failed:`, err);
+      return new Map();
+    }
   }
 
   /**
@@ -69,6 +113,9 @@ export class ConnecteamSyncClient {
     const { orgId, lienProjectId, hubspotProjectId, from, to } = params;
     const now = new Date();
 
+    // Fetch user display names upfront so we can embed them into each row
+    const userMap = await this.fetchUsers();
+
     // Build query params for the Connecteam time-clock records endpoint
     const qs = new URLSearchParams({ job_id: hubspotProjectId, limit: "200" });
     if (from) qs.set("from", from.toISOString().slice(0, 10));
@@ -96,6 +143,8 @@ export class ConnecteamSyncClient {
       if (!workStream) continue; // skip unrecognised tags
 
       const workDate = new Date(record.clock_in ?? record.date ?? new Date().toISOString());
+      const userId = String(record.user_id ?? "");
+      const displayName = userMap.get(userId) ?? null;
 
       // Check for existing record by unique key (orgId, connecteamTimeRecordId)
       const existing = await db
@@ -117,6 +166,7 @@ export class ConnecteamSyncClient {
             workDate,
             stageTag: record.tag ?? "",
             workStream,
+            displayName,
             lastSyncedAt: now,
             updatedAt: now,
           })
@@ -126,8 +176,9 @@ export class ConnecteamSyncClient {
           id: randomUUID(),
           orgId,
           lienProjectId,
-          connecteamUserId: String(record.user_id ?? ""),
+          connecteamUserId: userId,
           connecteamTimeRecordId: String(record.id),
+          displayName,
           stageTag: record.tag ?? "",
           workStream,
           hours: String(record.total_hours ?? record.hours ?? 0),
@@ -154,6 +205,19 @@ interface ConnecteamTimeRecord {
 }
 interface ConnecteamApiResponse {
   data?: ConnecteamTimeRecord[];
+}
+
+interface ConnecteamUserRecord {
+  id?: string | number;
+  user_id?: string | number;
+  first_name?: string;
+  firstName?: string;
+  last_name?: string;
+  lastName?: string;
+}
+interface ConnecteamUsersApiResponse {
+  data?: ConnecteamUserRecord[];
+  users?: ConnecteamUserRecord[];
 }
 
 export const connecteamSyncClient = new ConnecteamSyncClient();

@@ -305,6 +305,7 @@ export const timesheetLinksTable = pgTable(
     lienProjectId: text("lien_project_id").notNull(),
     connecteamUserId: text("connecteam_user_id").notNull(),
     connecteamTimeRecordId: text("connecteam_time_record_id").notNull(),
+    displayName: text("display_name"),
     stageTag: text("stage_tag").notNull(),
     workStream: workStreamEnum("work_stream").notNull(),
     hours: numeric("hours", { precision: 6, scale: 2 }).notNull(),
