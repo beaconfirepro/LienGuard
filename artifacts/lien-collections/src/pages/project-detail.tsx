@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { Screen } from "@/components/primitives/Screen";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -55,6 +55,7 @@ import {
   Lock,
   ArrowDownCircle,
   ArrowUpCircle,
+  ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DeadlineCountdown } from "@/components/ui/deadline-countdown";
@@ -586,9 +587,13 @@ function StreamCard({
               onOpenFiling(stream.id);
             }
           }}
-          className="shrink-0 text-xs underline text-muted-foreground hover:text-foreground"
+          className={cn(
+            buttonVariants({ variant: "outline", size: "sm" }),
+            "shrink-0 h-7 px-2.5 text-xs gap-1 cursor-pointer",
+          )}
         >
-          Open filing →
+          Open filing
+          <ArrowRight className="h-3 w-3" />
         </span>
         <span
           className={cn(
