@@ -2,7 +2,7 @@ import * as React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearch } from "wouter";
 import { Pencil, Check, Send, FileText, ChevronRight } from "lucide-react";
-import { Panel, useRightPanel } from "@/components/nav/AppShell";
+import { Panel, useRightPanel, useLeftPanel } from "@/components/nav/AppShell";
 import { QueueList } from "@/components/ui/queue-list";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { DeadlineCountdown } from "@/components/ui/deadline-countdown";
@@ -171,6 +171,32 @@ export default function SendQueuePage() {
       />
     </Panel>,
     [notices.length, selected?.id],
+  );
+
+  const draftCount = notices.filter((n) => n.status === "draft").length;
+  const approvedCount = notices.filter((n) => n.status === "approved").length;
+  const totalClaim = notices.reduce((s, n) => s + Number(n.claimAmount), 0);
+
+  useLeftPanel(
+    <Panel title="Queue Summary">
+      <div className="flex flex-col gap-2 p-3">
+        {[
+          { label: "Draft", value: String(draftCount), color: "#f59f0a" },
+          { label: "Approved", value: String(approvedCount), color: "#14eba3" },
+          { label: "Total claim", value: money(totalClaim), color: "var(--text-base)" },
+        ].map((s) => (
+          <div
+            key={s.label}
+            className="flex items-center justify-between rounded-md border px-3 py-2.5"
+            style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)" }}
+          >
+            <span className="text-[12px]" style={{ color: "var(--text-muted-color)" }}>{s.label}</span>
+            <span className="font-mono text-[13px] font-semibold" style={{ color: s.color }}>{s.value}</span>
+          </div>
+        ))}
+      </div>
+    </Panel>,
+    [notices.length, draftCount, approvedCount, totalClaim],
   );
 
   if (isError) {

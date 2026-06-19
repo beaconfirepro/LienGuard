@@ -2,6 +2,7 @@ import * as React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Screen } from "@/components/primitives/Screen";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Panel, useLeftPanel } from "@/components/nav/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1041,6 +1042,36 @@ function IntegrationsTab() {
 // ---------------------------------------------------------------------------
 
 export default function ConfigPage() {
+  const [tab, setTab] = React.useState("reference");
+
+  useLeftPanel(
+    <Panel title="Settings">
+      <div className="flex flex-col gap-1 p-3">
+        {[
+          { value: "reference", label: "Reference Tree", Icon: Building2 },
+          { value: "triggers", label: "Stage Triggers", Icon: GitBranch },
+          { value: "jurisdictions", label: "Jurisdiction Rules", Icon: ShieldAlert },
+          { value: "integrations", label: "Integrations", Icon: Banknote },
+        ].map((t) => (
+          <button
+            key={t.value}
+            onClick={() => setTab(t.value)}
+            className="flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-[12.5px] font-medium transition-colors"
+            style={
+              tab === t.value
+                ? { background: "var(--surface-3)", borderColor: "var(--helm-border)", color: "var(--text-base)" }
+                : { background: "var(--surface-2)", borderColor: "var(--helm-border)", color: "var(--text-dim)" }
+            }
+          >
+            <t.Icon className="h-4 w-4 shrink-0" />
+            {t.label}
+          </button>
+        ))}
+      </div>
+    </Panel>,
+    [tab],
+  );
+
   return (
     <Screen>
       <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
@@ -1051,8 +1082,8 @@ export default function ConfigPage() {
           </p>
         </div>
 
-        <Tabs defaultValue="reference">
-          <TabsList className="w-full sm:w-auto">
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList className="hidden">
             <TabsTrigger value="reference" className="gap-1.5">
               <Building2 className="h-4 w-4" />
               Reference Tree

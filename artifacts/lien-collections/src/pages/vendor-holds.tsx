@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Lock, Unlock, Plus, X } from "lucide-react";
-import { Panel, useRightPanel } from "@/components/nav/AppShell";
+import { Panel, useRightPanel, useLeftPanel } from "@/components/nav/AppShell";
 import { QueueList } from "@/components/ui/queue-list";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { money, alpha } from "@/lib/utils";
@@ -69,6 +69,37 @@ export default function VendorHoldsPage() {
       </div>
     </Panel>,
     [vendor, vendors.length],
+  );
+
+  const openCount = bills.filter((b) => b.status === "open").length;
+  const holdCount = bills.filter((b) => b.status === "hold").length;
+
+  useLeftPanel(
+    <Panel title="Bill Filters">
+      <div className="flex flex-col gap-1 p-3">
+        {[
+          { key: "all", label: "All bills", count: bills.length },
+          { key: "recommended", label: "Hold advised", count: recCount },
+          { key: "open", label: "Open", count: openCount },
+          { key: "hold", label: "On hold", count: holdCount },
+        ].map((f) => (
+          <button
+            key={f.key}
+            onClick={() => setFilter(f.key)}
+            className="flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left transition-colors"
+            style={
+              filter === f.key
+                ? { background: alpha("#f59f0a", 0.12), borderColor: alpha("#f59f0a", 0.4) }
+                : { background: "var(--surface-2)", borderColor: "var(--helm-border)" }
+            }
+          >
+            <span className="text-[12.5px] font-medium" style={{ color: "var(--text-base)" }}>{f.label}</span>
+            <span className="font-mono text-[11px]" style={{ color: "var(--text-muted-color)" }}>{f.count}</span>
+          </button>
+        ))}
+      </div>
+    </Panel>,
+    [filter, bills],
   );
 
   return (

@@ -2,7 +2,7 @@ import * as React from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Phone, Plus, Check, X, RefreshCw, Filter } from "lucide-react";
-import { Panel, useRightPanel } from "@/components/nav/AppShell";
+import { Panel, useRightPanel, useLeftPanel } from "@/components/nav/AppShell";
 import { QueueList } from "@/components/ui/queue-list";
 import { AgingBuckets } from "@/components/ui/aging-buckets";
 import { money, alpha } from "@/lib/utils";
@@ -182,6 +182,36 @@ export default function CollectionsPage() {
       />
     </Panel>,
     [callAccts.length],
+  );
+
+  useLeftPanel(
+    <Panel title="Pipeline Stages">
+      <div className="flex flex-col gap-1 p-3">
+        <StageFilterRow
+          label="All stages"
+          color="#6366f1"
+          count={allAccounts.length}
+          active={filterStage === ""}
+          onClick={() => setFilterStage("")}
+        />
+        {STAGE_ORDER.map((stage) => {
+          const list = allAccounts.filter((a) => a.escalationStage === stage);
+          if (!list.length) return null;
+          return (
+            <StageFilterRow
+              key={stage}
+              label={STAGE_LABELS[stage] ?? stage}
+              color={STAGE_COLOR[stage] ?? "#6b7280"}
+              count={list.length}
+              total={list.reduce((s, a) => s + Number(a.totalOverdue), 0)}
+              active={filterStage === stage}
+              onClick={() => setFilterStage((cur) => (cur === stage ? "" : stage))}
+            />
+          );
+        })}
+      </div>
+    </Panel>,
+    [allAccounts, filterStage],
   );
 
   if (loadingAccounts) {
@@ -488,5 +518,46 @@ function RiskPill({ risk }: { risk: number | null }) {
         {risk ?? "—"}
       </span>
     </div>
+  );
+}
+
+function StageFilterRow({
+  label,
+  color,
+  count,
+  total,
+  active,
+  onClick,
+}: {
+  label: string;
+  color: string;
+  count: number;
+  total?: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors"
+      style={
+        active
+          ? { background: alpha(color, 0.14), borderColor: alpha(color, 0.4) }
+          : { background: "var(--surface-2)", borderColor: "var(--helm-border)" }
+      }
+    >
+      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
+      <span className="min-w-0 flex-1 truncate text-[12px] font-medium" style={{ color: "var(--text-base)" }}>
+        {label}
+      </span>
+      <span className="font-mono text-[11px]" style={{ color: "var(--text-muted-color)" }}>
+        {count}
+      </span>
+      {total != null && total > 0 && (
+        <span className="font-mono text-[11.5px] font-semibold" style={{ color: "#eb143f" }}>
+          {money(total)}
+        </span>
+      )}
+    </button>
   );
 }

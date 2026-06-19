@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
-import { Panel, useRightPanel } from "@/components/nav/AppShell";
+import { Panel, useRightPanel, useLeftPanel } from "@/components/nav/AppShell";
 import { QueueList } from "@/components/ui/queue-list";
 import { AgingBuckets } from "@/components/ui/aging-buckets";
 import { DeadlineCountdown } from "@/components/ui/deadline-countdown";
@@ -115,6 +115,33 @@ export default function DashboardPage() {
       />
     </Panel>,
     [atRisk.length],
+  );
+
+  useLeftPanel(
+    <Panel title="Workspaces">
+      <div className="flex flex-col gap-1 p-3">
+        {[
+          { href: "/liens", label: "Liens", sub: `${projects.length} project${projects.length !== 1 ? "s" : ""}` },
+          { href: "/waivers", label: "Waivers", sub: "Lien waivers" },
+          { href: "/collections", label: "Collections", sub: `${accounts.length} account${accounts.length !== 1 ? "s" : ""}` },
+          { href: "/holds", label: "Vendor Holds", sub: `${activeHoldsCount} active hold${activeHoldsCount !== 1 ? "s" : ""}` },
+        ].map((w) => (
+          <Link key={w.href} href={w.href}>
+            <div
+              className="flex cursor-pointer items-center justify-between gap-2 rounded-md border px-3 py-2.5 transition-colors hover:opacity-80"
+              style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)" }}
+            >
+              <div className="min-w-0">
+                <div className="truncate text-[12.5px] font-semibold" style={{ color: "var(--text-base)" }}>{w.label}</div>
+                <div className="text-[11px]" style={{ color: "var(--text-muted-color)" }}>{w.sub}</div>
+              </div>
+              <ChevronRight className="h-4 w-4 shrink-0" style={{ color: "var(--text-muted-color)" }} />
+            </div>
+          </Link>
+        ))}
+      </div>
+    </Panel>,
+    [projects.length, accounts.length, activeHoldsCount],
   );
 
   const deadlineRows = projects

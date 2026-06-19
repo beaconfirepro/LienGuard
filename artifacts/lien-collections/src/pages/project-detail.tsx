@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DeadlineCountdown } from "@/components/ui/deadline-countdown";
+import { Panel, useLeftPanel } from "@/components/nav/AppShell";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1033,6 +1034,67 @@ export default function ProjectDetailPage() {
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
+
+  useLeftPanel(
+    <Panel title="Project">
+      {data ? (
+        <div className="flex flex-col gap-3 p-3">
+          <div>
+            <div className="text-[13px] font-semibold" style={{ color: "var(--text-base)" }}>
+              {data.project.cachedProjectName ?? data.project.hubspotProjectId}
+            </div>
+            <div className="mt-2 flex flex-col gap-1">
+              {[
+                { label: "County", value: data.project.county ?? "—" },
+                { label: "Tier", value: data.project.contractorTier.replace(/_/g, " ") },
+                { label: "Workflow", value: data.project.lienWorkflowType.replace(/_/g, " ") },
+              ].map((r) => (
+                <div key={r.label} className="flex items-center justify-between gap-2">
+                  <span className="text-[11px]" style={{ color: "var(--text-muted-color)" }}>{r.label}</span>
+                  <span className="text-[11.5px] font-medium capitalize" style={{ color: "var(--text-dim)" }}>{r.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div
+              className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em]"
+              style={{ color: "var(--text-muted-color)" }}
+            >
+              Lien Streams
+            </div>
+            {data.streams.length > 0 ? (
+              <div className="flex flex-col gap-1">
+                {data.streams.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => setLocation(`/filing/${s.id}`)}
+                    className="flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left hover:opacity-80"
+                    style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)" }}
+                  >
+                    <span className="truncate text-[12px] font-medium capitalize" style={{ color: "var(--text-base)" }}>
+                      {s.workStream.replace(/_/g, " ")}
+                    </span>
+                    <span
+                      className="shrink-0 text-[10px] font-semibold uppercase tracking-wide"
+                      style={{ color: "var(--text-muted-color)" }}
+                    >
+                      {s.status.replace(/_/g, " ")}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="text-[11.5px]" style={{ color: "var(--text-muted-color)" }}>No lien streams</div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="p-3 text-[12px]" style={{ color: "var(--text-muted-color)" }}>Loading…</div>
+      )}
+    </Panel>,
+    [data],
+  );
 
   if (isLoading) {
     return (

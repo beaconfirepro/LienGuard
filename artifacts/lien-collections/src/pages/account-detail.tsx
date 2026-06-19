@@ -2,7 +2,7 @@ import * as React from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Landmark, Clock, Phone, Mail, ChevronLeft, RefreshCw, Plus, Check, Trash2 } from "lucide-react";
-import { Panel, useRightPanel } from "@/components/nav/AppShell";
+import { Panel, useRightPanel, useLeftPanel } from "@/components/nav/AppShell";
 import { QueueList } from "@/components/ui/queue-list";
 import { AgingBuckets } from "@/components/ui/aging-buckets";
 import { ActivityTimeline } from "@/components/ui/activity-timeline";
@@ -171,6 +171,33 @@ export default function AccountDetailPage() {
       />
     </Panel>,
     [accountId],
+  );
+
+  useLeftPanel(
+    <Panel title="Account">
+      {data ? (
+        <div className="flex flex-col gap-2 p-3">
+          <div className="text-[13px] font-semibold" style={{ color: "var(--text-base)" }}>
+            {data.client?.cachedName ?? data.account.id}
+          </div>
+          {[
+            { label: "Risk score", value: data.account.riskScore != null ? String(data.account.riskScore) : "—" },
+            { label: "Total overdue", value: money(Number(data.account.totalOverdue)) },
+            { label: "Oldest", value: `${data.account.oldestOverdueDays}d` },
+            { label: "Stage", value: STAGE_LABELS[data.account.escalationStage] ?? data.account.escalationStage },
+            { label: "Status", value: data.account.status },
+          ].map((r) => (
+            <div key={r.label} className="flex items-center justify-between gap-2">
+              <span className="text-[11.5px]" style={{ color: "var(--text-muted-color)" }}>{r.label}</span>
+              <span className="font-mono text-[12px] font-semibold" style={{ color: "var(--text-base)" }}>{r.value}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="p-3 text-[12px]" style={{ color: "var(--text-muted-color)" }}>Loading…</div>
+      )}
+    </Panel>,
+    [data],
   );
 
   if (isLoading) {
