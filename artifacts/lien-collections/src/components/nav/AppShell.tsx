@@ -55,7 +55,7 @@ export function Panel({
 /* ─── Navigation config ──────────────────────────────────────────────────── */
 const MODULE_NAV = [
   { key: "dashboard", label: "Dashboard", to: "/", Icon: LayoutGrid },
-  { key: "liens", label: "Liens", to: "/liens", Icon: Landmark },
+  { key: "liens", label: "Projects", to: "/liens", Icon: Landmark },
   { key: "filings", label: "Filings", to: "/filing", Icon: Gavel },
   { key: "waivers", label: "Waivers", to: "/waivers", Icon: FileSignature },
   { key: "collections", label: "Collections", to: "/collections", Icon: DollarSign },
@@ -343,7 +343,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <nav className="fixed inset-x-0 bottom-0 z-40 flex h-[62px] border-t" style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}>
             {[
               { label: "Dashboard", to: "/", Icon: LayoutGrid },
-              { label: "Liens", to: "/liens", Icon: Landmark },
+              { label: "Projects", to: "/liens", Icon: Landmark },
               { label: "Waivers", to: "/waivers", Icon: FileSignature },
               { label: "Collections", to: "/collections", Icon: DollarSign },
               { label: "Settings", to: "/settings", Icon: Settings },
