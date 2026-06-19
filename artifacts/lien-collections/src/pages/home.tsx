@@ -10,13 +10,11 @@ interface HealthData {
 }
 
 function HealthBadge() {
-  const BASE = import.meta.env.BASE_URL ?? "/";
-  const apiBase = BASE.replace(/lien-collections\/?/, "api-server/api");
-
   const { data, isLoading, isError } = useQuery<HealthData>({
     queryKey: ["health"],
+    retry: false,
     queryFn: async () => {
-      const res = await fetch(`${apiBase.replace(/\/api$/, "")}/health`);
+      const res = await fetch("/api/health");
       if (!res.ok) throw new Error("health check failed");
       return res.json() as Promise<HealthData>;
     },

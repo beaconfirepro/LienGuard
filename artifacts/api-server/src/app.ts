@@ -5,6 +5,7 @@ import pinoHttp from "pino-http";
 import healthRouter from "./routes/health";
 import externalRouter from "./routes/external";
 import apiRouter from "./routes/api";
+import configRouter from "./routes/config";
 import devRouter from "./routes/dev";
 import { logger } from "./lib/logger";
 import { parseSession } from "./lib/session";
@@ -31,13 +32,18 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use(parseSession);
 
-app.use(healthRouter);
-app.use(externalRouter);
-app.use("/api", apiRouter);
+// All routes live under /api — the Replit proxy forwards /api/* to port 8080
+// without stripping the prefix.
+// Order matters: more-specific prefixes must be registered BEFORE /api catch-alls.
+app.use("/api", healthRouter);          // GET /api/health, GET /api/healthz  (no auth)
+app.use("/api", externalRouter);        // GET /api/external/reference         (service-key)
 
 if (process.env.NODE_ENV !== "production") {
-  app.use("/dev", devRouter);
-  logger.info("Dev session routes mounted at /dev (non-production only)");
+  app.use("/api/dev", devRouter);       // GET /api/dev/session                (no auth)
+  logger.info("Dev session routes mounted at /api/dev (non-production only)");
 }
+
+app.use("/api/config", configRouter);   // GET/POST /api/config/*              (session)
+app.use("/api", apiRouter);             // GET /api/org, etc.                  (session, catch-all)
 
 export default app;

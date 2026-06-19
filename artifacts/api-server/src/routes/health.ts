@@ -11,7 +11,7 @@ const VERSION = process.env.npm_package_version ?? "0.0.0";
  * Service-key and session authentication are intentionally omitted — this
  * endpoint is polled by infrastructure health checkers that have no session.
  */
-router.get("/health", async (_req, res) => {
+router.get(["/health", "/healthz"], async (_req, res) => {
   let dbStatus: "ok" | "error" = "ok";
 
   try {

@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/nav/AppShell";
 import NotFound from "@/pages/not-found";
 import HomePage from "@/pages/home";
+import ConfigPage from "@/pages/config";
 
 const queryClient = new QueryClient();
 
@@ -13,6 +14,7 @@ function Router() {
     <AppShell>
       <Switch>
         <Route path="/" component={HomePage} />
+        <Route path="/settings" component={ConfigPage} />
         <Route component={NotFound} />
       </Switch>
     </AppShell>
