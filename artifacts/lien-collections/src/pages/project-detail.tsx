@@ -1791,11 +1791,13 @@ function DeadlinesTab({
   data,
   holdsData,
   onOpenFiling,
+  showHolds,
 }: {
   id: string;
   data: ProjectDetailResponse;
   holdsData?: HoldsData;
   onOpenFiling: (streamId: string) => void;
+  showHolds: boolean;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -1891,8 +1893,8 @@ function DeadlinesTab({
 
   return (
       <div className="space-y-6 max-w-3xl">
-        {/* Active holds banner */}
-        {activeHolds.length > 0 && (
+        {/* Active holds banner — only when toggled via the header "Holds" badge */}
+        {showHolds && activeHolds.length > 0 && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-3 space-y-1.5">
             <div className="flex items-center gap-2">
               <Shield className="h-4 w-4 text-red-600 shrink-0" />
@@ -1916,8 +1918,10 @@ function DeadlinesTab({
           </div>
         )}
 
-        {/* Checklist */}
-        <ChecklistPanel checklist={checklist} contractorTier={project.contractorTier} />
+        {/* Checklist — only when incomplete (the header badge already signals "Setup Complete") */}
+        {!checklist.complete && (
+          <ChecklistPanel checklist={checklist} contractorTier={project.contractorTier} />
+        )}
 
         <Separator />
 
@@ -2076,6 +2080,7 @@ export default function ProjectDetailPage() {
   const [selectedStreamId, setSelectedStreamId] = React.useState<string>(
     () => new URLSearchParams(search).get("stream") ?? "",
   );
+  const [showHolds, setShowHolds] = React.useState(false);
 
   const streams = data?.streams ?? [];
   const streamIds = streams.map((s) => s.id).join(",");
@@ -2196,10 +2201,21 @@ export default function ProjectDetailPage() {
               </button>
               <div className="flex items-center gap-2 flex-wrap justify-end">
                 {activeHolds.length > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 text-red-700 px-3 py-1 text-xs font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setShowHolds((v) => !v)}
+                    aria-pressed={showHolds}
+                    title={showHolds ? "Hide hold details" : "Show hold details"}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors cursor-pointer",
+                      showHolds
+                        ? "bg-red-600 text-white"
+                        : "bg-red-100 text-red-700 hover:bg-red-200",
+                    )}
+                  >
                     <Shield className="h-3.5 w-3.5" />
                     {activeHolds.length} Hold{activeHolds.length !== 1 ? "s" : ""}
-                  </span>
+                  </button>
                 )}
                 {project.completionChecklistComplete ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 text-green-700 px-3 py-1 text-xs font-medium">
@@ -2232,6 +2248,7 @@ export default function ProjectDetailPage() {
             data={data}
             holdsData={holdsData}
             onOpenFiling={openFiling}
+            showHolds={showHolds}
           />
         ) : streams.length === 0 ? (
           <div
