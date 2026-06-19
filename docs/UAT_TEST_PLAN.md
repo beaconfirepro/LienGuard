@@ -119,6 +119,20 @@ promises, active plan), `acct_soft` (overdue/soft_collections), `acct_filing`
 `acct_plan` (payment_plan — active plan), `acct_resolved` (resolved — completed
 plan).
 
+**Invoices (AR — drive collections):** Collections figures (overdue total,
+oldest-overdue age, risk score) are **derived from live AR invoices**
+(`invoice_links`, non-supplier, non-cleared) for each account's client on every
+recompute — they are **not** static. Each non-trivial account is backed by
+invoices that aggregate to its scenario, spread across aging buckets:
+`cli_soft` (acct_soft) → ~8,200 overdue, oldest ~35d; `cli_filing` (acct_filing)
+→ ~62,000, oldest ~120d; `cli_agency` (acct_agency) → ~95,000, oldest ~210d;
+`cli_writeoff` (acct_writeoff) → ~15,000, oldest ~400d; `cli_promised`
+(acct_promised) → ~20,000, oldest ~28d; `cli_plan` (acct_plan) → ~30,000, oldest
+~60d; `cli_late` (acct_late) → 48,250 overdue (`inv_overdue`). `cli_good`
+(acct_good) and `cli_resolved` (acct_resolved) have only cleared/paid invoices,
+so they recompute to $0. Invoice due dates are anchored to the seed "today"
+(2026-06-19), so figures are approximate (±a few days as real time passes).
+
 **Holds:** `hold_sched` (schedule hold, active, `proj_comm`), `hold_mat`
 (material hold, active, client `cli_late`), `hold_cleared` (schedule hold,
 cleared, `proj_res`).
@@ -235,6 +249,15 @@ cleared, `proj_res`).
 
 ## 7. Collections (`/collections` and `/collections/:accountId`)
 
+> **Collections figures are invoice-derived, not static.** Each account's overdue
+> total, oldest-overdue age, and risk score are recomputed from its client's live
+> AR invoices (`invoice_links`, non-supplier, non-cleared) on every recompute —
+> a recompute happens automatically whenever the account detail page
+> (`GET /api/collections/accounts/:id`) is opened, and again whenever an invoice
+> is cleared. `status` and `escalationStage` are seeded scenario state and are
+> **not** changed by a recompute (except: clearing the last overdue invoice moves
+> a non-written-off account to `current`). See seed reference 1.4 → Invoices.
+
 ### Automated (AI-testable)
 
 | # | Role | Precondition | Steps | Expected result |
@@ -248,6 +271,8 @@ cleared, `proj_res`).
 | COLL-A7 | Coordinator | `acct_promised` | 1. Add a new promise-to-pay; later 2. update its status to kept/broken. | Promise is created `open`; status update persists. |
 | COLL-A8 | Admin | `acct_agency` escalated | 1. Perform the admin-only write-off action. | `200`; account moves to written_off / write_off stage. |
 | COLL-A9 | Coordinator | `acct_agency` | 1. Attempt the admin-only write-off action. | `403` — "Admin role required"; the write-off control is hidden/blocked for a coordinator. |
+| COLL-A10 | Admin | AR invoices seeded (1.4) | 1. Trigger a recompute by opening the account detail page (`GET /api/collections/accounts/:id`) for each backed account. | The recomputed `totalOverdue` / `oldestOverdueDays` match the seeded scenario from invoices (within a few days for age), e.g. `acct_agency` ≈ 95,000 / ~210d, `acct_filing` ≈ 62,000 / ~120d, `acct_soft` ≈ 8,200 / ~35d; `acct_good` and `acct_resolved` stay at $0. Status/stage are unchanged by the recompute. |
+| COLL-A11 | Coordinator | `acct_soft` backed by `inv_soft_1` (5,000) + `inv_soft_2` (3,200) | 1. Note `acct_soft` overdue (~8,200). 2. Clear one invoice (`POST /api/invoices/inv_soft_1/clear` with `{clearedFlag:true}`). 3. Re-open `acct_soft`. | After the clear, `acct_soft` overdue drops by the cleared amount (~8,200 → ~3,200) on the next recompute; clearing all overdue invoices would move the account to `current`. |
 
 ### Manual (human-required)
 
@@ -348,7 +373,7 @@ state below. Use this to confirm filters have something to show.
 - **WaiverApprovalStatus:** not_required, pending_pm, pending_pm_finance, approved, rejected (+ handed-to-GC flag)
 - **FilingStatus:** affidavit_draft, filed
 - **ReleaseStatus:** signed, filed
-- **CollectionStatus:** current, overdue, in_collections, promised, payment_plan, escalated, written_off, resolved
+- **CollectionStatus:** current, overdue, in_collections, promised, payment_plan, escalated, written_off, resolved *(status is seeded scenario state; the overdue total / oldest-age / risk score shown alongside it are derived from live AR invoices on recompute — see 1.4 → Invoices and section 7)*
 - **EscalationStage:** none, soft_collections, pre_lien_notice, lien_filing, agency_attorney, write_off
 - **PromiseStatus:** open, kept, broken, cancelled
 - **PaymentPlanStatus:** active, defaulted, completed, cancelled

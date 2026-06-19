@@ -394,6 +394,56 @@ async function main() {
       .onConflictDoNothing();
   });
 
+  // ── AR invoices behind the collection accounts ───────────────────────────
+  // The collections feature derives totalOverdue / oldestOverdueDays / riskScore
+  // from LIVE invoice data (invoice_links for the account's linkedClientId) on
+  // every recompute (see recomputeRiskScore in routes/collections.ts). The base
+  // seed only backs acct_late (inv_overdue → cli_late) and acct_good
+  // (inv_cleared → cli_good); the UAT accounts created above had hardcoded
+  // overdue figures with no invoices, so a recompute collapsed them to $0.
+  //
+  // These AR invoices (non-supplier, non-cleared, net-30) aggregate to each
+  // account's intended overdue total and oldest-overdue age, spread across aging
+  // buckets so the per-client aging breakdown renders meaningfully. Dates are
+  // anchored to the seed "today" of 2026-06-19 so re-running is idempotent.
+  // recomputeRiskScore leaves status / escalationStage untouched, so the
+  // canonical seeded stages survive a recompute; only the derived overdue/age/
+  // risk figures are refreshed from these invoices.
+  await step("AR invoices backing collection accounts", async () => {
+    await db
+      .insert(invoiceLinksTable)
+      .values([
+        // acct_soft (cli_soft) → ~8,200 overdue, oldest ~35 days
+        { id: "inv_soft_1", orgId: ORG, linkedClientId: "cli_soft", qboInvoiceId: "qbo_inv_soft_1", isSupplierInvoice: false, amount: "5000.00", invoiceDate: d("2026-04-15"), dueDate: d("2026-05-15"), qboStatus: "open", clearedFlag: false, lastSyncedAt: d("2026-06-01") },
+        { id: "inv_soft_2", orgId: ORG, linkedClientId: "cli_soft", qboInvoiceId: "qbo_inv_soft_2", isSupplierInvoice: false, amount: "3200.00", invoiceDate: d("2026-05-10"), dueDate: d("2026-06-09"), qboStatus: "open", clearedFlag: false, lastSyncedAt: d("2026-06-01") },
+
+        // acct_filing (cli_filing) → ~62,000 overdue, oldest ~120 days
+        { id: "inv_filing_1", orgId: ORG, linkedClientId: "cli_filing", qboInvoiceId: "qbo_inv_filing_1", isSupplierInvoice: false, amount: "32000.00", invoiceDate: d("2026-01-20"), dueDate: d("2026-02-19"), qboStatus: "open", clearedFlag: false, lastSyncedAt: d("2026-06-01") },
+        { id: "inv_filing_2", orgId: ORG, linkedClientId: "cli_filing", qboInvoiceId: "qbo_inv_filing_2", isSupplierInvoice: false, amount: "20000.00", invoiceDate: d("2026-03-06"), dueDate: d("2026-04-05"), qboStatus: "open", clearedFlag: false, lastSyncedAt: d("2026-06-01") },
+        { id: "inv_filing_3", orgId: ORG, linkedClientId: "cli_filing", qboInvoiceId: "qbo_inv_filing_3", isSupplierInvoice: false, amount: "10000.00", invoiceDate: d("2026-04-05"), dueDate: d("2026-05-05"), qboStatus: "open", clearedFlag: false, lastSyncedAt: d("2026-06-01") },
+
+        // acct_agency (cli_agency) → ~95,000 overdue, oldest ~210 days
+        { id: "inv_agency_1", orgId: ORG, linkedClientId: "cli_agency", qboInvoiceId: "qbo_inv_agency_1", isSupplierInvoice: false, amount: "50000.00", invoiceDate: d("2025-10-22"), dueDate: d("2025-11-21"), qboStatus: "open", clearedFlag: false, lastSyncedAt: d("2026-06-01") },
+        { id: "inv_agency_2", orgId: ORG, linkedClientId: "cli_agency", qboInvoiceId: "qbo_inv_agency_2", isSupplierInvoice: false, amount: "30000.00", invoiceDate: d("2026-01-10"), dueDate: d("2026-02-09"), qboStatus: "open", clearedFlag: false, lastSyncedAt: d("2026-06-01") },
+        { id: "inv_agency_3", orgId: ORG, linkedClientId: "cli_agency", qboInvoiceId: "qbo_inv_agency_3", isSupplierInvoice: false, amount: "15000.00", invoiceDate: d("2026-02-14"), dueDate: d("2026-03-16"), qboStatus: "open", clearedFlag: false, lastSyncedAt: d("2026-06-01") },
+
+        // acct_writeoff (cli_writeoff) → ~15,000 overdue, oldest ~400 days
+        { id: "inv_writeoff_1", orgId: ORG, linkedClientId: "cli_writeoff", qboInvoiceId: "qbo_inv_writeoff_1", isSupplierInvoice: false, amount: "15000.00", invoiceDate: d("2025-04-15"), dueDate: d("2025-05-15"), qboStatus: "open", clearedFlag: false, lastSyncedAt: d("2026-06-01") },
+
+        // acct_promised (cli_promised) → ~20,000 overdue, oldest ~28 days (open promise suppresses alerts)
+        { id: "inv_promised_1", orgId: ORG, linkedClientId: "cli_promised", qboInvoiceId: "qbo_inv_promised_1", isSupplierInvoice: false, amount: "12000.00", invoiceDate: d("2026-04-22"), dueDate: d("2026-05-22"), qboStatus: "open", clearedFlag: false, lastSyncedAt: d("2026-06-01") },
+        { id: "inv_promised_2", orgId: ORG, linkedClientId: "cli_promised", qboInvoiceId: "qbo_inv_promised_2", isSupplierInvoice: false, amount: "8000.00", invoiceDate: d("2026-05-10"), dueDate: d("2026-06-09"), qboStatus: "open", clearedFlag: false, lastSyncedAt: d("2026-06-01") },
+
+        // acct_plan (cli_plan) → ~30,000 overdue, oldest ~60 days
+        { id: "inv_plan_1", orgId: ORG, linkedClientId: "cli_plan", qboInvoiceId: "qbo_inv_plan_1", isSupplierInvoice: false, amount: "18000.00", invoiceDate: d("2026-03-21"), dueDate: d("2026-04-20"), qboStatus: "open", clearedFlag: false, lastSyncedAt: d("2026-06-01") },
+        { id: "inv_plan_2", orgId: ORG, linkedClientId: "cli_plan", qboInvoiceId: "qbo_inv_plan_2", isSupplierInvoice: false, amount: "12000.00", invoiceDate: d("2026-04-25"), dueDate: d("2026-05-25"), qboStatus: "open", clearedFlag: false, lastSyncedAt: d("2026-06-01") },
+
+        // acct_resolved (cli_resolved) → cleared invoice only, keeps $0 overdue on recompute
+        { id: "inv_resolved_1", orgId: ORG, linkedClientId: "cli_resolved", qboInvoiceId: "qbo_inv_resolved_1", isSupplierInvoice: false, amount: "18000.00", invoiceDate: d("2026-03-01"), dueDate: d("2026-03-31"), qboStatus: "paid", clearedFlag: true, clearedAt: d("2026-04-02"), clearedByUserId: "user_coord", lastSyncedAt: d("2026-06-01") },
+      ])
+      .onConflictDoNothing();
+  });
+
   // ── Collection activities — dunning history (covers all methods) ─────────
   await step("collection activities (dunning history, all methods)", async () => {
     await db
