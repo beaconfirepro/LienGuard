@@ -31,9 +31,11 @@ import {
   lienStreamsTable,
   workMonthsTable,
   lienDeadlinesTable,
+  holdsTable,
 } from "@workspace/db";
-import { eq, and, inArray, desc, asc } from "drizzle-orm";
+import { eq, and, inArray, desc, asc, isNull, sql } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
+import { hubspotClient } from "../lib/clients/hubspot";
 
 const router = Router();
 
@@ -63,6 +65,114 @@ const ESCALATION_LADDER = [
   "agency_attorney",
   "write_off",
 ] as const;
+
+// ---------------------------------------------------------------------------
+// Risk scoring engine
+// Computes riskScore (0-100), oldestOverdueDays, and totalOverdue from live
+// invoice data + promise history, then persists to collectionAccountsTable.
+// Call after any event that changes account risk posture.
+// ---------------------------------------------------------------------------
+async function recomputeRiskScore(
+  accountId: string,
+  orgId: string,
+  linkedClientId: string,
+  escalationStage: string,
+): Promise<{ riskScore: number; oldestOverdueDays: number; totalOverdue: number }> {
+  const today = new Date();
+
+  // Unpaid overdue invoices for this client
+  const unpaidInvoices = await db
+    .select()
+    .from(invoiceLinksTable)
+    .where(
+      and(
+        eq(invoiceLinksTable.orgId, orgId),
+        eq(invoiceLinksTable.linkedClientId, linkedClientId),
+        eq(invoiceLinksTable.clearedFlag, false),
+      ),
+    );
+
+  const overdueInvoices = unpaidInvoices.filter(
+    (inv) => new Date(inv.dueDate) < today,
+  );
+
+  const totalOverdue = overdueInvoices.reduce(
+    (sum, inv) => sum + Number(inv.amount),
+    0,
+  );
+
+  const oldestOverdueDays =
+    overdueInvoices.length > 0
+      ? Math.max(
+          ...overdueInvoices.map((inv) =>
+            Math.floor(
+              (today.getTime() - new Date(inv.dueDate).getTime()) /
+                (1000 * 60 * 60 * 24),
+            ),
+          ),
+        )
+      : 0;
+
+  // Broken promises count
+  const brokenPromises = await db
+    .select()
+    .from(promisesToPayTable)
+    .where(
+      and(
+        eq(promisesToPayTable.orgId, orgId),
+        eq(promisesToPayTable.accountId, accountId),
+        eq(promisesToPayTable.status, "broken"),
+      ),
+    );
+
+  // Score factors (sum to max 100)
+  // Factor 1: Overdue age (0-40 pts)
+  let agePts = 0;
+  if (oldestOverdueDays > 90) agePts = 40;
+  else if (oldestOverdueDays > 60) agePts = 28;
+  else if (oldestOverdueDays > 30) agePts = 16;
+  else if (oldestOverdueDays > 0) agePts = 6;
+
+  // Factor 2: Escalation stage (0-35 pts)
+  const stagePts: Record<string, number> = {
+    none: 0,
+    soft_collections: 8,
+    pre_lien_notice: 18,
+    lien_filing: 28,
+    agency_attorney: 35,
+    write_off: 35,
+  };
+  const escalationPts = stagePts[escalationStage] ?? 0;
+
+  // Factor 3: Broken promises (0-15 pts, 5 per broken promise, capped)
+  const brokenPts = Math.min(brokenPromises.length * 5, 15);
+
+  // Factor 4: Total overdue exposure (0-10 pts)
+  let exposurePts = 0;
+  if (totalOverdue > 50000) exposurePts = 10;
+  else if (totalOverdue > 25000) exposurePts = 7;
+  else if (totalOverdue > 10000) exposurePts = 4;
+  else if (totalOverdue > 2500) exposurePts = 2;
+
+  const riskScore = Math.min(agePts + escalationPts + brokenPts + exposurePts, 100);
+
+  // Persist refreshed values
+  await db
+    .update(collectionAccountsTable)
+    .set({
+      riskScore,
+      oldestOverdueDays,
+      totalOverdue: String(totalOverdue),
+    })
+    .where(
+      and(
+        eq(collectionAccountsTable.id, accountId),
+        eq(collectionAccountsTable.orgId, orgId),
+      ),
+    );
+
+  return { riskScore, oldestOverdueDays, totalOverdue };
+}
 
 // ---------------------------------------------------------------------------
 // GET /collections/aging — AR aging buckets reconciled to invoices
@@ -190,7 +300,18 @@ router.get("/accounts", requireSession, async (req, res) => {
   if (status) rows = rows.filter((r) => r.status === status);
   if (stage) rows = rows.filter((r) => r.escalationStage === stage);
 
-  res.json({ accounts: rows });
+  // Active holds count for the whole org (for dashboard KPI)
+  const activeHolds = await db
+    .select()
+    .from(holdsTable)
+    .where(
+      and(
+        eq(holdsTable.orgId, orgId),
+        isNull(holdsTable.clearedAt),
+      ),
+    );
+
+  res.json({ accounts: rows, activeHoldsCount: activeHolds.length });
 });
 
 // ---------------------------------------------------------------------------
@@ -379,6 +500,29 @@ router.post(
     const account = await getAccount(accountId, orgId);
     if (!account) { res.status(404).json({ error: "Account not found" }); return; }
 
+    // Resolve HubSpot company ID via linked client for write-back
+    const [linkedClient] = await db
+      .select()
+      .from(linkedClientsTable)
+      .where(eq(linkedClientsTable.id, account.linkedClientId))
+      .limit(1);
+
+    // Write activity to HubSpot (stub-safe — falls back gracefully when key absent)
+    let hubspotActivityId: string | null = null;
+    if (linkedClient?.hubspotCompanyId) {
+      try {
+        const hsResult = await hubspotClient.postActivity({
+          hubspotCompanyId: linkedClient.hubspotCompanyId,
+          type: method,
+          body: notes ?? `${method} contact logged`,
+          activityDate: new Date(activityDate),
+        });
+        hubspotActivityId = hsResult.hubspotActivityId;
+      } catch {
+        // Non-fatal — continue without HubSpot ID
+      }
+    }
+
     const [activity] = await db
       .insert(collectionActivitiesTable)
       .values({
@@ -387,6 +531,7 @@ router.post(
         method: method as "email" | "phone" | "letter" | "sms" | "portal" | "in_person",
         activityDate: new Date(activityDate),
         notes: notes ?? null,
+        hubspotActivityId,
         createdByUserId: userId ?? null,
       })
       .returning();
@@ -446,12 +591,42 @@ router.post(
       )
       .orderBy(asc(dunningStepsTable.order));
 
-    // Find the next applicable step based on oldestOverdueDays
-    const nextStep = steps.find(
-      (s) =>
-        s.daysOverdue <= account.oldestOverdueDays &&
-        s.id !== account.currentDunningStepId,
+    // Recompute oldest overdue days from live invoice data (do not trust stored value)
+    const today = new Date();
+    const unpaidInvoices = await db
+      .select({ dueDate: invoiceLinksTable.dueDate })
+      .from(invoiceLinksTable)
+      .where(
+        and(
+          eq(invoiceLinksTable.orgId, orgId),
+          eq(invoiceLinksTable.linkedClientId, account.linkedClientId),
+          eq(invoiceLinksTable.clearedFlag, false),
+        ),
+      );
+    const overdueInvoices = unpaidInvoices.filter(
+      (inv) => new Date(inv.dueDate) < today,
     );
+    const computedOldestDays =
+      overdueInvoices.length > 0
+        ? Math.max(
+            ...overdueInvoices.map((inv) =>
+              Math.floor(
+                (today.getTime() - new Date(inv.dueDate).getTime()) /
+                  (1000 * 60 * 60 * 24),
+              ),
+            ),
+          )
+        : 0;
+
+    // Forward-only: find current step index, then pick the NEXT step after it
+    // that qualifies by daysOverdue threshold. Never regress to an earlier step.
+    const currentStepIdx = account.currentDunningStepId
+      ? steps.findIndex((s) => s.id === account.currentDunningStepId)
+      : -1;
+
+    const nextStep = steps
+      .slice(currentStepIdx + 1)           // only steps AFTER the current one
+      .find((s) => s.daysOverdue <= computedOldestDays);
 
     if (!nextStep) {
       res.json({ account, message: "No new dunning step triggered", advanced: false });
@@ -460,9 +635,17 @@ router.post(
 
     const [updated] = await db
       .update(collectionAccountsTable)
-      .set({ currentDunningStepId: nextStep.id })
+      .set({
+        currentDunningStepId: nextStep.id,
+        oldestOverdueDays: computedOldestDays,
+        // Ensure status reflects active dunning
+        status: account.status === "current" ? "overdue" : account.status,
+      })
       .where(eq(collectionAccountsTable.id, accountId))
       .returning();
+
+    // Recompute risk score after advancing dunning
+    await recomputeRiskScore(accountId, orgId, account.linkedClientId, account.escalationStage);
 
     res.json({ account: updated, step: nextStep, advanced: true });
   },
@@ -508,6 +691,9 @@ router.post(
       .update(collectionAccountsTable)
       .set({ status: "promised" })
       .where(eq(collectionAccountsTable.id, accountId));
+
+    // Recompute risk score — new promise reduces immediate risk temporarily
+    await recomputeRiskScore(accountId, orgId, account.linkedClientId, account.escalationStage);
 
     res.status(201).json({ promise });
   },
@@ -574,6 +760,28 @@ router.patch("/promises/:id", requireSession, async (req, res) => {
             eq(collectionAccountsTable.status, "promised"),
           ),
         );
+    }
+  }
+
+  // Recompute risk score — broken promise increases risk
+  if (status === "broken" || status === "cancelled") {
+    const [acctForRisk] = await db
+      .select()
+      .from(collectionAccountsTable)
+      .where(
+        and(
+          eq(collectionAccountsTable.id, existing.accountId),
+          eq(collectionAccountsTable.orgId, orgId),
+        ),
+      )
+      .limit(1);
+    if (acctForRisk) {
+      await recomputeRiskScore(
+        acctForRisk.id,
+        orgId,
+        acctForRisk.linkedClientId,
+        acctForRisk.escalationStage,
+      );
     }
   }
 
@@ -752,6 +960,9 @@ router.post(
       .set({ escalationStage: escalationStage as typeof validStages[number] })
       .where(eq(collectionAccountsTable.id, accountId))
       .returning();
+
+    // Recompute risk score — higher escalation stage increases risk
+    await recomputeRiskScore(accountId, orgId, account.linkedClientId, escalationStage);
 
     res.json({ account: updated });
   },

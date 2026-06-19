@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Landmark, Clock, Phone, Mail, ChevronLeft, RefreshCw, Plus, Check } from "lucide-react";
+import { Landmark, Clock, Phone, Mail, ChevronLeft, RefreshCw, Plus, Check, Trash2 } from "lucide-react";
 import { Panel, useRightPanel } from "@/components/nav/AppShell";
 import { QueueList } from "@/components/ui/queue-list";
 import { AgingBuckets } from "@/components/ui/aging-buckets";
@@ -54,6 +54,9 @@ export default function AccountDetailPage() {
   const [promiseAmount, setPromiseAmount] = React.useState("");
   const [promiseDate, setPromiseDate] = React.useState("");
   const [promiseNotes, setPromiseNotes] = React.useState("");
+  const [planInstallments, setPlanInstallments] = React.useState<Array<{ dueDate: string; amount: string }>>([
+    { dueDate: "", amount: "" },
+  ]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["collections/accounts", accountId],
@@ -126,6 +129,21 @@ export default function AccountDetailPage() {
         body: JSON.stringify({ paid, paidDate: paid ? new Date().toISOString().slice(0, 10) : undefined }),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["collections/accounts", accountId] }),
+  });
+
+  const createPlanMut = useMutation({
+    mutationFn: (body: { totalAmount: number; installments: Array<{ dueDate: string; amount: number }> }) =>
+      apiFetch(`/collections/accounts/${accountId}/plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["collections/accounts", accountId] });
+      qc.invalidateQueries({ queryKey: ["collections/accounts"] });
+      setShowPlanForm(false);
+      setPlanInstallments([{ dueDate: "", amount: "" }]);
+    },
   });
 
   const escalateMut = useMutation({
@@ -343,6 +361,14 @@ export default function AccountDetailPage() {
           <Plus className="h-3.5 w-3.5" />
           Promise-to-pay
         </button>
+        <button
+          onClick={() => setShowPlanForm((v) => !v)}
+          className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-[12.5px] font-semibold"
+          style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-base)" }}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Payment plan
+        </button>
         {nextStage && (
           <button
             onClick={() => escalateMut.mutate(nextStage)}
@@ -445,6 +471,89 @@ export default function AccountDetailPage() {
               style={{ background: "#14eba3" }}
             >
               {promiseMut.isPending ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Payment plan creation form */}
+      {showPlanForm && (
+        <div
+          className="rounded-lg border p-4"
+          style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-[13px] font-semibold" style={{ color: "var(--text-base)" }}>
+              Create payment plan
+            </div>
+            <span className="text-[11px]" style={{ color: "var(--text-dim)" }}>
+              {planInstallments.length} installment{planInstallments.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {planInstallments.map((inst, idx) => (
+              <div key={idx} className="flex gap-2 items-center">
+                <input
+                  type="date"
+                  value={inst.dueDate}
+                  onChange={(e) => {
+                    const next = [...planInstallments];
+                    next[idx] = { ...next[idx], dueDate: e.target.value };
+                    setPlanInstallments(next);
+                  }}
+                  className="rounded-md border px-3 py-2 text-[12.5px]"
+                  style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)", color: "var(--text-base)" }}
+                />
+                <input
+                  type="number"
+                  value={inst.amount}
+                  onChange={(e) => {
+                    const next = [...planInstallments];
+                    next[idx] = { ...next[idx], amount: e.target.value };
+                    setPlanInstallments(next);
+                  }}
+                  placeholder="Amount ($)"
+                  className="w-32 rounded-md border px-3 py-2 text-[12.5px]"
+                  style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)", color: "var(--text-base)" }}
+                />
+                {planInstallments.length > 1 && (
+                  <button
+                    onClick={() => setPlanInstallments(planInstallments.filter((_, i) => i !== idx))}
+                    className="rounded-md p-1.5"
+                    style={{ color: "var(--text-dim)" }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={() => setPlanInstallments([...planInstallments, { dueDate: "", amount: "" }])}
+              className="flex items-center gap-1 rounded-md border px-3 py-1.5 text-[12px]"
+              style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)", color: "var(--text-dim)" }}
+            >
+              <Plus className="h-3 w-3" />Add installment
+            </button>
+            <button
+              onClick={() => {
+                const valid = planInstallments.every((i) => i.dueDate && Number(i.amount) > 0);
+                if (!valid) return;
+                const total = planInstallments.reduce((s, i) => s + Number(i.amount), 0);
+                createPlanMut.mutate({
+                  totalAmount: total,
+                  installments: planInstallments.map((i) => ({ dueDate: i.dueDate, amount: Number(i.amount) })),
+                });
+              }}
+              disabled={
+                createPlanMut.isPending ||
+                planInstallments.some((i) => !i.dueDate || !i.amount)
+              }
+              className="rounded-md px-4 py-2 text-[12.5px] font-semibold text-white disabled:opacity-50"
+              style={{ background: "#6366f1" }}
+            >
+              {createPlanMut.isPending ? "Saving…" : `Create plan · ${money(planInstallments.reduce((s, i) => s + (Number(i.amount) || 0), 0))}`}
             </button>
           </div>
         </div>

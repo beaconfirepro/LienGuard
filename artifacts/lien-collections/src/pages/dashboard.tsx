@@ -67,13 +67,14 @@ export default function DashboardPage() {
 
   const { data: accountsData } = useQuery({
     queryKey: ["collections/accounts"],
-    queryFn: () => apiFetch<{ accounts: CollectionAccount[] }>("/collections/accounts"),
+    queryFn: () => apiFetch<{ accounts: CollectionAccount[]; activeHoldsCount: number }>("/collections/accounts"),
     retry: false,
   });
 
   const projects = projectsData?.projects ?? [];
   const aging = agingData?.buckets;
   const accounts = accountsData?.accounts ?? [];
+  const activeHoldsCount = accountsData?.activeHoldsCount ?? 0;
 
   const atRisk = projects.filter((p) => {
     const r = highestRisk(p.streams);
@@ -97,8 +98,8 @@ export default function DashboardPage() {
     { label: "At Risk · This Month", value: atRisk.length, sub: "notice or filing due", color: "#f59f0a" },
     { label: "Rights Lapsed", value: lapsed, sub: lapsed > 0 ? "requires escalation" : "none lapsed", color: lapsed > 0 ? "#eb143f" : "#14eba3" },
     { label: "In Collections", value: inCollections, sub: inCollections > 0 ? "active dunning" : "all current", color: inCollections > 0 ? "#eb143f" : "#14eba3" },
-    { label: "AR Overdue", value: money(totalOverdue, true), sub: `${agingData?.overdueCount ?? 0} invoices`, color: totalOverdue > 0 ? "#eb143f" : "#14eba3" },
-    { label: "High Risk", value: highRisk, sub: "risk score ≥ 75", color: highRisk > 0 ? "#f97316" : "#14eba3" },
+    { label: "AR Overdue", value: money(totalOverdue), sub: `${agingData?.overdueCount ?? 0} invoices`, color: totalOverdue > 0 ? "#eb143f" : "#14eba3" },
+    { label: "Active Holds", value: activeHoldsCount, sub: activeHoldsCount > 0 ? "vendor holds open" : "no holds", color: activeHoldsCount > 0 ? "#f59f0a" : "#14eba3" },
   ];
 
   useRightPanel(
