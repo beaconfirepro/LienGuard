@@ -117,68 +117,71 @@ export default function DashboardPage() {
 
   return (
     <>
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        {kpis.map((k, i) => (
-          <div
-            key={k.label}
-            className="relative overflow-hidden rounded-lg border px-4 pb-3.5 pt-4"
-            style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
-          >
+      {/* KPI strip + Due This Month */}
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+        {/* KPI strip */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:col-span-2 xl:auto-rows-min">
+          {kpis.map((k, i) => (
             <div
-              className="absolute inset-x-0 top-0 h-[3px]"
-              style={{ background: k.color }}
-            />
-            <div
-              className="truncate text-[10.5px] font-semibold uppercase tracking-wide"
-              style={{ color: "var(--text-muted-color)" }}
+              key={k.label}
+              className="relative overflow-hidden rounded-lg border px-4 pb-3.5 pt-4"
+              style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
             >
-              {k.label}
+              <div
+                className="absolute inset-x-0 top-0 h-[3px]"
+                style={{ background: k.color }}
+              />
+              <div
+                className="truncate text-[10.5px] font-semibold uppercase tracking-wide"
+                style={{ color: "var(--text-muted-color)" }}
+              >
+                {k.label}
+              </div>
+              <div
+                className="mt-1.5 font-mono text-[26px] font-bold leading-none"
+                style={{ color: k.color }}
+              >
+                {k.value}
+              </div>
+              <div className="mt-0.5 text-[11.5px]" style={{ color: "var(--text-dim)" }}>
+                {k.sub}
+              </div>
             </div>
-            <div
-              className="mt-1.5 font-mono text-[26px] font-bold leading-none"
-              style={{ color: k.color }}
-            >
-              {k.value}
-            </div>
-            <div className="mt-0.5 text-[11.5px]" style={{ color: "var(--text-dim)" }}>
-              {k.sub}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Due This Month */}
-      <div
-        className="overflow-hidden rounded-lg border"
-        style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
-      >
-        <div
-          className="flex items-center justify-between border-b px-[18px] py-3.5"
-          style={{ borderColor: "var(--helm-border)" }}
-        >
-          <div className="text-[14.5px] font-semibold" style={{ color: "var(--text-base)" }}>
-            Due This Month
-          </div>
-          <span className="text-[11px]" style={{ color: "var(--text-dim)" }}>
-            {atRisk.length} project{atRisk.length !== 1 ? "s" : ""} at risk
-          </span>
+          ))}
         </div>
-        {atRisk.length === 0 ? (
-          <div className="px-[18px] py-6 text-[12px]" style={{ color: "var(--text-muted-color)" }}>
-            Nothing due this month.
+
+        {/* Due This Month */}
+        <div
+          className="overflow-hidden rounded-lg border xl:col-span-1"
+          style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
+        >
+          <div
+            className="flex items-center justify-between border-b px-[18px] py-3.5"
+            style={{ borderColor: "var(--helm-border)" }}
+          >
+            <div className="text-[14.5px] font-semibold" style={{ color: "var(--text-base)" }}>
+              Due This Month
+            </div>
+            <span className="text-[11px]" style={{ color: "var(--text-dim)" }}>
+              {atRisk.length} project{atRisk.length !== 1 ? "s" : ""} at risk
+            </span>
           </div>
-        ) : (
-          <QueueList
-            items={atRisk.slice(0, 6).map((p, i) => ({
-              id: p.id,
-              title: p.cachedProjectName ?? p.hubspotProjectId,
-              sub: `${highestRisk(p.streams).replace("_", " ")} · stream active`,
-              action: i === 0 ? "View project" : undefined,
-              actionTone: "#f59e0b",
-            }))}
-          />
-        )}
+          {atRisk.length === 0 ? (
+            <div className="px-[18px] py-6 text-[12px]" style={{ color: "var(--text-muted-color)" }}>
+              Nothing due this month.
+            </div>
+          ) : (
+            <QueueList
+              items={atRisk.slice(0, 6).map((p, i) => ({
+                id: p.id,
+                title: p.cachedProjectName ?? p.hubspotProjectId,
+                sub: `${highestRisk(p.streams).replace("_", " ")} · stream active`,
+                action: i === 0 ? "View project" : undefined,
+                actionTone: "#f59e0b",
+              }))}
+            />
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
