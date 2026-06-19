@@ -223,9 +223,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <div className="text-[17px] font-bold leading-tight tracking-tight" style={{ color: "var(--text-base)" }}>
                   Liens &amp; Collections
                 </div>
-                <div className="truncate text-[12px]" style={{ color: "var(--text-dim)" }}>
-                  Texas · Module 22 · protecting HELM's right to payment
-                </div>
               </div>
             </div>
             <div className="relative hidden w-56 lg:block">
