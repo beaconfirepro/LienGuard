@@ -56,7 +56,9 @@ if (process.env.NODE_ENV !== "production") {
 
 app.use("/api/config", configRouter);        // GET/POST /api/config/*              (session)
 app.use("/api/projects", projectsRouter);   // GET/POST /api/projects/*            (session)
+app.use("/api/lien/projects", projectsRouter); // /api/lien/projects/* aliases (task contract)
 app.use("/api", streamsRouter);             // POST /api/streams/open, PATCH /api/streams/:id/*
+app.use("/api/lien", streamsRouter);        // GET /api/lien/streams/:id alias (task contract)
 app.use("/api", deadlinesRouter);           // GET /api/deadlines/:workMonthId
 app.use("/api", invoicesRouter);            // GET/POST /api/invoices/*
 app.use("/api", holdsRouter);               // GET/POST /api/holds/*

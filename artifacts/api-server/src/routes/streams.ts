@@ -20,6 +20,10 @@ import {
   timesheetLinksTable,
   invoiceLinksTable,
   lienFilingsTable,
+  noticesTable,
+  noticeRecipientsTable,
+  mailingRecordsTable,
+  waiversTable,
 } from "@workspace/db";
 import { eq, and, lt, inArray } from "drizzle-orm";
 import { connecteamSyncClient } from "../lib/clients/connecteam";
@@ -136,6 +140,168 @@ router.patch("/streams/:id/status", async (req, res) => {
     .returning();
 
   return res.json({ stream: updated });
+});
+
+// ---------------------------------------------------------------------------
+// GET /streams/:id
+// Stream detail: stream record + project stub + work months (with deadlines)
+// + notice list (with recipients & mailing) + waiver checklist
+// ---------------------------------------------------------------------------
+
+router.get("/streams/:id", async (req, res) => {
+  const { orgId } = getSession(req);
+  const { id } = req.params;
+
+  const [stream] = await db
+    .select()
+    .from(lienStreamsTable)
+    .where(and(eq(lienStreamsTable.id, id), eq(lienStreamsTable.orgId, orgId)));
+
+  if (!stream) return res.status(404).json({ error: "Stream not found" });
+
+  // Load project, work months, notices, waivers, and filing in parallel
+  const [projectRows, workMonths, notices, waivers, filingRows] = await Promise.all([
+    db
+      .select({
+        id: lienProjectsTable.id,
+        cachedProjectName: lienProjectsTable.cachedProjectName,
+        lienWorkflowType: lienProjectsTable.lienWorkflowType,
+        contractorTier: lienProjectsTable.contractorTier,
+        legalPropertyAddress: lienProjectsTable.legalPropertyAddress,
+        county: lienProjectsTable.county,
+      })
+      .from(lienProjectsTable)
+      .where(and(eq(lienProjectsTable.id, stream.lienProjectId), eq(lienProjectsTable.orgId, orgId)))
+      .limit(1),
+    db
+      .select()
+      .from(workMonthsTable)
+      .where(and(eq(workMonthsTable.lienStreamId, id), eq(workMonthsTable.orgId, orgId))),
+    db
+      .select()
+      .from(noticesTable)
+      .where(and(eq(noticesTable.lienStreamId, id), eq(noticesTable.orgId, orgId))),
+    db
+      .select()
+      .from(waiversTable)
+      .where(
+        and(
+          eq(waiversTable.lienProjectId, stream.lienProjectId),
+          eq(waiversTable.workStream, stream.workStream),
+          eq(waiversTable.orgId, orgId),
+        ),
+      ),
+    db
+      .select()
+      .from(lienFilingsTable)
+      .where(and(eq(lienFilingsTable.lienStreamId, id), eq(lienFilingsTable.orgId, orgId)))
+      .limit(1),
+  ]);
+
+  const project = projectRows[0] ?? null;
+  const filing = filingRows[0] ?? null;
+
+  // Enrich work months with deadlines
+  const workMonthIds = workMonths.map((wm) => wm.id);
+  const allDeadlines =
+    workMonthIds.length > 0
+      ? await db
+          .select()
+          .from(lienDeadlinesTable)
+          .where(
+            and(inArray(lienDeadlinesTable.workMonthId, workMonthIds), eq(lienDeadlinesTable.orgId, orgId)),
+          )
+      : [];
+
+  const ruleIds = [...new Set(allDeadlines.map((d) => d.ruleId))];
+  const ruleRows =
+    ruleIds.length > 0
+      ? await db
+          .select({
+            id: lienRulesTable.id,
+            ruleKind: lienRulesTable.ruleKind,
+            statuteCitation: lienRulesTable.statuteCitation,
+            description: lienRulesTable.description,
+          })
+          .from(lienRulesTable)
+          .where(inArray(lienRulesTable.id, ruleIds))
+      : [];
+  const ruleMap = new Map(ruleRows.map((r) => [r.id, r]));
+
+  const workMonthsEnriched = workMonths
+    .map((wm) => ({
+      ...wm,
+      deadlines: allDeadlines
+        .filter((d) => d.workMonthId === wm.id)
+        .map((d) => ({ ...d, rule: ruleMap.get(d.ruleId) ?? null }))
+        .sort((a, b) => new Date(a.adjustedDate).getTime() - new Date(b.adjustedDate).getTime()),
+    }))
+    .sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime());
+
+  // Enrich notices with recipients and mailing records
+  const noticeIds = notices.map((n) => n.id);
+  const [recipients, mailingRecords] =
+    noticeIds.length > 0
+      ? await Promise.all([
+          db
+            .select()
+            .from(noticeRecipientsTable)
+            .where(
+              and(inArray(noticeRecipientsTable.noticeId, noticeIds), eq(noticeRecipientsTable.orgId, orgId)),
+            ),
+          db
+            .select()
+            .from(mailingRecordsTable)
+            .where(
+              and(inArray(mailingRecordsTable.noticeId, noticeIds), eq(mailingRecordsTable.orgId, orgId)),
+            ),
+        ])
+      : [[], []];
+
+  const noticesEnriched = notices
+    .map((n) => ({
+      ...n,
+      recipients: recipients.filter((r) => r.noticeId === n.id),
+      mailing: mailingRecords.find((m) => m.noticeId === n.id) ?? null,
+    }))
+    .sort((a, b) => new Date(a.monthListed).getTime() - new Date(b.monthListed).getTime());
+
+  // Waiver checklist: group by type with completion state
+  const waiverTypes = ["conditional_progress", "unconditional_progress", "conditional_final", "unconditional_final"] as const;
+  const waiverChecklist = waiverTypes.map((waiverType) => {
+    const existing = waivers.filter((w) => w.waiverType === waiverType);
+    return {
+      waiverType,
+      count: existing.length,
+      allApproved: existing.length > 0 && existing.every((w) => w.approvalStatus === "approved"),
+      allProvidedToGc: existing.length > 0 && existing.every((w) => w.providedToGc),
+      waivers: existing,
+    };
+  });
+
+  // Summarize next upcoming deadline (not yet satisfied)
+  const nextDeadline = workMonthsEnriched
+    .flatMap((wm) => wm.deadlines)
+    .filter((d) => !d.satisfiedAt && new Date(d.adjustedDate) > new Date())
+    .sort((a, b) => new Date(a.adjustedDate).getTime() - new Date(b.adjustedDate).getTime())[0] ?? null;
+
+  return res.json({
+    stream,
+    project,
+    workMonths: workMonthsEnriched,
+    notices: noticesEnriched,
+    waiverChecklist,
+    filing,
+    nextDeadline,
+    summary: {
+      workMonthCount: workMonths.length,
+      overdueMonths: workMonths.filter((wm) => wm.derivedOverdue && !wm.clearedFlag).length,
+      noticeCount: notices.length,
+      sentNotices: notices.filter((n) => n.status === "sent" || n.status === "delivered").length,
+      totalDeadlines: allDeadlines.length,
+      unsatisfiedDeadlines: allDeadlines.filter((d) => !d.satisfiedAt).length,
+    },
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -6,8 +6,11 @@ import {
   subSystemTypesTable,
   lienStreamsTable,
   jurisdictionsTable,
+  workMonthsTable,
+  lienDeadlinesTable,
+  lienRulesTable,
 } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { hubspotClient } from "../lib/clients/hubspot";
 
@@ -106,13 +109,12 @@ async function refreshChecklistComplete(orgId: string, projectId: string) {
 // ---------------------------------------------------------------------------
 // GET /projects
 // Query params: status, lienWorkflowType, contractorTier, incomplete, risk (high|medium|low|ok)
+//              page (default 1), limit (default 50, max 200)
 // ---------------------------------------------------------------------------
 router.get("/", async (req, res) => {
   const { orgId } = getSession(req);
-  const { status, lienWorkflowType, contractorTier, incomplete, risk } = req.query as Record<
-    string,
-    string | undefined
-  >;
+  const { status, lienWorkflowType, contractorTier, incomplete, risk, page: pageRaw, limit: limitRaw } =
+    req.query as Record<string, string | undefined>;
 
   const [projects, allStreams, allParties] = await Promise.all([
     db.select().from(lienProjectsTable).where(eq(lienProjectsTable.orgId, orgId)),
@@ -158,7 +160,13 @@ router.get("/", async (req, res) => {
     }
   }
 
-  res.json({ projects: filtered });
+  const total = filtered.length;
+  const page = Math.max(1, parseInt(pageRaw ?? "1", 10) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(limitRaw ?? "50", 10) || 50));
+  const offset = (page - 1) * limit;
+  const paginated = filtered.slice(offset, offset + limit);
+
+  res.json({ projects: paginated, total, page, limit });
 });
 
 // ---------------------------------------------------------------------------
@@ -268,6 +276,104 @@ router.post("/", async (req, res) => {
     .returning();
 
   res.status(201).json({ project });
+});
+
+// ---------------------------------------------------------------------------
+// GET /projects/:id/deadlines
+// Returns all lien deadlines for a project grouped by stream → work month.
+// Aggregates across all streams — useful for the project dashboard overview.
+// ---------------------------------------------------------------------------
+router.get("/:id/deadlines", async (req, res) => {
+  const { orgId } = getSession(req);
+  const id = req.params["id"] as string;
+
+  const [project] = await db
+    .select()
+    .from(lienProjectsTable)
+    .where(and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)))
+    .limit(1);
+
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  const streams = await db
+    .select()
+    .from(lienStreamsTable)
+    .where(and(eq(lienStreamsTable.lienProjectId, id), eq(lienStreamsTable.orgId, orgId)));
+
+  if (streams.length === 0) {
+    res.json({ project: { id: project.id, cachedProjectName: project.cachedProjectName }, streams: [] });
+    return;
+  }
+
+  const streamIds = streams.map((s) => s.id);
+
+  const allWorkMonths = await db
+    .select()
+    .from(workMonthsTable)
+    .where(and(inArray(workMonthsTable.lienStreamId, streamIds), eq(workMonthsTable.orgId, orgId)));
+
+  const workMonthIds = allWorkMonths.map((wm) => wm.id);
+
+  const allDeadlines =
+    workMonthIds.length > 0
+      ? await db
+          .select()
+          .from(lienDeadlinesTable)
+          .where(
+            and(inArray(lienDeadlinesTable.workMonthId, workMonthIds), eq(lienDeadlinesTable.orgId, orgId)),
+          )
+      : [];
+
+  // Enrich deadlines with rule metadata
+  const ruleIds = [...new Set(allDeadlines.map((d) => d.ruleId))];
+  const ruleRows =
+    ruleIds.length > 0
+      ? await db
+          .select({
+            id: lienRulesTable.id,
+            ruleKind: lienRulesTable.ruleKind,
+            statuteCitation: lienRulesTable.statuteCitation,
+            description: lienRulesTable.description,
+          })
+          .from(lienRulesTable)
+          .where(inArray(lienRulesTable.id, ruleIds))
+      : [];
+  const ruleMap = new Map(ruleRows.map((r) => [r.id, r]));
+
+  // Build nested response: stream → workMonths → deadlines
+  const streamsWithDeadlines = streams.map((stream) => {
+    const workMonths = allWorkMonths
+      .filter((wm) => wm.lienStreamId === stream.id)
+      .map((wm) => ({
+        ...wm,
+        deadlines: allDeadlines
+          .filter((d) => d.workMonthId === wm.id)
+          .map((d) => ({ ...d, rule: ruleMap.get(d.ruleId) ?? null }))
+          .sort((a, b) => new Date(a.adjustedDate).getTime() - new Date(b.adjustedDate).getTime()),
+      }))
+      .sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime());
+
+    const nextDeadline = workMonths
+      .flatMap((wm) => wm.deadlines)
+      .filter((d) => !d.satisfiedAt && new Date(d.adjustedDate) > new Date())
+      .sort((a, b) => new Date(a.adjustedDate).getTime() - new Date(b.adjustedDate).getTime())[0] ?? null;
+
+    return { ...stream, workMonths, nextDeadline };
+  });
+
+  res.json({
+    project: { id: project.id, cachedProjectName: project.cachedProjectName, lienWorkflowType: project.lienWorkflowType },
+    streams: streamsWithDeadlines,
+    summary: {
+      totalStreams: streams.length,
+      totalWorkMonths: allWorkMonths.length,
+      totalDeadlines: allDeadlines.length,
+      unsatisfiedDeadlines: allDeadlines.filter((d) => !d.satisfiedAt).length,
+    },
+  });
 });
 
 // ---------------------------------------------------------------------------
