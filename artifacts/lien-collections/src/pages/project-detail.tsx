@@ -2159,7 +2159,7 @@ export default function ProjectDetailPage() {
       : streams[0]?.id ?? "";
 
   return (
-    <Screen>
+    <Screen className="pt-0 md:pt-0">
       <div className="flex flex-col gap-4">
         <WorkspaceHeader
           title={project.cachedProjectName ?? project.hubspotProjectId}
