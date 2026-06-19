@@ -1,8 +1,9 @@
 /**
  * invoices.ts — coordinator invoice management routes.
  *
- * POST /invoices/:id/clear   coordinator marks an invoice as cleared
- * GET  /invoices             list invoices for the org (by project)
+ * GET  /invoices               list invoices for the org (by project)
+ * POST /invoices/sync          trigger QBO invoice sync for a project
+ * POST /invoices/:id/clear     coordinator marks an invoice as cleared
  */
 
 import { Router } from "express";
@@ -11,12 +12,50 @@ import {
   invoiceLinksTable,
   collectionAccountsTable,
   promisesToPayTable,
+  lienProjectsTable,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
+import { qboSyncClient } from "../lib/clients/qbo";
 
 const router = Router();
 router.use(requireSession);
+
+/**
+ * POST /invoices/sync
+ *
+ * Trigger a QBO invoice sync for a specific project. Accepts { projectId }
+ * and calls qboSyncClient.syncInvoicesForProject. This decouples invoice sync
+ * from the full stream recompute, so coordinators can pull fresh QBO data
+ * without recomputing all deadlines.
+ *
+ * Returns { synced, skipped, reason? }.
+ */
+router.post("/invoices/sync", async (req, res) => {
+  const { orgId } = getSession(req);
+  const { projectId } = req.body as { projectId?: string };
+
+  if (!projectId) {
+    return res.status(400).json({ error: "projectId is required" });
+  }
+
+  const [project] = await db
+    .select()
+    .from(lienProjectsTable)
+    .where(and(eq(lienProjectsTable.id, projectId), eq(lienProjectsTable.orgId, orgId)))
+    .limit(1);
+
+  if (!project) return res.status(404).json({ error: "Project not found" });
+
+  const result = await qboSyncClient.syncInvoicesForProject({
+    orgId,
+    lienProjectId: project.id,
+    hubspotProjectId: project.hubspotProjectId,
+    linkedClientId: null,
+  });
+
+  return res.json(result);
+});
 
 /**
  * GET /invoices?projectId=

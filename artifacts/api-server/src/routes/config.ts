@@ -677,4 +677,21 @@ router.patch("/rule-sets/:id/review", requireAdmin, async (req, res) => {
   res.json({ ruleSet: updated });
 });
 
+/**
+ * GET /config/qbo-status
+ *
+ * Returns whether QBO credentials are present in the environment.
+ * The UI uses this to decide whether to show the Sync QBO button or a
+ * "Not connected" message. No credential values are ever returned.
+ */
+router.get("/qbo-status", (_req, res) => {
+  const connected = !!(
+    process.env.QBO_CLIENT_ID &&
+    process.env.QBO_CLIENT_SECRET &&
+    process.env.QBO_REFRESH_TOKEN &&
+    process.env.QBO_REALM_ID
+  );
+  res.json({ connected });
+});
+
 export default router;

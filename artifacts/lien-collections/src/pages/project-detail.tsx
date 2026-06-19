@@ -36,6 +36,8 @@ import {
   Users,
   Building2,
   XCircle,
+  Receipt,
+  Link as LinkIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -121,6 +123,18 @@ interface StreamWithWorkMonths {
   stream: LienStream;
   workMonths: WorkMonth[];
   summary?: { workMonthsProcessed: number; deadlinesComputed: number };
+}
+
+interface Invoice {
+  id: string;
+  qboInvoiceId: string | null;
+  invoiceDate: string;
+  dueDate: string;
+  amount: string;
+  qboStatus: string;
+  clearedFlag: boolean;
+  clearedAt: string | null;
+  isSupplierInvoice: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -497,6 +511,222 @@ function StreamDeadlinesPanel({
               )}
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Invoices panel
+// ---------------------------------------------------------------------------
+
+function InvoicesPanel({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [open, setOpen] = React.useState(true);
+
+  const { data: qboStatus } = useQuery({
+    queryKey: ["qbo-status"],
+    queryFn: () => apiFetch<{ connected: boolean }>("/config/qbo-status"),
+    staleTime: 60_000,
+  });
+  const connected = qboStatus?.connected ?? false;
+
+  const { data: invoiceData, isLoading: invoicesLoading } = useQuery({
+    queryKey: ["invoices", projectId],
+    queryFn: () => apiFetch<{ invoices: Invoice[] }>(`/invoices?projectId=${projectId}`),
+    enabled: !!projectId,
+  });
+  const invoices = invoiceData?.invoices ?? [];
+
+  const syncMutation = useMutation({
+    mutationFn: () =>
+      apiFetch<{ synced: number; skipped: boolean; reason?: string }>("/invoices/sync", {
+        method: "POST",
+        body: JSON.stringify({ projectId }),
+      }),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ["invoices", projectId] });
+      if (result.skipped) {
+        toast({
+          title: "Sync skipped",
+          description: result.reason ?? "QBO credentials not configured",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Invoices synced",
+          description: `${result.synced} invoice${result.synced !== 1 ? "s" : ""} pulled from QuickBooks.`,
+        });
+      }
+    },
+    onError: (err: Error) =>
+      toast({ title: "Sync failed", description: err.message, variant: "destructive" }),
+  });
+
+  const clearMutation = useMutation({
+    mutationFn: ({ id, flag }: { id: string; flag: boolean }) =>
+      apiFetch(`/invoices/${id}/clear`, {
+        method: "POST",
+        body: JSON.stringify({ clearedFlag: flag }),
+      }),
+    onMutate: async ({ id, flag }) => {
+      await qc.cancelQueries({ queryKey: ["invoices", projectId] });
+      const prev = qc.getQueryData<{ invoices: Invoice[] }>(["invoices", projectId]);
+      qc.setQueryData<{ invoices: Invoice[] }>(["invoices", projectId], (old) =>
+        old
+          ? { invoices: old.invoices.map((inv) => inv.id === id ? { ...inv, clearedFlag: flag } : inv) }
+          : old,
+      );
+      return { prev };
+    },
+    onError: (err: Error, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["invoices", projectId], ctx.prev);
+      toast({ title: "Clear failed", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["invoices", projectId] }),
+  });
+
+  function invoiceRowColor(inv: Invoice): string {
+    if (inv.clearedFlag) return "bg-teal-50 border-teal-200";
+    if (inv.qboStatus === "paid") return "bg-green-50 border-green-200";
+    if (new Date(inv.dueDate) < new Date()) return "bg-red-50 border-red-200";
+    return "bg-card border-border";
+  }
+
+  function qboStatusBadge(inv: Invoice) {
+    if (inv.clearedFlag) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-teal-100 text-teal-700 px-2 py-0.5 text-xs font-medium">
+          <CheckCircle2 className="h-3 w-3" />
+          Cleared
+        </span>
+      );
+    }
+    if (inv.qboStatus === "paid") {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-medium">
+          <CheckCircle2 className="h-3 w-3" />
+          Paid
+        </span>
+      );
+    }
+    if (new Date(inv.dueDate) < new Date()) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 text-red-700 px-2 py-0.5 text-xs font-medium">
+          <AlertTriangle className="h-3 w-3" />
+          Overdue
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 text-xs font-medium">
+        <Clock className="h-3 w-3" />
+        Open
+      </span>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border bg-muted/10">
+      {/* Panel header */}
+      <div className="flex items-center justify-between px-4 py-3">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center gap-2 text-sm font-semibold hover:opacity-80 transition-opacity"
+        >
+          <Receipt className="h-4 w-4 text-primary" />
+          Invoices (QBO)
+          {invoices.length > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              {invoices.length}
+            </Badge>
+          )}
+        </button>
+
+        <div className="flex items-center gap-2">
+          {connected ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              disabled={syncMutation.isPending}
+              onClick={() => syncMutation.mutate()}
+            >
+              <RefreshCw className={cn("h-3 w-3", syncMutation.isPending && "animate-spin")} />
+              Sync QBO
+            </Button>
+          ) : (
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <LinkIcon className="h-3 w-3" />
+              Not connected —{" "}
+              <a href="/config" className="underline hover:text-foreground">
+                add credentials in Settings
+              </a>
+            </span>
+          )}
+        </div>
+      </div>
+
+      {open && (
+        <div className="border-t px-4 pb-4 pt-3">
+          {invoicesLoading ? (
+            <p className="text-xs text-muted-foreground py-2">Loading invoices…</p>
+          ) : invoices.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-2">
+              No invoices on record.{" "}
+              {connected
+                ? "Click Sync QBO to pull from QuickBooks."
+                : "Connect QBO credentials to enable sync."}
+            </p>
+          ) : (
+            <div className="overflow-x-auto rounded-md border">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b bg-muted/40">
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Invoice #</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Date</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Due Date</th>
+                    <th className="text-right px-3 py-2 font-medium text-muted-foreground">Amount</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
+                    <th className="text-center px-3 py-2 font-medium text-muted-foreground">Cleared</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoices.map((inv) => (
+                    <tr
+                      key={inv.id}
+                      className={cn("border-b last:border-0", invoiceRowColor(inv))}
+                    >
+                      <td className="px-3 py-2 font-mono">
+                        {inv.qboInvoiceId ? `#${inv.qboInvoiceId}` : "—"}
+                      </td>
+                      <td className="px-3 py-2 tabular-nums">{formatDate(inv.invoiceDate)}</td>
+                      <td className="px-3 py-2 tabular-nums">{formatDate(inv.dueDate)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-medium">
+                        ${Number(inv.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-3 py-2">{qboStatusBadge(inv)}</td>
+                      <td className="px-3 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={inv.clearedFlag}
+                          disabled={clearMutation.isPending}
+                          onChange={(e) =>
+                            clearMutation.mutate({ id: inv.id, flag: e.target.checked })
+                          }
+                          className="h-4 w-4 rounded border-gray-300 accent-teal-600 cursor-pointer"
+                          title={inv.clearedFlag ? "Mark as not cleared" : "Mark as cleared"}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -901,6 +1131,13 @@ export default function ProjectDetailPage() {
               )}
             </div>
           )}
+        </div>
+
+        <Separator />
+
+        {/* Invoices (QBO) */}
+        <div className="space-y-3">
+          <InvoicesPanel projectId={id!} />
         </div>
 
         <Separator />

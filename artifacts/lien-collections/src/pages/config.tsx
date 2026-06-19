@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { ChevronRight, Plus, CheckCircle2, Clock, ShieldAlert, Building2, Layers, Layout, GitBranch, Pencil } from "lucide-react";
+import { ChevronRight, Plus, CheckCircle2, Clock, ShieldAlert, Building2, Layers, Layout, GitBranch, Pencil, Banknote } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -930,6 +930,113 @@ function JurisdictionRulesTab() {
 }
 
 // ---------------------------------------------------------------------------
+// Tab: Integrations (QBO + future connections)
+// ---------------------------------------------------------------------------
+
+const QBO_ENV_VARS = [
+  {
+    key: "QBO_CLIENT_ID",
+    purpose: "OAuth2 client ID from the Intuit Developer Portal app.",
+  },
+  {
+    key: "QBO_CLIENT_SECRET",
+    purpose: "OAuth2 client secret paired with the client ID.",
+  },
+  {
+    key: "QBO_REFRESH_TOKEN",
+    purpose: "Long-lived refresh token obtained from the initial OAuth2 authorization flow.",
+  },
+  {
+    key: "QBO_REALM_ID",
+    purpose: "Company ID (realmId) visible in the QBO URL after login.",
+  },
+  {
+    key: "QBO_ENVIRONMENT",
+    purpose: 'Set to "production" for the live QBO company, or "sandbox" (default) for testing.',
+  },
+];
+
+function IntegrationsTab() {
+  const { data: qboStatus } = useQuery({
+    queryKey: ["config-qbo-status"],
+    queryFn: () => apiFetch<{ connected: boolean }>("/config/qbo-status"),
+    retry: false,
+  });
+
+  const connected = qboStatus?.connected ?? false;
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        icon={Banknote}
+        title="QuickBooks Online (QBO)"
+        subtitle="Invoice sync pulls billing data from QBO into each project. Credentials are stored as Replit secrets — never in code."
+      />
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <CardTitle className="text-sm font-semibold">Connection Status</CardTitle>
+              <CardDescription className="text-xs mt-0.5">
+                All four required secrets must be present for live sync to activate.
+              </CardDescription>
+            </div>
+            {connected ? (
+              <div className="flex items-center gap-1.5 text-green-700 text-xs font-medium">
+                <CheckCircle2 className="h-4 w-4" />
+                Connected
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-amber-600 text-xs font-medium">
+                <Clock className="h-4 w-4" />
+                Not connected — add secrets below
+              </div>
+            )}
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b bg-muted/40">
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Secret Name</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Purpose</th>
+                </tr>
+              </thead>
+              <tbody>
+                {QBO_ENV_VARS.map((v, i) => (
+                  <tr
+                    key={v.key}
+                    className={cn(
+                      "border-b last:border-0",
+                      i % 2 === 0 ? "bg-background" : "bg-muted/20",
+                    )}
+                  >
+                    <td className="px-3 py-2 font-mono font-semibold text-foreground whitespace-nowrap">
+                      {v.key}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">{v.purpose}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="mt-3 text-xs text-muted-foreground">
+            Add these in the <span className="font-medium text-foreground">Secrets</span> tab of
+            your Replit workspace. Once all four required secrets are set, the{" "}
+            <span className="font-medium text-foreground">Sync QBO</span> button on each project
+            will pull live invoice data from QuickBooks Online.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page root
 // ---------------------------------------------------------------------------
 
@@ -940,7 +1047,7 @@ export default function ConfigPage() {
         <div>
           <h1 className="text-xl font-bold text-foreground">Configuration</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Reference tree, stage clock triggers, and jurisdiction rule sets for{" "}
+            Reference tree, stage clock triggers, jurisdiction rule sets, and integrations for{" "}
             <span className="font-medium text-foreground">Beacon Fire Protection</span>.
           </p>
         </div>
@@ -959,6 +1066,10 @@ export default function ConfigPage() {
               <ShieldAlert className="h-4 w-4" />
               Jurisdiction Rules
             </TabsTrigger>
+            <TabsTrigger value="integrations" className="gap-1.5">
+              <Banknote className="h-4 w-4" />
+              Integrations
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="reference" className="mt-6">
@@ -971,6 +1082,10 @@ export default function ConfigPage() {
 
           <TabsContent value="jurisdictions" className="mt-6">
             <JurisdictionRulesTab />
+          </TabsContent>
+
+          <TabsContent value="integrations" className="mt-6">
+            <IntegrationsTab />
           </TabsContent>
         </Tabs>
       </div>
