@@ -16,6 +16,11 @@ interface Project {
   contractorTier: string;
   streams: { id: string; workStream: string; status: string }[];
   completionChecklistComplete: boolean;
+  nextDeadline: {
+    id: string;
+    adjustedDate: string;
+    lienStreamId: string;
+  } | null;
 }
 
 interface AgingData {
@@ -60,14 +65,12 @@ function highestRisk(streams: Project["streams"]) {
   return streams[0]?.status ?? "open";
 }
 
-const DAYS_FAKE: Record<string, number> = {
-  at_risk: -3,
-  filing: -14,
-  lapsed: -45,
-  notice_active: 12,
-  filed: 30,
-  open: 45,
-};
+function daysUntil(dateStr: string): number {
+  const startOfDay = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diffMs = startOfDay(new Date(dateStr)) - startOfDay(new Date());
+  return Math.round(diffMs / 86_400_000);
+}
 
 export default function DashboardPage() {
   const { data: projectsData } = useQuery({
@@ -160,13 +163,18 @@ export default function DashboardPage() {
 
   const deadlineRows = projects
     .filter((p) => p.streams.length > 0)
-    .slice(0, 5)
     .map((p) => ({
       id: p.id,
       name: p.cachedProjectName ?? p.hubspotProjectId,
       status: highestRisk(p.streams),
-      days: DAYS_FAKE[highestRisk(p.streams)] ?? 30,
-    }));
+      days: p.nextDeadline ? daysUntil(p.nextDeadline.adjustedDate) : null,
+    }))
+    .sort((a, b) => {
+      if (a.days === null) return 1;
+      if (b.days === null) return -1;
+      return a.days - b.days;
+    })
+    .slice(0, 5);
 
   const topAccounts = [...accounts]
     .sort((a, b) => (b.riskScore ?? 0) - (a.riskScore ?? 0))
@@ -267,9 +275,12 @@ export default function DashboardPage() {
                           className="mt-0.5 text-[11.5px]"
                           style={{ color: "var(--text-muted-color)" }}
                         >
-                          Lien stream active
+                          {d.days === null
+                            ? "No upcoming deadline"
+                            : "Next statutory deadline"}
                         </div>
                       </div>
+                      {d.days !== null && <DeadlineCountdown days={d.days} />}
                       <StatusBadge status={d.status} />
                       <ChevronRight
                         className="h-4 w-4 shrink-0"

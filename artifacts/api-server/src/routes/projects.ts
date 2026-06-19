@@ -168,6 +168,61 @@ router.get("/", async (req, res) => {
       .where(eq(projectPartyLinksTable.orgId, orgId)),
   ]);
 
+  // Fetch all work months + deadlines for the org so we can summarize each
+  // project's next upcoming statutory deadline without N+1 queries.
+  const allStreamIds = allStreams.map((s) => s.id);
+  const allWorkMonths =
+    allStreamIds.length > 0
+      ? await db
+          .select({ id: workMonthsTable.id, lienStreamId: workMonthsTable.lienStreamId })
+          .from(workMonthsTable)
+          .where(
+            and(inArray(workMonthsTable.lienStreamId, allStreamIds), eq(workMonthsTable.orgId, orgId)),
+          )
+      : [];
+  const workMonthToStream = new Map(allWorkMonths.map((wm) => [wm.id, wm.lienStreamId]));
+  const streamToProject = new Map(allStreams.map((s) => [s.id, s.lienProjectId]));
+  const allWorkMonthIds = allWorkMonths.map((wm) => wm.id);
+  const allDeadlines =
+    allWorkMonthIds.length > 0
+      ? await db
+          .select({
+            id: lienDeadlinesTable.id,
+            workMonthId: lienDeadlinesTable.workMonthId,
+            adjustedDate: lienDeadlinesTable.adjustedDate,
+            satisfiedAt: lienDeadlinesTable.satisfiedAt,
+            ruleId: lienDeadlinesTable.ruleId,
+          })
+          .from(lienDeadlinesTable)
+          .where(
+            and(
+              inArray(lienDeadlinesTable.workMonthId, allWorkMonthIds),
+              eq(lienDeadlinesTable.orgId, orgId),
+            ),
+          )
+      : [];
+
+  // Group earliest unsatisfied deadline per project (past = overdue, future = upcoming).
+  const nextDeadlineByProject = new Map<
+    string,
+    { id: string; adjustedDate: Date; lienStreamId: string }
+  >();
+  for (const d of allDeadlines) {
+    if (d.satisfiedAt) continue;
+    const streamId = workMonthToStream.get(d.workMonthId);
+    if (!streamId) continue;
+    const projectId = streamToProject.get(streamId);
+    if (!projectId) continue;
+    const existing = nextDeadlineByProject.get(projectId);
+    const candidate = { id: d.id, adjustedDate: d.adjustedDate, lienStreamId: streamId };
+    if (
+      !existing ||
+      new Date(candidate.adjustedDate).getTime() < new Date(existing.adjustedDate).getTime()
+    ) {
+      nextDeadlineByProject.set(projectId, candidate);
+    }
+  }
+
   // Attach streams + compute live checklist for each project
   const projectsWithMeta = projects.map((p) => {
     const streams = allStreams.filter((s) => s.lienProjectId === p.id);
@@ -177,6 +232,7 @@ router.get("/", async (req, res) => {
       ...p,
       completionChecklistComplete: liveChecklistComplete,
       streams,
+      nextDeadline: nextDeadlineByProject.get(p.id) ?? null,
     };
   });
 
