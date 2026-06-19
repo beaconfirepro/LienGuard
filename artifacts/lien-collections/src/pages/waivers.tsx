@@ -507,13 +507,6 @@ export default function WaiversPage() {
           </div>
         )}
 
-        {/* Header row */}
-        <div className="flex items-center justify-between">
-          <div className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>
-            {waivers.length} waiver{waivers.length !== 1 ? "s" : ""}
-          </div>
-        </div>
-
         {/* Waiver cards */}
         {waivers.length === 0 && (
           <div
