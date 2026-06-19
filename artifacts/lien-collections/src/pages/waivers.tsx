@@ -1,6 +1,6 @@
 import React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Panel, useRightPanel } from "@/components/nav/AppShell";
+import { Panel, useRightPanel, useLeftPanel } from "@/components/nav/AppShell";
 import { QueueList } from "@/components/ui/queue-list";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ApprovalGateBanner } from "@/components/ui/approval-gate-banner";
@@ -150,14 +150,16 @@ interface CreateFormState {
 function CreateWaiverModal({
   onClose,
   onCreated,
+  initialType = "conditional_progress",
 }: {
   onClose: () => void;
   onCreated: () => void;
+  initialType?: WaiverType;
 }) {
   const [form, setForm] = React.useState<CreateFormState>({
     lienProjectId: "",
     workStream: "construction",
-    waiverType: "conditional_progress",
+    waiverType: initialType,
     paymentAmount: "",
     invoiceLinkId: "",
   });
@@ -359,7 +361,7 @@ function CreateWaiverModal({
 
 export default function WaiversPage() {
   const queryClient = useQueryClient();
-  const [showCreate, setShowCreate] = React.useState(false);
+  const [createType, setCreateType] = React.useState<WaiverType | null>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({
@@ -396,6 +398,30 @@ export default function WaiversPage() {
     mutationFn: (id: string) => apiPost(`/waivers/${id}/notarize`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["waivers"] }),
   });
+
+  useLeftPanel(
+    <Panel title="New Waiver" accent="#14eba3">
+      <div className="flex flex-col gap-2 p-3">
+        {(Object.entries(WAIVER_TYPE_LABELS) as [WaiverType, string][]).map(([type, label]) => (
+          <button
+            key={type}
+            onClick={() => setCreateType(type)}
+            className="flex items-center gap-2 rounded-md border px-3 py-2.5 text-left text-[12.5px] font-semibold transition-opacity hover:opacity-80"
+            style={{ background: alpha("#14eba3", 0.1), borderColor: alpha("#14eba3", 0.25), color: "#14eba3" }}
+          >
+            <Plus className="h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0">
+              <span className="block">{label}</span>
+              <span className="block text-[10px] font-normal" style={{ color: "var(--text-muted-color)" }}>
+                {WAIVER_TYPE_SUBSECTION[type]}
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </Panel>,
+    [],
+  );
 
   useRightPanel(
     <Panel title="Approval Queue" count={pendingWaivers.length}>
@@ -434,9 +460,10 @@ export default function WaiversPage() {
 
   return (
     <>
-      {showCreate && (
+      {createType && (
         <CreateWaiverModal
-          onClose={() => setShowCreate(false)}
+          initialType={createType}
+          onClose={() => setCreateType(null)}
           onCreated={() => {
             queryClient.invalidateQueries({ queryKey: ["waivers"] });
             queryClient.invalidateQueries({ queryKey: ["waivers-exposure"] });
@@ -486,7 +513,7 @@ export default function WaiversPage() {
             {waivers.length} waiver{waivers.length !== 1 ? "s" : ""}
           </div>
           <button
-            onClick={() => setShowCreate(true)}
+            onClick={() => setCreateType("conditional_progress")}
             className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[12.5px] font-semibold"
             style={{ background: alpha("#14eba3", 0.1), borderColor: alpha("#14eba3", 0.25), color: "#14eba3" }}
           >

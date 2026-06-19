@@ -1,17 +1,32 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
-import { Panel, useRightPanel } from "@/components/nav/AppShell";
+import { useLocation } from "wouter";
+import { Panel, useRightPanel, useLeftPanel } from "@/components/nav/AppShell";
 import { QueueList } from "@/components/ui/queue-list";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ResponsiveTable } from "@/components/ui/responsive-table";
 import { DeadlineCountdown } from "@/components/ui/deadline-countdown";
-import { Search, Plus, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Search } from "lucide-react";
 
 interface LienStream {
   id: string;
   workStream: string;
   status: string;
+}
+
+interface QueueNotice {
+  id: string;
+  status: string;
+  monthListed: string;
+  project: { id: string; projectName: string } | null;
+}
+
+function fmtMonthListed(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 interface Project {
@@ -60,6 +75,7 @@ const DAYS_BY_STATUS: Record<string, number> = {
 };
 
 export default function HomePage() {
+  const [, setLocation] = useLocation();
   const [search, setSearch] = React.useState("");
   const [filterWorkflow, setFilterWorkflow] = React.useState("all");
 
@@ -68,6 +84,19 @@ export default function HomePage() {
     queryFn: () => apiFetch<{ projects: Project[] }>("/projects"),
     retry: false,
   });
+
+  const { data: queueData } = useQuery({
+    queryKey: ["send-queue"],
+    queryFn: () => apiFetch<{ notices: QueueNotice[] }>("/monthly/send-queue"),
+    retry: false,
+    staleTime: 30_000,
+  });
+
+  const queueNotices = queueData?.notices ?? [];
+  const draftNotices = queueNotices.filter((n) => n.status === "draft");
+  const readyNotices = queueNotices.filter((n) => n.status === "approved");
+  const draftSig = draftNotices.map((n) => n.id).join(",");
+  const readySig = readyNotices.map((n) => n.id).join(",");
 
   const projects = data?.projects ?? [];
 
@@ -85,16 +114,42 @@ export default function HomePage() {
   }).length;
   const incompleteCount = projects.filter((p) => !p.completionChecklistComplete).length;
 
-  useRightPanel(
-    <Panel title="Quick Actions" accent="#f59e0b">
+  useLeftPanel(
+    <Panel title="Notices to Send" accent="#f59e0b" count={draftNotices.length}>
       <QueueList
-        items={[
-          { id: "q1", title: "New project", sub: "Register a new fire protection job", action: "Create", actionTone: "#f59e0b" },
-          { id: "q2", title: "Monthly report", sub: "All active streams this month", action: "View report", actionTone: "#6366f1" },
-        ]}
+        items={
+          draftNotices.length > 0
+            ? draftNotices.map((n) => ({
+                id: n.id,
+                title: n.project?.projectName ?? "Unknown project",
+                sub: `Draft · ${fmtMonthListed(n.monthListed)}`,
+                onClick: () => setLocation(`/send-queue?notice=${n.id}`),
+              }))
+            : [{ id: "empty", title: "Nothing to send", sub: "No draft notices" }]
+        }
       />
     </Panel>,
-    [],
+    [draftSig],
+  );
+
+  useRightPanel(
+    <Panel title="Send Queue" accent="#6366f1" count={readyNotices.length}>
+      <QueueList
+        items={
+          readyNotices.length > 0
+            ? readyNotices.map((n) => ({
+                id: n.id,
+                title: n.project?.projectName ?? "Unknown project",
+                sub: `Approved · ${fmtMonthListed(n.monthListed)}`,
+                action: "Send",
+                actionTone: "#f59e0b",
+                onClick: () => setLocation(`/send-queue?notice=${n.id}`),
+              }))
+            : [{ id: "empty", title: "Queue empty", sub: "Approve notices to send" }]
+        }
+      />
+    </Panel>,
+    [readySig],
   );
 
   type ProjectRow = Project & { risk: string; days: number };
@@ -204,15 +259,6 @@ export default function HomePage() {
             </button>
           ))}
         </div>
-        <Link href="/projects/new">
-          <div
-            className="flex items-center gap-1.5 rounded-md px-3 py-2 text-[12.5px] font-semibold cursor-pointer"
-            style={{ background: "rgba(245,158,11,.14)", color: "#f59e0b", border: "1px solid rgba(245,158,11,.3)" }}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            New Project
-          </div>
-        </Link>
       </div>
 
       {/* Project list */}

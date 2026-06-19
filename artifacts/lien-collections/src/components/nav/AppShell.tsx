@@ -9,14 +9,26 @@ import {
   PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 
-/* ─── Right-panel context ────────────────────────────────────────────────── */
-const PanelCtx = React.createContext<{ setRight: (n: React.ReactNode) => void } | null>(null);
+/* ─── Panel context (inner left + right) ─────────────────────────────────── */
+const PanelCtx = React.createContext<{
+  setRight: (n: React.ReactNode) => void;
+  setLeft: (n: React.ReactNode) => void;
+} | null>(null);
 
 export function useRightPanel(node: React.ReactNode, deps: React.DependencyList = []) {
   const ctx = React.useContext(PanelCtx);
   React.useEffect(() => {
     ctx?.setRight(node);
     return () => ctx?.setRight(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+}
+
+export function useLeftPanel(node: React.ReactNode, deps: React.DependencyList = []) {
+  const ctx = React.useContext(PanelCtx);
+  React.useEffect(() => {
+    ctx?.setLeft(node);
+    return () => ctx?.setLeft(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 }
@@ -47,10 +59,8 @@ const MODULE_NAV = [
     key: "liens", label: "Liens", to: "/liens", Icon: Landmark,
     sub: [
       { label: "Projects", to: "/liens" },
-      { label: "Monthly Report", to: "/monthly" },
       { label: "Send Queue", to: "/send-queue" },
       { label: "Waivers", to: "/waivers" },
-      { label: "Reports", to: "/reports" },
     ],
   },
   { key: "collections", label: "Collections", to: "/collections", Icon: DollarSign },
@@ -58,19 +68,15 @@ const MODULE_NAV = [
   { key: "config", label: "Settings", to: "/settings", Icon: Settings },
 ];
 
-const LIENS_PATHS = ["/liens", "/monthly", "/send-queue", "/waivers", "/projects", "/filing", "/reports"];
+const LIENS_PATHS = ["/liens", "/send-queue", "/waivers", "/projects", "/filing"];
 
 const TITLES: [RegExp, string][] = [
   [/^\/settings$/, "Settings"],
   [/^\/liens$/, "Liens — Projects"],
-  [/^\/monthly$/, "Monthly Lien Report"],
   [/^\/send-queue$/, "Ready-to-Send Queue"],
-  [/^\/projects\/new$/, "New Project"],
   [/^\/projects\//, "Project Lien Detail"],
   [/^\/waivers$/, "Waiver Workspace"],
   [/^\/filing\//, "Filing Workspace"],
-  [/^\/reports\/.+\/timeline$/, "Lien Timeline"],
-  [/^\/reports$/, "Exposure & Reports"],
   [/^\/holds$/, "Vendor Bill Holds"],
   [/^\/collections\/.+/, "Account Detail"],
   [/^\/collections$/, "Collections Pipeline"],
@@ -89,6 +95,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = React.useState<"dark" | "light">("dark");
   const [drawer, setDrawer] = React.useState(false);
   const [right, setRight] = React.useState<React.ReactNode>(null);
+  const [left, setLeft] = React.useState<React.ReactNode>(null);
   const [rightOpen, setRightOpen] = React.useState(true);
   const [leftOpen, setLeftOpen] = React.useState(true);
 
@@ -100,18 +107,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const title = getTitle(location);
 
   const isLiensSection = LIENS_PATHS.some((p) =>
-    p === "/liens" ? location === p || location.startsWith("/projects") || location.startsWith("/filing") || location.startsWith("/monthly") || location.startsWith("/send-queue") || location.startsWith("/waivers") : location.startsWith(p)
+    p === "/liens" ? location === p || location.startsWith("/projects") || location.startsWith("/filing") || location.startsWith("/send-queue") || location.startsWith("/waivers") : location.startsWith(p)
   );
 
-  /* Inner left tab (DD-UI: LP · content · RP). Shown for sections that have
-     their own pages — currently the Liens workspace. */
-  const liensNav = MODULE_NAV.find((m) => m.key === "liens");
-  const sectionNav = isLiensSection && liensNav?.sub
-    ? { heading: "Liens", items: liensNav.sub }
-    : null;
-
+  /* Inner left panel (DD-UI: LP · content · RP) is now page-registered via
+     useLeftPanel — pages decide its content. */
   const sidebarW = isDesktop ? (collapsed ? 70 : 236) : 0;
-  const hasLeft = !!sectionNav && leftOpen && isDesktop;
+  const hasLeft = !!left && leftOpen && isDesktop;
   const leftW = hasLeft ? 208 : 0;
   const avail = width - sidebarW - leftW;
   const rightFits = avail - 314 >= 470;
@@ -119,7 +121,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const rightCol = hasRight && rightFits && isDesktop;
   const rightStacked = hasRight && !rightCol;
 
-  const ctx = { setRight };
+  const ctx = { setRight, setLeft };
 
   return (
     <PanelCtx.Provider value={ctx}>
@@ -160,20 +162,44 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   m.key === "liens" ? (location.startsWith(m.to) || isLiensSection) :
                   location.startsWith(m.to);
                 return (
-                  <Link key={m.key} href={m.to}>
-                    <div
-                      className={cn(
-                        "flex items-center gap-3 rounded-md py-2.5 text-[13.5px] cursor-pointer",
-                        collapsed ? "justify-center px-2.5" : "px-3",
-                      )}
-                      style={active
-                        ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
-                        : { color: "var(--text-dim)", fontWeight: 500 }}
-                    >
-                      <m.Icon className="h-[18px] w-[18px] shrink-0" />
-                      {!collapsed && <span className="whitespace-nowrap">{m.label}</span>}
-                    </div>
-                  </Link>
+                  <div key={m.key}>
+                    <Link href={m.to}>
+                      <div
+                        className={cn(
+                          "flex items-center gap-3 rounded-md py-2.5 text-[13.5px] cursor-pointer",
+                          collapsed ? "justify-center px-2.5" : "px-3",
+                        )}
+                        style={active
+                          ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
+                          : { color: "var(--text-dim)", fontWeight: 500 }}
+                      >
+                        <m.Icon className="h-[18px] w-[18px] shrink-0" />
+                        {!collapsed && <span className="whitespace-nowrap">{m.label}</span>}
+                      </div>
+                    </Link>
+                    {m.sub && active && !collapsed && (
+                      <div
+                        className="ml-[18px] mt-0.5 flex flex-col gap-0.5 border-l pb-1 pl-3"
+                        style={{ borderColor: "var(--helm-border)" }}
+                      >
+                        {m.sub.map((s) => {
+                          const sa = location === s.to;
+                          return (
+                            <Link key={s.to} href={s.to}>
+                              <div
+                                className="rounded-md px-2.5 py-1.5 text-[12.5px] cursor-pointer transition-colors"
+                                style={sa
+                                  ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
+                                  : { color: "var(--text-dim)", fontWeight: 500 }}
+                              >
+                                {s.label}
+                              </div>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </nav>
@@ -252,7 +278,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="sticky top-16 z-20 flex items-center gap-3 border-b px-4 py-2.5 md:px-6"
             style={{ background: "var(--bg)", borderColor: "var(--helm-border)" }}
           >
-            {!!sectionNav && isDesktop && (
+            {!!left && isDesktop && (
               <button
                 onClick={() => setLeftOpen((o) => !o)}
                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors"
@@ -301,32 +327,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               paddingBottom: isMobile ? 80 : undefined,
             }}
           >
-            {hasLeft && sectionNav && (
+            {hasLeft && (
               <aside
-                className="sticky top-[120px] flex flex-col gap-0.5 rounded-lg border p-2"
+                className="sticky top-[120px] overflow-hidden rounded-lg border"
                 style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
               >
-                <div
-                  className="px-2 pb-1.5 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.12em]"
-                  style={{ color: "var(--text-muted-color)" }}
-                >
-                  {sectionNav.heading}
-                </div>
-                {sectionNav.items.map((s) => {
-                  const sa = location === s.to;
-                  return (
-                    <Link key={s.to} href={s.to}>
-                      <div
-                        className="rounded-md px-2.5 py-2 text-[12.5px] cursor-pointer transition-colors"
-                        style={sa
-                          ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
-                          : { color: "var(--text-dim)", fontWeight: 500 }}
-                      >
-                        {s.label}
-                      </div>
-                    </Link>
-                  );
-                })}
+                {left}
               </aside>
             )}
             <div className="flex min-w-0 flex-col gap-4">

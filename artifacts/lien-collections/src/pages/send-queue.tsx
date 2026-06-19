@@ -220,7 +220,7 @@ export default function SendQueuePage() {
         No draft or approved notices in queue.
         <br />
         <span style={{ color: "var(--text-muted-color)" }}>
-          Run the monthly engine on the Monthly Report page to generate notices.
+          Approve notices from the Liens workspace to add them to the send queue.
         </span>
       </div>
     );

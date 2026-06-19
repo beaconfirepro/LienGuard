@@ -13,9 +13,9 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { useRoute } from "wouter";
+import { useRoute, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Panel, useRightPanel } from "@/components/nav/AppShell";
+import { Panel, useRightPanel, useLeftPanel } from "@/components/nav/AppShell";
 import { QueueList } from "@/components/ui/queue-list";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
@@ -25,6 +25,8 @@ import {
   Send,
   Download,
   MapPin,
+  Plus,
+  FileText,
 } from "lucide-react";
 import { alpha, money } from "@/lib/utils";
 
@@ -98,6 +100,20 @@ interface ComplianceGap {
   issue: string;
   noticeSentAt: string | null;
 }
+
+interface ExposureRow {
+  streamId: string;
+  lienProjectId: string;
+  projectName: string;
+  workStream: string;
+  streamStatus: string;
+  overdueMonths: number;
+  grossExposure: number;
+  waivedAmount: number;
+  netExposure: number;
+}
+
+const EMPTY_EXPOSURE: ExposureRow[] = [];
 
 // ── API helpers ────────────────────────────────────────────────────────────
 
@@ -237,6 +253,12 @@ export default function FilingPage() {
     enabled: !!streamId,
   });
 
+  const { data: exposureData } = useQuery({
+    queryKey: ["filing-exposure"],
+    queryFn: () => apiFetch<{ exposure: ExposureRow[] }>("/waivers/exposure"),
+    staleTime: 30_000,
+  });
+
   const escalate = useMutation({
     mutationFn: () => apiPost(`/filing/${streamId}/escalate`),
     onSuccess: (result) => {
@@ -327,6 +349,82 @@ export default function FilingPage() {
       />
     </Panel>,
     [filing?.postFilingNoticeDeadline, filing?.enforcementDeadline],
+  );
+
+  const compliance = exposureData?.exposure ?? EMPTY_EXPOSURE;
+
+  useLeftPanel(
+    <Panel title="New Filing" accent="#f59e0b">
+      <div className="flex flex-col gap-2 p-3">
+        <button
+          onClick={() => escalate.mutate()}
+          disabled={escalate.isPending}
+          className="flex items-center gap-2 rounded-md px-3 py-2.5 text-[12.5px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+          style={{ background: "#f59e0b", color: "#1a1205" }}
+        >
+          <Plus className="h-3.5 w-3.5 shrink-0" />
+          {escalate.isPending ? "Checking…" : "New filing"}
+        </button>
+        <button
+          onClick={() => affidavit.mutate()}
+          disabled={affidavit.isPending}
+          className="flex items-center gap-2 rounded-md border px-3 py-2.5 text-[12.5px] font-semibold transition-opacity hover:opacity-80 disabled:opacity-50"
+          style={{ background: "var(--surface-3)", borderColor: "var(--helm-border)", color: "var(--text-dim)" }}
+        >
+          <FileText className="h-3.5 w-3.5 shrink-0" />
+          {affidavit.isPending ? "Generating…" : "New affidavit"}
+        </button>
+
+        <div
+          className="px-1 pb-1 pt-3 text-[10.5px] font-semibold uppercase tracking-[0.12em]"
+          style={{ color: "var(--text-muted-color)" }}
+        >
+          Upcoming Compliance
+        </div>
+
+        {compliance.length > 0 ? (
+          compliance.map((row) => {
+            const dot = row.overdueMonths > 0 ? "#eb143f" : row.netExposure > 0 ? "#f59e0b" : "#14eba3";
+            const sub =
+              row.overdueMonths > 0
+                ? `${row.overdueMonths} overdue month${row.overdueMonths !== 1 ? "s" : ""}`
+                : row.netExposure > 0
+                ? `Net exposure ${money(row.netExposure)}`
+                : "On track";
+            return (
+              <Link key={row.streamId} href={`/filing/${row.streamId}`}>
+                <div
+                  className="cursor-pointer rounded-md border px-3 py-2 transition-colors"
+                  style={{
+                    background: row.streamId === streamId ? "var(--surface-3)" : "var(--surface-2)",
+                    borderColor: row.streamId === streamId ? "var(--helm-accent)" : "var(--helm-border)",
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dot }} />
+                    <span className="min-w-0 truncate text-[12px] font-semibold" style={{ color: "var(--text-base)" }}>
+                      {row.projectName}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 pl-3.5 text-[11px]" style={{ color: "var(--text-muted-color)" }}>
+                    {sub}
+                  </div>
+                </div>
+              </Link>
+            );
+          })
+        ) : (
+          <div className="px-1 py-2 text-[11px]" style={{ color: "var(--text-muted-color)" }}>
+            No compliance gaps flagged.
+          </div>
+        )}
+
+        <div className="px-1 pt-1 text-[10.5px] leading-snug" style={{ color: "var(--text-muted-color)" }}>
+          Start a filing or affidavit; compliance gaps flagged above.
+        </div>
+      </div>
+    </Panel>,
+    [compliance, streamId, escalate.isPending, affidavit.isPending],
   );
 
   if (isLoading) {

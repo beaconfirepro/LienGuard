@@ -9,3 +9,4 @@
 - [Express 5 params strict typing](express5-params-strict.md) — req.params fields type as string|string[]; Drizzle eq() with strict enum columns rejects this; cast with `req.params["id"] as string`.
 - [Shippo + NotaryLive stubs](third-party-stubs.md) — Both clients fall back to deterministic stubs when SHIPPO_API_KEY / NOTARYLIVE_API_KEY are absent; real keys activate live calls.
 - [Session lib no requireRole](session-no-requirerole.md) — no requireRole() exported from session.ts; inline admin check via `getSession(req).role !== "admin"` → 403.
+- [Authenticated screenshots](screenshot-dev-session.md) — app has no auto-login; prime screenshot browser with `screenshot(path="/api/dev/session")` before app pages or everything shows Unauthorized.
