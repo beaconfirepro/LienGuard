@@ -23,25 +23,43 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { ChevronRight, Plus, CheckCircle2, Clock, ShieldAlert, Building2, Layers, Layout, GitBranch, Pencil, Banknote } from "lucide-react";
+import {
+  ChevronRight,
+  Plus,
+  CheckCircle2,
+  Clock,
+  ShieldAlert,
+  Building2,
+  Layers,
+  Layout,
+  GitBranch,
+  Pencil,
+  Banknote,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Plain-language lien workflow type labels (L04)
 // ---------------------------------------------------------------------------
 
-const WORKFLOW_TYPE_LABELS: Record<string, { label: string; description: string }> = {
+const WORKFLOW_TYPE_LABELS: Record<
+  string,
+  { label: string; description: string }
+> = {
   commercial_sub: {
     label: "Commercial Sub",
-    description: "HELM is sub-contractor on a commercial job — primary HELM case",
+    description:
+      "HELM is sub-contractor on a commercial job — primary HELM case",
   },
   residential_sub: {
     label: "Residential Sub",
-    description: "HELM is sub-contractor; GC has direct agreement with owner-occupant",
+    description:
+      "HELM is sub-contractor; GC has direct agreement with owner-occupant",
   },
   public_bond: {
     label: "Public / Bond",
-    description: "Public project — handled outside the lien system via payment bond claims",
+    description:
+      "Public project — handled outside the lien system via payment bond claims",
   },
   none: {
     label: "No Lien Tracking",
@@ -49,9 +67,15 @@ const WORKFLOW_TYPE_LABELS: Record<string, { label: string; description: string 
   },
 };
 
-const CLOCK_TRIGGER_LABELS: Record<string, { label: string; description: string }> = {
+const CLOCK_TRIGGER_LABELS: Record<
+  string,
+  { label: string; description: string }
+> = {
   none: { label: "None", description: "Stage does not start any lien clock" },
-  design_start: { label: "Design Start", description: "Starts the design-stream lien clock" },
+  design_start: {
+    label: "Design Start",
+    description: "Starts the design-stream lien clock",
+  },
   field_work_start: {
     label: "Field Work Start",
     description: "Starts the construction-stream lien clock",
@@ -83,7 +107,10 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const apiBase = getApiBase().replace(/\/$/, "");
   const res = await fetch(`${apiBase}${path}`, {
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...(options?.headers ?? {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(options?.headers ?? {}),
+    },
     ...options,
   });
   if (!res.ok) {
@@ -178,7 +205,15 @@ function WorkflowTypeBadge({ value }: { value: string }) {
   );
 }
 
-function SectionHeader({ icon: Icon, title, subtitle }: { icon: React.ElementType; title: string; subtitle?: string }) {
+function SectionHeader({
+  icon: Icon,
+  title,
+  subtitle,
+}: {
+  icon: React.ElementType;
+  title: string;
+  subtitle?: string;
+}) {
   return (
     <div className="flex items-start gap-3 mb-4">
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -186,7 +221,9 @@ function SectionHeader({ icon: Icon, title, subtitle }: { icon: React.ElementTyp
       </div>
       <div>
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-        {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+        {subtitle && (
+          <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+        )}
       </div>
     </div>
   );
@@ -202,14 +239,17 @@ function ReferenceTreeTab() {
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["config-departments"],
-    queryFn: () => apiFetch<{ departments: Department[] }>("/config/departments"),
+    queryFn: () =>
+      apiFetch<{ departments: Department[] }>("/config/departments"),
     retry: false,
   });
 
   const [newDeptName, setNewDeptName] = React.useState("");
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
   const [stNames, setStNames] = React.useState<Record<string, string>>({});
-  const [sstForms, setSstForms] = React.useState<Record<string, { name: string; lienWorkflowType: string }>>({});
+  const [sstForms, setSstForms] = React.useState<
+    Record<string, { name: string; lienWorkflowType: string }>
+  >({});
 
   const addDept = useMutation({
     mutationFn: (name: string) =>
@@ -222,11 +262,22 @@ function ReferenceTreeTab() {
       setNewDeptName("");
       toast({ title: "Department added" });
     },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: Error) =>
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      }),
   });
 
   const addSt = useMutation({
-    mutationFn: ({ name, departmentId }: { name: string; departmentId: string }) =>
+    mutationFn: ({
+      name,
+      departmentId,
+    }: {
+      name: string;
+      departmentId: string;
+    }) =>
       apiFetch("/config/system-types", {
         method: "POST",
         body: JSON.stringify({ name, departmentId }),
@@ -236,21 +287,42 @@ function ReferenceTreeTab() {
       setStNames((prev) => ({ ...prev, [vars.departmentId]: "" }));
       toast({ title: "System type added" });
     },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: Error) =>
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      }),
   });
 
   const addSst = useMutation({
-    mutationFn: ({ name, systemTypeId, lienWorkflowType }: { name: string; systemTypeId: string; lienWorkflowType: string }) =>
+    mutationFn: ({
+      name,
+      systemTypeId,
+      lienWorkflowType,
+    }: {
+      name: string;
+      systemTypeId: string;
+      lienWorkflowType: string;
+    }) =>
       apiFetch("/config/sub-system-types", {
         method: "POST",
         body: JSON.stringify({ name, systemTypeId, lienWorkflowType }),
       }),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["config-departments"] });
-      setSstForms((prev) => ({ ...prev, [vars.systemTypeId]: { name: "", lienWorkflowType: "" } }));
+      setSstForms((prev) => ({
+        ...prev,
+        [vars.systemTypeId]: { name: "", lienWorkflowType: "" },
+      }));
       toast({ title: "Sub-system type added" });
     },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: Error) =>
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      }),
   });
 
   type EditName = { id: string; name: string };
@@ -261,35 +333,67 @@ function ReferenceTreeTab() {
 
   const patchDept = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) =>
-      apiFetch(`/config/departments/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+      apiFetch(`/config/departments/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["config-departments"] });
       setEditDept(null);
       toast({ title: "Department renamed" });
     },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: Error) =>
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      }),
   });
 
   const patchSt = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) =>
-      apiFetch(`/config/system-types/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+      apiFetch(`/config/system-types/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["config-departments"] });
       setEditSt(null);
       toast({ title: "System type renamed" });
     },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: Error) =>
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      }),
   });
 
   const patchSst = useMutation({
-    mutationFn: ({ id, name, lienWorkflowType }: { id: string; name: string; lienWorkflowType: string }) =>
-      apiFetch(`/config/sub-system-types/${id}`, { method: "PATCH", body: JSON.stringify({ name, lienWorkflowType }) }),
+    mutationFn: ({
+      id,
+      name,
+      lienWorkflowType,
+    }: {
+      id: string;
+      name: string;
+      lienWorkflowType: string;
+    }) =>
+      apiFetch(`/config/sub-system-types/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name, lienWorkflowType }),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["config-departments"] });
       setEditSst(null);
       toast({ title: "Sub-system type updated" });
     },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: Error) =>
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      }),
   });
 
   function toggleExpand(id: string) {
@@ -344,27 +448,70 @@ function ReferenceTreeTab() {
                       className="h-7 text-xs w-44"
                       value={editDept.name}
                       autoFocus
-                      onChange={(e) => setEditDept({ id: dept.id, name: e.target.value })}
+                      onChange={(e) =>
+                        setEditDept({ id: dept.id, name: e.target.value })
+                      }
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && editDept.name.trim()) patchDept.mutate({ id: dept.id, name: editDept.name.trim() });
+                        if (e.key === "Enter" && editDept.name.trim())
+                          patchDept.mutate({
+                            id: dept.id,
+                            name: editDept.name.trim(),
+                          });
                         if (e.key === "Escape") setEditDept(null);
                       }}
                     />
-                    <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!editDept.name.trim() || patchDept.isPending} onClick={() => patchDept.mutate({ id: dept.id, name: editDept.name.trim() })}>Save</Button>
-                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditDept(null)}>Cancel</Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      disabled={!editDept.name.trim() || patchDept.isPending}
+                      onClick={() =>
+                        patchDept.mutate({
+                          id: dept.id,
+                          name: editDept.name.trim(),
+                        })
+                      }
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                      onClick={() => setEditDept(null)}
+                    >
+                      Cancel
+                    </Button>
                   </div>
                 ) : (
-                  <button type="button" onClick={() => toggleExpand(dept.id)} className="flex flex-1 items-center gap-2 hover:opacity-80 transition-opacity text-left">
+                  <button
+                    type="button"
+                    onClick={() => toggleExpand(dept.id)}
+                    className="flex flex-1 items-center gap-2 hover:opacity-80 transition-opacity text-left"
+                  >
                     <Building2 className="h-4 w-4 text-muted-foreground" />
                     <span>{dept.name}</span>
                     <Badge variant="secondary" className="text-xs">
-                      {dept.systemTypes.length} type{dept.systemTypes.length !== 1 ? "s" : ""}
+                      {dept.systemTypes.length} type
+                      {dept.systemTypes.length !== 1 ? "s" : ""}
                     </Badge>
-                    <ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform ml-auto", expanded.has(dept.id) && "rotate-90")} />
+                    <ChevronRight
+                      className={cn(
+                        "h-4 w-4 text-muted-foreground transition-transform ml-auto",
+                        expanded.has(dept.id) && "rotate-90",
+                      )}
+                    />
                   </button>
                 )}
                 {editDept?.id !== dept.id && (
-                  <button type="button" title="Rename department" className="ml-2 p-1 text-muted-foreground hover:text-foreground rounded transition-colors" onClick={() => setEditDept({ id: dept.id, name: dept.name })}>
+                  <button
+                    type="button"
+                    title="Rename department"
+                    className="ml-2 p-1 text-muted-foreground hover:text-foreground rounded transition-colors"
+                    onClick={() =>
+                      setEditDept({ id: dept.id, name: dept.name })
+                    }
+                  >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                 )}
@@ -373,13 +520,21 @@ function ReferenceTreeTab() {
               {expanded.has(dept.id) && (
                 <div className="border-t px-4 pb-4">
                   {dept.systemTypes.length === 0 ? (
-                    <p className="py-2 text-xs text-muted-foreground">No system types yet.</p>
+                    <p className="py-2 text-xs text-muted-foreground">
+                      No system types yet.
+                    </p>
                   ) : (
                     <div className="mt-2 space-y-3">
                       {dept.systemTypes.map((st) => {
-                        const sstForm = sstForms[st.id] ?? { name: "", lienWorkflowType: "" };
+                        const sstForm = sstForms[st.id] ?? {
+                          name: "",
+                          lienWorkflowType: "",
+                        };
                         return (
-                          <div key={st.id} className="pl-4 border-l-2 border-muted">
+                          <div
+                            key={st.id}
+                            className="pl-4 border-l-2 border-muted"
+                          >
                             <div className="flex items-center gap-2 py-1">
                               {editSt?.id === st.id ? (
                                 <>
@@ -388,23 +543,67 @@ function ReferenceTreeTab() {
                                     className="h-7 text-xs w-40"
                                     value={editSt.name}
                                     autoFocus
-                                    onChange={(e) => setEditSt({ id: st.id, name: e.target.value })}
+                                    onChange={(e) =>
+                                      setEditSt({
+                                        id: st.id,
+                                        name: e.target.value,
+                                      })
+                                    }
                                     onKeyDown={(e) => {
-                                      if (e.key === "Enter" && editSt.name.trim()) patchSt.mutate({ id: st.id, name: editSt.name.trim() });
+                                      if (
+                                        e.key === "Enter" &&
+                                        editSt.name.trim()
+                                      )
+                                        patchSt.mutate({
+                                          id: st.id,
+                                          name: editSt.name.trim(),
+                                        });
                                       if (e.key === "Escape") setEditSt(null);
                                     }}
                                   />
-                                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!editSt.name.trim() || patchSt.isPending} onClick={() => patchSt.mutate({ id: st.id, name: editSt.name.trim() })}>Save</Button>
-                                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditSt(null)}>Cancel</Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs"
+                                    disabled={
+                                      !editSt.name.trim() || patchSt.isPending
+                                    }
+                                    onClick={() =>
+                                      patchSt.mutate({
+                                        id: st.id,
+                                        name: editSt.name.trim(),
+                                      })
+                                    }
+                                  >
+                                    Save
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 text-xs"
+                                    onClick={() => setEditSt(null)}
+                                  >
+                                    Cancel
+                                  </Button>
                                 </>
                               ) : (
                                 <>
                                   <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-                                  <span className="text-sm font-medium">{st.name}</span>
+                                  <span className="text-sm font-medium">
+                                    {st.name}
+                                  </span>
                                   <Badge variant="outline" className="text-xs">
-                                    {st.subSystemTypes.length} sub-type{st.subSystemTypes.length !== 1 ? "s" : ""}
+                                    {st.subSystemTypes.length} sub-type
+                                    {st.subSystemTypes.length !== 1 ? "s" : ""}
                                   </Badge>
-                                  <button type="button" title="Rename system type" className="ml-1 p-0.5 text-muted-foreground hover:text-foreground rounded transition-colors" onClick={() => setEditSt({ id: st.id, name: st.name })}>
+                                  <button
+                                    type="button"
+                                    title="Rename system type"
+                                    className="ml-1 p-0.5 text-muted-foreground hover:text-foreground rounded transition-colors"
+                                    onClick={() =>
+                                      setEditSt({ id: st.id, name: st.name })
+                                    }
+                                  >
                                     <Pencil className="h-3 w-3" />
                                   </button>
                                 </>
@@ -417,42 +616,120 @@ function ReferenceTreeTab() {
                                     {editSst?.id === sst.id ? (
                                       <div className="flex flex-wrap items-end gap-2 py-1 pl-1 border-l border-dashed">
                                         <div className="space-y-0.5">
-                                          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Name</p>
+                                          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                            Name
+                                          </p>
                                           <Input
                                             className="h-7 text-xs w-36"
                                             value={editSst.name}
                                             autoFocus
-                                            onChange={(e) => setEditSst({ ...editSst, name: e.target.value })}
+                                            onChange={(e) =>
+                                              setEditSst({
+                                                ...editSst,
+                                                name: e.target.value,
+                                              })
+                                            }
                                           />
                                         </div>
                                         <div className="space-y-0.5">
-                                          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Lien Workflow</p>
-                                          <Select value={editSst.lienWorkflowType} onValueChange={(v) => setEditSst({ ...editSst, lienWorkflowType: v })}>
+                                          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                            Lien Workflow
+                                          </p>
+                                          <Select
+                                            value={editSst.lienWorkflowType}
+                                            onValueChange={(v) =>
+                                              setEditSst({
+                                                ...editSst,
+                                                lienWorkflowType: v,
+                                              })
+                                            }
+                                          >
                                             <SelectTrigger className="h-7 text-xs w-44">
                                               <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
-                                              {Object.entries(WORKFLOW_TYPE_LABELS).map(([value, { label, description }]) => (
-                                                <SelectItem key={value} value={value}>
-                                                  <span className="font-medium">{label}</span>
-                                                  <span className="ml-1 text-muted-foreground text-[10px]">— {description}</span>
-                                                </SelectItem>
-                                              ))}
+                                              {Object.entries(
+                                                WORKFLOW_TYPE_LABELS,
+                                              ).map(
+                                                ([
+                                                  value,
+                                                  { label, description },
+                                                ]) => (
+                                                  <SelectItem
+                                                    key={value}
+                                                    value={value}
+                                                  >
+                                                    <span className="font-medium">
+                                                      {label}
+                                                    </span>
+                                                    <span className="ml-1 text-muted-foreground text-[10px]">
+                                                      — {description}
+                                                    </span>
+                                                  </SelectItem>
+                                                ),
+                                              )}
                                             </SelectContent>
                                           </Select>
                                         </div>
-                                        <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!editSst.name.trim() || !editSst.lienWorkflowType || patchSst.isPending} onClick={() => patchSst.mutate({ id: sst.id, name: editSst.name.trim(), lienWorkflowType: editSst.lienWorkflowType })}>Save</Button>
-                                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditSst(null)}>Cancel</Button>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-7 text-xs"
+                                          disabled={
+                                            !editSst.name.trim() ||
+                                            !editSst.lienWorkflowType ||
+                                            patchSst.isPending
+                                          }
+                                          onClick={() =>
+                                            patchSst.mutate({
+                                              id: sst.id,
+                                              name: editSst.name.trim(),
+                                              lienWorkflowType:
+                                                editSst.lienWorkflowType,
+                                            })
+                                          }
+                                        >
+                                          Save
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 text-xs"
+                                          onClick={() => setEditSst(null)}
+                                        >
+                                          Cancel
+                                        </Button>
                                       </div>
                                     ) : (
                                       <div className="flex items-center gap-2 py-0.5">
                                         <Layout className="h-3 w-3 text-muted-foreground" />
-                                        <span className="text-xs text-foreground">{sst.name}</span>
-                                        <WorkflowTypeBadge value={sst.lienWorkflowType} />
-                                        <span className="text-xs text-muted-foreground">
-                                          — {WORKFLOW_TYPE_LABELS[sst.lienWorkflowType]?.description}
+                                        <span className="text-xs text-foreground">
+                                          {sst.name}
                                         </span>
-                                        <button type="button" title="Edit sub-system type" className="ml-1 p-0.5 text-muted-foreground hover:text-foreground rounded transition-colors" onClick={() => setEditSst({ id: sst.id, name: sst.name, lienWorkflowType: sst.lienWorkflowType })}>
+                                        <WorkflowTypeBadge
+                                          value={sst.lienWorkflowType}
+                                        />
+                                        <span className="text-xs text-muted-foreground">
+                                          —{" "}
+                                          {
+                                            WORKFLOW_TYPE_LABELS[
+                                              sst.lienWorkflowType
+                                            ]?.description
+                                          }
+                                        </span>
+                                        <button
+                                          type="button"
+                                          title="Edit sub-system type"
+                                          className="ml-1 p-0.5 text-muted-foreground hover:text-foreground rounded transition-colors"
+                                          onClick={() =>
+                                            setEditSst({
+                                              id: sst.id,
+                                              name: sst.name,
+                                              lienWorkflowType:
+                                                sst.lienWorkflowType,
+                                            })
+                                          }
+                                        >
                                           <Pencil className="h-3 w-3" />
                                         </button>
                                       </div>
@@ -463,34 +740,56 @@ function ReferenceTreeTab() {
                             )}
                             <div className="ml-4 mt-2 flex flex-wrap items-end gap-2 border-l border-dashed pl-3 pb-1">
                               <div className="space-y-0.5">
-                                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Add Sub-System Type</p>
+                                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                  Add Sub-System Type
+                                </p>
                                 <Input
                                   placeholder="Name"
                                   className="h-7 text-xs w-36"
                                   value={sstForm.name}
                                   onChange={(e) =>
-                                    setSstForms((prev) => ({ ...prev, [st.id]: { ...sstForm, name: e.target.value } }))
+                                    setSstForms((prev) => ({
+                                      ...prev,
+                                      [st.id]: {
+                                        ...sstForm,
+                                        name: e.target.value,
+                                      },
+                                    }))
                                   }
                                 />
                               </div>
                               <div className="space-y-0.5">
-                                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Lien Workflow</p>
+                                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                  Lien Workflow
+                                </p>
                                 <Select
                                   value={sstForm.lienWorkflowType}
                                   onValueChange={(v) =>
-                                    setSstForms((prev) => ({ ...prev, [st.id]: { ...sstForm, lienWorkflowType: v } }))
+                                    setSstForms((prev) => ({
+                                      ...prev,
+                                      [st.id]: {
+                                        ...sstForm,
+                                        lienWorkflowType: v,
+                                      },
+                                    }))
                                   }
                                 >
                                   <SelectTrigger className="h-7 text-xs w-44">
                                     <SelectValue placeholder="Select workflow…" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {Object.entries(WORKFLOW_TYPE_LABELS).map(([value, { label, description }]) => (
-                                      <SelectItem key={value} value={value}>
-                                        <span className="font-medium">{label}</span>
-                                        <span className="ml-1 text-muted-foreground text-[10px]">— {description}</span>
-                                      </SelectItem>
-                                    ))}
+                                    {Object.entries(WORKFLOW_TYPE_LABELS).map(
+                                      ([value, { label, description }]) => (
+                                        <SelectItem key={value} value={value}>
+                                          <span className="font-medium">
+                                            {label}
+                                          </span>
+                                          <span className="ml-1 text-muted-foreground text-[10px]">
+                                            — {description}
+                                          </span>
+                                        </SelectItem>
+                                      ),
+                                    )}
                                   </SelectContent>
                                 </Select>
                               </div>
@@ -498,9 +797,17 @@ function ReferenceTreeTab() {
                                 size="sm"
                                 variant="outline"
                                 className="h-7 text-xs"
-                                disabled={!sstForm.name.trim() || !sstForm.lienWorkflowType || addSst.isPending}
+                                disabled={
+                                  !sstForm.name.trim() ||
+                                  !sstForm.lienWorkflowType ||
+                                  addSst.isPending
+                                }
                                 onClick={() =>
-                                  addSst.mutate({ name: sstForm.name.trim(), systemTypeId: st.id, lienWorkflowType: sstForm.lienWorkflowType })
+                                  addSst.mutate({
+                                    name: sstForm.name.trim(),
+                                    systemTypeId: st.id,
+                                    lienWorkflowType: sstForm.lienWorkflowType,
+                                  })
                                 }
                               >
                                 <Plus className="h-3 w-3 mr-1" />
@@ -515,15 +822,23 @@ function ReferenceTreeTab() {
 
                   <div className="mt-3 flex flex-wrap items-end gap-2 rounded border border-dashed bg-muted/20 px-3 py-2">
                     <div className="space-y-0.5">
-                      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Add System Type</p>
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Add System Type
+                      </p>
                       <Input
                         placeholder="e.g. Multifamily"
                         className="h-7 text-xs w-44"
                         value={stNames[dept.id] ?? ""}
-                        onChange={(e) => setStNames((prev) => ({ ...prev, [dept.id]: e.target.value }))}
+                        onChange={(e) =>
+                          setStNames((prev) => ({
+                            ...prev,
+                            [dept.id]: e.target.value,
+                          }))
+                        }
                         onKeyDown={(e) => {
                           const n = stNames[dept.id]?.trim();
-                          if (e.key === "Enter" && n) addSt.mutate({ name: n, departmentId: dept.id });
+                          if (e.key === "Enter" && n)
+                            addSt.mutate({ name: n, departmentId: dept.id });
                         }}
                       />
                     </div>
@@ -560,7 +875,11 @@ function ReferenceTreeTab() {
             value={newDeptName}
             onChange={(e) => setNewDeptName(e.target.value)}
             className="max-w-xs"
-            onKeyDown={(e) => e.key === "Enter" && newDeptName.trim() && addDept.mutate(newDeptName.trim())}
+            onKeyDown={(e) =>
+              e.key === "Enter" &&
+              newDeptName.trim() &&
+              addDept.mutate(newDeptName.trim())
+            }
           />
           <Button
             size="sm"
@@ -586,21 +905,34 @@ function StageTriggersTab() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["config-stage-triggers"],
-    queryFn: () => apiFetch<{ stageTriggers: StageTrigger[] }>("/config/stage-triggers"),
+    queryFn: () =>
+      apiFetch<{ stageTriggers: StageTrigger[] }>("/config/stage-triggers"),
     retry: false,
   });
 
-  const [form, setForm] = React.useState({ hubspotStageKey: "", label: "", lienClockTrigger: "" });
+  const [form, setForm] = React.useState({
+    hubspotStageKey: "",
+    label: "",
+    lienClockTrigger: "",
+  });
 
   const addTrigger = useMutation({
     mutationFn: (body: typeof form) =>
-      apiFetch("/config/stage-triggers", { method: "POST", body: JSON.stringify(body) }),
+      apiFetch("/config/stage-triggers", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["config-stage-triggers"] });
       setForm({ hubspotStageKey: "", label: "", lienClockTrigger: "" });
       toast({ title: "Stage trigger added" });
     },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: Error) =>
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      }),
   });
 
   const triggers = data?.stageTriggers ?? [];
@@ -630,16 +962,32 @@ function StageTriggersTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/40">
-                <th className="text-left px-4 py-2 font-medium text-muted-foreground">HubSpot Stage Key</th>
-                <th className="text-left px-4 py-2 font-medium text-muted-foreground">Label</th>
-                <th className="text-left px-4 py-2 font-medium text-muted-foreground">Lien Clock Trigger</th>
-                <th className="text-left px-4 py-2 font-medium text-muted-foreground">Effect</th>
+                <th className="text-left px-4 py-2 font-medium text-muted-foreground">
+                  HubSpot Stage Key
+                </th>
+                <th className="text-left px-4 py-2 font-medium text-muted-foreground">
+                  Label
+                </th>
+                <th className="text-left px-4 py-2 font-medium text-muted-foreground">
+                  Lien Clock Trigger
+                </th>
+                <th className="text-left px-4 py-2 font-medium text-muted-foreground">
+                  Effect
+                </th>
               </tr>
             </thead>
             <tbody>
               {triggers.map((t, i) => (
-                <tr key={t.id} className={cn("border-b last:border-0", i % 2 === 0 ? "bg-background" : "bg-muted/20")}>
-                  <td className="px-4 py-2.5 font-mono text-xs">{t.hubspotStageKey}</td>
+                <tr
+                  key={t.id}
+                  className={cn(
+                    "border-b last:border-0",
+                    i % 2 === 0 ? "bg-background" : "bg-muted/20",
+                  )}
+                >
+                  <td className="px-4 py-2.5 font-mono text-xs">
+                    {t.hubspotStageKey}
+                  </td>
                   <td className="px-4 py-2.5">{t.label}</td>
                   <td className="px-4 py-2.5">
                     <span
@@ -648,11 +996,12 @@ function StageTriggersTab() {
                         t.lienClockTrigger === "none"
                           ? "bg-gray-100 text-gray-600"
                           : t.lienClockTrigger === "field_work_start"
-                          ? "bg-orange-100 text-orange-800"
-                          : "bg-blue-100 text-blue-800",
+                            ? "bg-orange-100 text-orange-800"
+                            : "bg-blue-100 text-blue-800",
                       )}
                     >
-                      {CLOCK_TRIGGER_LABELS[t.lienClockTrigger]?.label ?? t.lienClockTrigger}
+                      {CLOCK_TRIGGER_LABELS[t.lienClockTrigger]?.label ??
+                        t.lienClockTrigger}
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-xs text-muted-foreground">
@@ -677,7 +1026,9 @@ function StageTriggersTab() {
             <Input
               placeholder="e.g. install"
               value={form.hubspotStageKey}
-              onChange={(e) => setForm((f) => ({ ...f, hubspotStageKey: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, hubspotStageKey: e.target.value }))
+              }
             />
           </div>
           <div className="space-y-1">
@@ -685,24 +1036,30 @@ function StageTriggersTab() {
             <Input
               placeholder="e.g. Field Work Start"
               value={form.label}
-              onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, label: e.target.value }))
+              }
             />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Lien Clock Trigger</Label>
             <Select
               value={form.lienClockTrigger}
-              onValueChange={(v) => setForm((f) => ({ ...f, lienClockTrigger: v }))}
+              onValueChange={(v) =>
+                setForm((f) => ({ ...f, lienClockTrigger: v }))
+              }
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select trigger…" />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(CLOCK_TRIGGER_LABELS).map(([value, { label }]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
+                {Object.entries(CLOCK_TRIGGER_LABELS).map(
+                  ([value, { label }]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ),
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -738,7 +1095,9 @@ function JurisdictionRulesTab() {
     queryKey: ["config-jurisdictions"],
     retry: false,
     queryFn: async () => {
-      const base = await apiFetch<{ jurisdictions: Jurisdiction[] }>("/config/jurisdictions");
+      const base = await apiFetch<{ jurisdictions: Jurisdiction[] }>(
+        "/config/jurisdictions",
+      );
       const jurisdictions = await Promise.all(
         base.jurisdictions.map(async (j) => {
           const ruleSets = await Promise.all(
@@ -767,7 +1126,11 @@ function JurisdictionRulesTab() {
       toast({ title: "Rule set marked as legally reviewed" });
     },
     onError: (err: Error) =>
-      toast({ title: "Error", description: err.message, variant: "destructive" }),
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      }),
   });
 
   const jurisdictions = data?.jurisdictions ?? [];
@@ -824,14 +1187,19 @@ function JurisdictionRulesTab() {
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div>
-                      <CardTitle className="text-sm font-semibold">{rs.version}</CardTitle>
+                      <CardTitle className="text-sm font-semibold">
+                        {rs.version}
+                      </CardTitle>
                       <CardDescription className="text-xs mt-0.5">
                         {rs.statuteRef} · Effective{" "}
-                        {new Date(rs.effectiveDate).toLocaleDateString("en-US", {
-                          year: "numeric",
-                          month: "long",
-                          day: "numeric",
-                        })}
+                        {new Date(rs.effectiveDate).toLocaleDateString(
+                          "en-US",
+                          {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          },
+                        )}
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
@@ -867,11 +1235,21 @@ function JurisdictionRulesTab() {
                       <table className="w-full text-xs">
                         <thead>
                           <tr className="border-b bg-muted/40">
-                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Rule</th>
-                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Workflow</th>
-                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Stream</th>
-                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Deadline Expression</th>
-                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Citation</th>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                              Rule
+                            </th>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                              Workflow
+                            </th>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                              Stream
+                            </th>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                              Deadline Expression
+                            </th>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                              Citation
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
@@ -897,16 +1275,27 @@ function JurisdictionRulesTab() {
                               >
                                 <td className="px-3 py-2">
                                   <div className="font-medium text-foreground">
-                                    {RULE_KIND_LABELS[rule.ruleKind] ?? rule.ruleKind}
+                                    {RULE_KIND_LABELS[rule.ruleKind] ??
+                                      rule.ruleKind}
                                   </div>
-                                  <div className="text-muted-foreground">{rule.description}</div>
+                                  <div className="text-muted-foreground">
+                                    {rule.description}
+                                  </div>
                                 </td>
                                 <td className="px-3 py-2">
-                                  <WorkflowTypeBadge value={rule.lienWorkflowType} />
+                                  <WorkflowTypeBadge
+                                    value={rule.lienWorkflowType}
+                                  />
                                 </td>
-                                <td className="px-3 py-2 capitalize">{rule.workStream}</td>
-                                <td className="px-3 py-2 font-mono text-muted-foreground">{expr}</td>
-                                <td className="px-3 py-2 font-mono">{rule.statuteCitation}</td>
+                                <td className="px-3 py-2 capitalize">
+                                  {rule.workStream}
+                                </td>
+                                <td className="px-3 py-2 font-mono text-muted-foreground">
+                                  {expr}
+                                </td>
+                                <td className="px-3 py-2 font-mono">
+                                  {rule.statuteCitation}
+                                </td>
                               </tr>
                             );
                           })}
@@ -916,7 +1305,8 @@ function JurisdictionRulesTab() {
                     {!rs.legalReviewed && (
                       <p className="mt-2 text-xs text-amber-600 flex items-center gap-1">
                         <Clock className="h-3.5 w-3.5" />
-                        This rule set has not been legally reviewed. Do not use in production until reviewed.
+                        This rule set has not been legally reviewed. Do not use
+                        in production until reviewed.
                       </p>
                     )}
                   </CardContent>
@@ -945,7 +1335,8 @@ const QBO_ENV_VARS = [
   },
   {
     key: "QBO_REFRESH_TOKEN",
-    purpose: "Long-lived refresh token obtained from the initial OAuth2 authorization flow.",
+    purpose:
+      "Long-lived refresh token obtained from the initial OAuth2 authorization flow.",
   },
   {
     key: "QBO_REALM_ID",
@@ -953,7 +1344,16 @@ const QBO_ENV_VARS = [
   },
   {
     key: "QBO_ENVIRONMENT",
-    purpose: 'Set to "production" for the live QBO company, or "sandbox" (default) for testing.',
+    purpose:
+      'Set to "production" for the live QBO company, or "sandbox" (default) for testing.',
+  },
+];
+
+const HUBSPOT_ENV_VARS = [
+  {
+    key: "HUBSPOT_API_KEY",
+    purpose:
+      "Private app access token. Reads projects/companies from HubSpot and writes collection activity notes back to the associated company.",
   },
 ];
 
@@ -964,7 +1364,14 @@ function IntegrationsTab() {
     retry: false,
   });
 
+  const { data: hubspotStatus } = useQuery({
+    queryKey: ["config-hubspot-status"],
+    queryFn: () => apiFetch<{ connected: boolean }>("/config/hubspot-status"),
+    retry: false,
+  });
+
   const connected = qboStatus?.connected ?? false;
+  const hubspotConnected = hubspotStatus?.connected ?? false;
 
   return (
     <div className="space-y-6">
@@ -978,9 +1385,12 @@ function IntegrationsTab() {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
-              <CardTitle className="text-sm font-semibold">Connection Status</CardTitle>
+              <CardTitle className="text-sm font-semibold">
+                Connection Status
+              </CardTitle>
               <CardDescription className="text-xs mt-0.5">
-                All four required secrets must be present for live sync to activate.
+                All four required secrets must be present for live sync to
+                activate.
               </CardDescription>
             </div>
             {connected ? (
@@ -1002,8 +1412,12 @@ function IntegrationsTab() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b bg-muted/40">
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Secret Name</th>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Purpose</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                    Secret Name
+                  </th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                    Purpose
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1018,7 +1432,9 @@ function IntegrationsTab() {
                     <td className="px-3 py-2 font-mono font-semibold text-foreground whitespace-nowrap">
                       {v.key}
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">{v.purpose}</td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {v.purpose}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1026,10 +1442,87 @@ function IntegrationsTab() {
           </div>
 
           <p className="mt-3 text-xs text-muted-foreground">
-            Add these in the <span className="font-medium text-foreground">Secrets</span> tab of
+            Add these in the{" "}
+            <span className="font-medium text-foreground">Secrets</span> tab of
             your Replit workspace. Once all four required secrets are set, the{" "}
-            <span className="font-medium text-foreground">Sync QBO</span> button on each project
-            will pull live invoice data from QuickBooks Online.
+            <span className="font-medium text-foreground">Sync QBO</span> button
+            on each project will pull live invoice data from QuickBooks Online.
+          </p>
+        </CardContent>
+      </Card>
+
+      <SectionHeader
+        icon={Building2}
+        title="HubSpot CRM"
+        subtitle="Syncs projects and companies from HubSpot and writes collection activity notes back to the associated company. Credentials are stored as Replit secrets — never in code."
+      />
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <CardTitle className="text-sm font-semibold">
+                Connection Status
+              </CardTitle>
+              <CardDescription className="text-xs mt-0.5">
+                The API key must be present for live reads and activity
+                write-back to activate.
+              </CardDescription>
+            </div>
+            {hubspotConnected ? (
+              <div className="flex items-center gap-1.5 text-green-700 text-xs font-medium">
+                <CheckCircle2 className="h-4 w-4" />
+                Connected
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-amber-600 text-xs font-medium">
+                <Clock className="h-4 w-4" />
+                Not connected — add secret below
+              </div>
+            )}
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b bg-muted/40">
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                    Secret Name
+                  </th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                    Purpose
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {HUBSPOT_ENV_VARS.map((v, i) => (
+                  <tr
+                    key={v.key}
+                    className={cn(
+                      "border-b last:border-0",
+                      i % 2 === 0 ? "bg-background" : "bg-muted/20",
+                    )}
+                  >
+                    <td className="px-3 py-2 font-mono font-semibold text-foreground whitespace-nowrap">
+                      {v.key}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {v.purpose}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="mt-3 text-xs text-muted-foreground">
+            Add this in the{" "}
+            <span className="font-medium text-foreground">Secrets</span> tab of
+            your Replit workspace. When absent, project/company reads fall back
+            to fixture data and activity write-back uses a local placeholder so
+            development still works.
           </p>
         </CardContent>
       </Card>
@@ -1050,7 +1543,11 @@ export default function ConfigPage() {
         {[
           { value: "reference", label: "Reference Tree", Icon: Building2 },
           { value: "triggers", label: "Stage Triggers", Icon: GitBranch },
-          { value: "jurisdictions", label: "Jurisdiction Rules", Icon: ShieldAlert },
+          {
+            value: "jurisdictions",
+            label: "Jurisdiction Rules",
+            Icon: ShieldAlert,
+          },
           { value: "integrations", label: "Integrations", Icon: Banknote },
         ].map((t) => (
           <button
@@ -1059,8 +1556,16 @@ export default function ConfigPage() {
             className="flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-[12.5px] font-medium transition-colors"
             style={
               tab === t.value
-                ? { background: "var(--surface-3)", borderColor: "var(--helm-border)", color: "var(--text-base)" }
-                : { background: "var(--surface-2)", borderColor: "var(--helm-border)", color: "var(--text-dim)" }
+                ? {
+                    background: "var(--surface-3)",
+                    borderColor: "var(--helm-border)",
+                    color: "var(--text-base)",
+                  }
+                : {
+                    background: "var(--surface-2)",
+                    borderColor: "var(--helm-border)",
+                    color: "var(--text-dim)",
+                  }
             }
           >
             <t.Icon className="h-4 w-4 shrink-0" />
@@ -1077,8 +1582,12 @@ export default function ConfigPage() {
       <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
         <div>
           <p className="text-sm text-muted-foreground mt-1">
-            Reference tree, stage clock triggers, jurisdiction rule sets, and integrations for{" "}
-            <span className="font-medium text-foreground">HELM Fire Protection</span>.
+            Reference tree, stage clock triggers, jurisdiction rule sets, and
+            integrations for{" "}
+            <span className="font-medium text-foreground">
+              HELM Fire Protection
+            </span>
+            .
           </p>
         </div>
 

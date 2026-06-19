@@ -138,7 +138,31 @@ interface HsApiCompany {
 async function hsGet<T>(path: string, apiKey: string): Promise<T | null> {
   try {
     const res = await fetch(`${HUBSPOT_BASE}${path}`, {
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function hsPost<T>(
+  path: string,
+  apiKey: string,
+  body: unknown,
+): Promise<T | null> {
+  try {
+    const res = await fetch(`${HUBSPOT_BASE}${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
     });
     if (!res.ok) return null;
     return (await res.json()) as T;
@@ -182,7 +206,10 @@ export class HubSpotClient {
         };
       }
     }
-    return FIXTURE_PROJECTS.find((p) => p.hubspotProjectId === hubspotProjectId) ?? null;
+    return (
+      FIXTURE_PROJECTS.find((p) => p.hubspotProjectId === hubspotProjectId) ??
+      null
+    );
   }
 
   async getCompany(hubspotCompanyId: string): Promise<HubSpotCompany | null> {
@@ -203,7 +230,10 @@ export class HubSpotClient {
         };
       }
     }
-    return FIXTURE_COMPANIES.find((c) => c.hubspotCompanyId === hubspotCompanyId) ?? null;
+    return (
+      FIXTURE_COMPANIES.find((c) => c.hubspotCompanyId === hubspotCompanyId) ??
+      null
+    );
   }
 
   async listProjects(): Promise<HubSpotProject[]> {
@@ -224,13 +254,41 @@ export class HubSpotClient {
     return FIXTURE_PROJECTS;
   }
 
-  async postActivity(_params: {
+  async postActivity(params: {
     hubspotCompanyId: string;
     type: string;
     body: string;
     activityDate: Date;
   }): Promise<{ hubspotActivityId: string }> {
-    // Live note creation would use POST /crm/v3/objects/notes
+    if (this.live) {
+      // Create a Note engagement and associate it to the company.
+      // associationTypeId 190 = note → company (HUBSPOT_DEFINED).
+      const created = await hsPost<{ id: string }>(
+        "/crm/v3/objects/notes",
+        this.apiKey!,
+        {
+          properties: {
+            hs_note_body: params.body,
+            hs_timestamp: params.activityDate.toISOString(),
+          },
+          associations: [
+            {
+              to: { id: params.hubspotCompanyId },
+              types: [
+                {
+                  associationCategory: "HUBSPOT_DEFINED",
+                  associationTypeId: 190,
+                },
+              ],
+            },
+          ],
+        },
+      );
+      if (created?.id) {
+        return { hubspotActivityId: created.id };
+      }
+    }
+    // No-key (or failed live call) fallback — deterministic stub
     return { hubspotActivityId: `hs_act_stub_${Date.now()}` };
   }
 }

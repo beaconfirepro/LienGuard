@@ -62,19 +62,32 @@ function computeChecklist(
   const missing: { field: string; label: string }[] = [];
 
   if (!project.legalPropertyAddress) {
-    missing.push({ field: "legalPropertyAddress", label: "Legal property address is required" });
+    missing.push({
+      field: "legalPropertyAddress",
+      label: "Legal property address is required",
+    });
   }
   if (!project.county) {
     missing.push({ field: "county", label: "County is required" });
   }
   if (!project.contractStartDate) {
-    missing.push({ field: "contractStartDate", label: "Contract start date is required" });
+    missing.push({
+      field: "contractStartDate",
+      label: "Contract start date is required",
+    });
   }
   if (project.contractorTier === "second_tier") {
-    const hasHiringParty = parties.some((p) => p.partyRelationType === "hiring_party");
-    const hasOriginalContractor = parties.some((p) => p.partyRelationType === "original_contractor");
+    const hasHiringParty = parties.some(
+      (p) => p.partyRelationType === "hiring_party",
+    );
+    const hasOriginalContractor = parties.some(
+      (p) => p.partyRelationType === "original_contractor",
+    );
     if (!hasHiringParty) {
-      missing.push({ field: "hiring_party", label: "Hiring party is required for 2nd-tier projects" });
+      missing.push({
+        field: "hiring_party",
+        label: "Hiring party is required for 2nd-tier projects",
+      });
     }
     if (!hasOriginalContractor) {
       missing.push({
@@ -91,21 +104,36 @@ async function refreshChecklistComplete(orgId: string, projectId: string) {
   const [project] = await db
     .select()
     .from(lienProjectsTable)
-    .where(and(eq(lienProjectsTable.id, projectId), eq(lienProjectsTable.orgId, orgId)))
+    .where(
+      and(
+        eq(lienProjectsTable.id, projectId),
+        eq(lienProjectsTable.orgId, orgId),
+      ),
+    )
     .limit(1);
   if (!project) return;
 
   const parties = await db
     .select({ partyRelationType: projectPartyLinksTable.partyRelationType })
     .from(projectPartyLinksTable)
-    .where(and(eq(projectPartyLinksTable.lienProjectId, projectId), eq(projectPartyLinksTable.orgId, orgId)));
+    .where(
+      and(
+        eq(projectPartyLinksTable.lienProjectId, projectId),
+        eq(projectPartyLinksTable.orgId, orgId),
+      ),
+    );
 
   const { complete } = computeChecklist(project, parties);
 
   await db
     .update(lienProjectsTable)
     .set({ completionChecklistComplete: complete })
-    .where(and(eq(lienProjectsTable.id, projectId), eq(lienProjectsTable.orgId, orgId)));
+    .where(
+      and(
+        eq(lienProjectsTable.id, projectId),
+        eq(lienProjectsTable.orgId, orgId),
+      ),
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -115,11 +143,21 @@ async function refreshChecklistComplete(orgId: string, projectId: string) {
 // ---------------------------------------------------------------------------
 router.get("/", async (req, res) => {
   const { orgId } = getSession(req);
-  const { status, lienWorkflowType, contractorTier, incomplete, risk, page: pageRaw, limit: limitRaw } =
-    req.query as Record<string, string | undefined>;
+  const {
+    status,
+    lienWorkflowType,
+    contractorTier,
+    incomplete,
+    risk,
+    page: pageRaw,
+    limit: limitRaw,
+  } = req.query as Record<string, string | undefined>;
 
   const [projects, allStreams, allParties] = await Promise.all([
-    db.select().from(lienProjectsTable).where(eq(lienProjectsTable.orgId, orgId)),
+    db
+      .select()
+      .from(lienProjectsTable)
+      .where(eq(lienProjectsTable.orgId, orgId)),
     db.select().from(lienStreamsTable).where(eq(lienStreamsTable.orgId, orgId)),
     db
       .select({
@@ -135,7 +173,11 @@ router.get("/", async (req, res) => {
     const streams = allStreams.filter((s) => s.lienProjectId === p.id);
     const parties = allParties.filter((pp) => pp.lienProjectId === p.id);
     const { complete: liveChecklistComplete } = computeChecklist(p, parties);
-    return { ...p, completionChecklistComplete: liveChecklistComplete, streams };
+    return {
+      ...p,
+      completionChecklistComplete: liveChecklistComplete,
+      streams,
+    };
   });
 
   let filtered = projectsWithMeta;
@@ -164,7 +206,10 @@ router.get("/", async (req, res) => {
 
   const total = filtered.length;
   const page = Math.max(1, parseInt(pageRaw ?? "1", 10) || 1);
-  const limit = Math.min(200, Math.max(1, parseInt(limitRaw ?? "50", 10) || 50));
+  const limit = Math.min(
+    200,
+    Math.max(1, parseInt(limitRaw ?? "50", 10) || 50),
+  );
   const offset = (page - 1) * limit;
   const paginated = filtered.slice(offset, offset + limit);
 
@@ -178,13 +223,17 @@ router.get("/", async (req, res) => {
 // ---------------------------------------------------------------------------
 router.post("/", async (req, res) => {
   const { orgId } = getSession(req);
-  const { hubspotProjectId, subSystemTypeId, jurisdictionId: jurisdictionIdInput, contractorTier } =
-    req.body as {
-      hubspotProjectId?: string;
-      subSystemTypeId?: string;
-      jurisdictionId?: string;
-      contractorTier?: string;
-    };
+  const {
+    hubspotProjectId,
+    subSystemTypeId,
+    jurisdictionId: jurisdictionIdInput,
+    contractorTier,
+  } = req.body as {
+    hubspotProjectId?: string;
+    subSystemTypeId?: string;
+    jurisdictionId?: string;
+    contractorTier?: string;
+  };
 
   if (!hubspotProjectId || typeof hubspotProjectId !== "string") {
     res.status(400).json({ error: "hubspotProjectId is required" });
@@ -199,7 +248,12 @@ router.post("/", async (req, res) => {
   const [sst] = await db
     .select()
     .from(subSystemTypesTable)
-    .where(and(eq(subSystemTypesTable.id, subSystemTypeId), eq(subSystemTypesTable.orgId, orgId)))
+    .where(
+      and(
+        eq(subSystemTypesTable.id, subSystemTypeId),
+        eq(subSystemTypesTable.orgId, orgId),
+      ),
+    )
     .limit(1);
   if (!sst) {
     res.status(404).json({ error: "SubSystemType not found" });
@@ -212,11 +266,17 @@ router.post("/", async (req, res) => {
     const [firstJur] = await db
       .select({ id: jurisdictionsTable.id })
       .from(jurisdictionsTable)
-      .where(and(eq(jurisdictionsTable.orgId, orgId), eq(jurisdictionsTable.active, true)))
+      .where(
+        and(
+          eq(jurisdictionsTable.orgId, orgId),
+          eq(jurisdictionsTable.active, true),
+        ),
+      )
       .limit(1);
     if (!firstJur) {
       res.status(400).json({
-        error: "No active jurisdiction found for this org. Set up a jurisdiction in Settings first.",
+        error:
+          "No active jurisdiction found for this org. Set up a jurisdiction in Settings first.",
       });
       return;
     }
@@ -227,7 +287,10 @@ router.post("/", async (req, res) => {
       .select({ id: jurisdictionsTable.id })
       .from(jurisdictionsTable)
       .where(
-        and(eq(jurisdictionsTable.id, resolvedJurisdictionId), eq(jurisdictionsTable.orgId, orgId)),
+        and(
+          eq(jurisdictionsTable.id, resolvedJurisdictionId),
+          eq(jurisdictionsTable.orgId, orgId),
+        ),
       )
       .limit(1);
     if (!jur) {
@@ -248,7 +311,11 @@ router.post("/", async (req, res) => {
     )
     .limit(1);
   if (existing) {
-    res.status(409).json({ error: "A lien project for this HubSpot project already exists" });
+    res
+      .status(409)
+      .json({
+        error: "A lien project for this HubSpot project already exists",
+      });
     return;
   }
 
@@ -293,7 +360,9 @@ router.post("/:id/sync", async (req, res) => {
   const [project] = await db
     .select()
     .from(lienProjectsTable)
-    .where(and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)))
+    .where(
+      and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)),
+    )
     .limit(1);
 
   if (!project) {
@@ -313,17 +382,26 @@ router.post("/:id/sync", async (req, res) => {
       cachedHubspotStatus: hsProject?.status ?? project.cachedHubspotStatus,
       lastSyncedAt: now,
     })
-    .where(and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)));
+    .where(
+      and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)),
+    );
 
   // --- Sync parties ---
   const parties = await db
     .select()
     .from(projectPartyLinksTable)
     .where(
-      and(eq(projectPartyLinksTable.lienProjectId, id), eq(projectPartyLinksTable.orgId, orgId)),
+      and(
+        eq(projectPartyLinksTable.lienProjectId, id),
+        eq(projectPartyLinksTable.orgId, orgId),
+      ),
     );
 
-  const partySyncResults: { partyId: string; hubspotCompanyId: string; synced: boolean }[] = [];
+  const partySyncResults: {
+    partyId: string;
+    hubspotCompanyId: string;
+    synced: boolean;
+  }[] = [];
 
   for (const party of parties) {
     const hsCompany = await hubspotClient.getCompany(party.hubspotCompanyId);
@@ -333,11 +411,15 @@ router.post("/:id/sync", async (req, res) => {
         .update(projectPartyLinksTable)
         .set({
           cachedLegalName: hsCompany.legalName,
-          cachedMailingAddress: hsCompany.mailingAddress ?? party.cachedMailingAddress,
+          cachedMailingAddress:
+            hsCompany.mailingAddress ?? party.cachedMailingAddress,
           lastSyncedAt: now,
         })
         .where(
-          and(eq(projectPartyLinksTable.id, party.id), eq(projectPartyLinksTable.orgId, orgId)),
+          and(
+            eq(projectPartyLinksTable.id, party.id),
+            eq(projectPartyLinksTable.orgId, orgId),
+          ),
         );
 
       // Update matching linkedClientsTable row if one exists
@@ -356,9 +438,17 @@ router.post("/:id/sync", async (req, res) => {
           ),
         );
 
-      partySyncResults.push({ partyId: party.id, hubspotCompanyId: party.hubspotCompanyId, synced: true });
+      partySyncResults.push({
+        partyId: party.id,
+        hubspotCompanyId: party.hubspotCompanyId,
+        synced: true,
+      });
     } else {
-      partySyncResults.push({ partyId: party.id, hubspotCompanyId: party.hubspotCompanyId, synced: false });
+      partySyncResults.push({
+        partyId: party.id,
+        hubspotCompanyId: party.hubspotCompanyId,
+        synced: false,
+      });
     }
   }
 
@@ -366,12 +456,26 @@ router.post("/:id/sync", async (req, res) => {
   const [refreshed] = await db
     .select()
     .from(lienProjectsTable)
-    .where(and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)))
+    .where(
+      and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)),
+    )
     .limit(1);
+
+  // Collect the project's synced streams to return alongside the refreshed project
+  const syncedStreams = await db
+    .select()
+    .from(lienStreamsTable)
+    .where(
+      and(
+        eq(lienStreamsTable.lienProjectId, id),
+        eq(lienStreamsTable.orgId, orgId),
+      ),
+    );
 
   res.json({
     project: refreshed,
     parties: partySyncResults,
+    streams: syncedStreams,
     syncedAt: now.toISOString(),
     live: !!process.env.HUBSPOT_API_KEY,
   });
@@ -389,7 +493,9 @@ router.get("/:id/deadlines", async (req, res) => {
   const [project] = await db
     .select()
     .from(lienProjectsTable)
-    .where(and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)))
+    .where(
+      and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)),
+    )
     .limit(1);
 
   if (!project) {
@@ -400,10 +506,18 @@ router.get("/:id/deadlines", async (req, res) => {
   const streams = await db
     .select()
     .from(lienStreamsTable)
-    .where(and(eq(lienStreamsTable.lienProjectId, id), eq(lienStreamsTable.orgId, orgId)));
+    .where(
+      and(
+        eq(lienStreamsTable.lienProjectId, id),
+        eq(lienStreamsTable.orgId, orgId),
+      ),
+    );
 
   if (streams.length === 0) {
-    res.json({ project: { id: project.id, cachedProjectName: project.cachedProjectName }, streams: [] });
+    res.json({
+      project: { id: project.id, cachedProjectName: project.cachedProjectName },
+      streams: [],
+    });
     return;
   }
 
@@ -412,7 +526,12 @@ router.get("/:id/deadlines", async (req, res) => {
   const allWorkMonths = await db
     .select()
     .from(workMonthsTable)
-    .where(and(inArray(workMonthsTable.lienStreamId, streamIds), eq(workMonthsTable.orgId, orgId)));
+    .where(
+      and(
+        inArray(workMonthsTable.lienStreamId, streamIds),
+        eq(workMonthsTable.orgId, orgId),
+      ),
+    );
 
   const workMonthIds = allWorkMonths.map((wm) => wm.id);
 
@@ -422,7 +541,10 @@ router.get("/:id/deadlines", async (req, res) => {
           .select()
           .from(lienDeadlinesTable)
           .where(
-            and(inArray(lienDeadlinesTable.workMonthId, workMonthIds), eq(lienDeadlinesTable.orgId, orgId)),
+            and(
+              inArray(lienDeadlinesTable.workMonthId, workMonthIds),
+              eq(lienDeadlinesTable.orgId, orgId),
+            ),
           )
       : [];
 
@@ -451,20 +573,35 @@ router.get("/:id/deadlines", async (req, res) => {
         deadlines: allDeadlines
           .filter((d) => d.workMonthId === wm.id)
           .map((d) => ({ ...d, rule: ruleMap.get(d.ruleId) ?? null }))
-          .sort((a, b) => new Date(a.adjustedDate).getTime() - new Date(b.adjustedDate).getTime()),
+          .sort(
+            (a, b) =>
+              new Date(a.adjustedDate).getTime() -
+              new Date(b.adjustedDate).getTime(),
+          ),
       }))
-      .sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime());
+      .sort(
+        (a, b) => new Date(a.month).getTime() - new Date(b.month).getTime(),
+      );
 
-    const nextDeadline = workMonths
-      .flatMap((wm) => wm.deadlines)
-      .filter((d) => !d.satisfiedAt && new Date(d.adjustedDate) > new Date())
-      .sort((a, b) => new Date(a.adjustedDate).getTime() - new Date(b.adjustedDate).getTime())[0] ?? null;
+    const nextDeadline =
+      workMonths
+        .flatMap((wm) => wm.deadlines)
+        .filter((d) => !d.satisfiedAt && new Date(d.adjustedDate) > new Date())
+        .sort(
+          (a, b) =>
+            new Date(a.adjustedDate).getTime() -
+            new Date(b.adjustedDate).getTime(),
+        )[0] ?? null;
 
     return { ...stream, workMonths, nextDeadline };
   });
 
   res.json({
-    project: { id: project.id, cachedProjectName: project.cachedProjectName, lienWorkflowType: project.lienWorkflowType },
+    project: {
+      id: project.id,
+      cachedProjectName: project.cachedProjectName,
+      lienWorkflowType: project.lienWorkflowType,
+    },
     streams: streamsWithDeadlines,
     summary: {
       totalStreams: streams.length,
@@ -485,7 +622,9 @@ router.get("/:id", async (req, res) => {
   const [project] = await db
     .select()
     .from(lienProjectsTable)
-    .where(and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)))
+    .where(
+      and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)),
+    )
     .limit(1);
 
   if (!project) {
@@ -498,24 +637,41 @@ router.get("/:id", async (req, res) => {
       .select()
       .from(projectPartyLinksTable)
       .where(
-        and(eq(projectPartyLinksTable.lienProjectId, id), eq(projectPartyLinksTable.orgId, orgId)),
+        and(
+          eq(projectPartyLinksTable.lienProjectId, id),
+          eq(projectPartyLinksTable.orgId, orgId),
+        ),
       ),
     db
       .select()
       .from(lienStreamsTable)
-      .where(and(eq(lienStreamsTable.lienProjectId, id), eq(lienStreamsTable.orgId, orgId))),
+      .where(
+        and(
+          eq(lienStreamsTable.lienProjectId, id),
+          eq(lienStreamsTable.orgId, orgId),
+        ),
+      ),
     db
       .select()
       .from(subSystemTypesTable)
       .where(
-        and(eq(subSystemTypesTable.id, project.subSystemTypeId), eq(subSystemTypesTable.orgId, orgId)),
+        and(
+          eq(subSystemTypesTable.id, project.subSystemTypeId),
+          eq(subSystemTypesTable.orgId, orgId),
+        ),
       )
       .limit(1),
   ]);
 
   const checklist = computeChecklist(project, parties);
 
-  res.json({ project, parties, streams, subSystemType: sstRows[0] ?? null, checklist });
+  res.json({
+    project,
+    parties,
+    streams,
+    subSystemType: sstRows[0] ?? null,
+    checklist,
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -526,17 +682,20 @@ router.patch("/:id", async (req, res) => {
   const { orgId } = getSession(req);
   const id = req.params.id as string;
 
-  const { contractorTier, legalPropertyAddress, county, contractStartDate } = req.body as {
-    contractorTier?: string;
-    legalPropertyAddress?: string | null;
-    county?: string | null;
-    contractStartDate?: string | null;
-  };
+  const { contractorTier, legalPropertyAddress, county, contractStartDate } =
+    req.body as {
+      contractorTier?: string;
+      legalPropertyAddress?: string | null;
+      county?: string | null;
+      contractStartDate?: string | null;
+    };
 
   const [existing] = await db
     .select()
     .from(lienProjectsTable)
-    .where(and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)))
+    .where(
+      and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)),
+    )
     .limit(1);
 
   if (!existing) {
@@ -549,15 +708,20 @@ router.patch("/:id", async (req, res) => {
 
   if (contractorTier !== undefined) {
     if (!validTiers.includes(contractorTier)) {
-      res.status(400).json({ error: "contractorTier must be first_tier or second_tier" });
+      res
+        .status(400)
+        .json({ error: "contractorTier must be first_tier or second_tier" });
       return;
     }
     updates.contractorTier = contractorTier;
   }
-  if (legalPropertyAddress !== undefined) updates.legalPropertyAddress = legalPropertyAddress;
+  if (legalPropertyAddress !== undefined)
+    updates.legalPropertyAddress = legalPropertyAddress;
   if (county !== undefined) updates.county = county;
   if (contractStartDate !== undefined) {
-    updates.contractStartDate = contractStartDate ? new Date(contractStartDate) : null;
+    updates.contractStartDate = contractStartDate
+      ? new Date(contractStartDate)
+      : null;
   }
 
   if (Object.keys(updates).length === 0) {
@@ -568,7 +732,9 @@ router.patch("/:id", async (req, res) => {
   await db
     .update(lienProjectsTable)
     .set(updates)
-    .where(and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)));
+    .where(
+      and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)),
+    );
 
   // Recompute checklist after update
   await refreshChecklistComplete(orgId, id);
@@ -576,7 +742,9 @@ router.patch("/:id", async (req, res) => {
   const [refreshed] = await db
     .select()
     .from(lienProjectsTable)
-    .where(and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)))
+    .where(
+      and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)),
+    )
     .limit(1);
 
   res.json({ project: refreshed });
@@ -592,7 +760,9 @@ router.get("/:id/checklist", async (req, res) => {
   const [project] = await db
     .select()
     .from(lienProjectsTable)
-    .where(and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)))
+    .where(
+      and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)),
+    )
     .limit(1);
 
   if (!project) {
@@ -604,7 +774,10 @@ router.get("/:id/checklist", async (req, res) => {
     .select({ partyRelationType: projectPartyLinksTable.partyRelationType })
     .from(projectPartyLinksTable)
     .where(
-      and(eq(projectPartyLinksTable.lienProjectId, id), eq(projectPartyLinksTable.orgId, orgId)),
+      and(
+        eq(projectPartyLinksTable.lienProjectId, id),
+        eq(projectPartyLinksTable.orgId, orgId),
+      ),
     );
 
   const checklist = computeChecklist(project, parties);
@@ -620,13 +793,17 @@ router.post("/:id/parties", async (req, res) => {
   const { orgId } = getSession(req);
   const projectId = req.params.id as string;
 
-  const { hubspotCompanyId, partyRelationType, cachedLegalName, cachedMailingAddress } =
-    req.body as {
-      hubspotCompanyId?: string;
-      partyRelationType?: string;
-      cachedLegalName?: string;
-      cachedMailingAddress?: string;
-    };
+  const {
+    hubspotCompanyId,
+    partyRelationType,
+    cachedLegalName,
+    cachedMailingAddress,
+  } = req.body as {
+    hubspotCompanyId?: string;
+    partyRelationType?: string;
+    cachedLegalName?: string;
+    cachedMailingAddress?: string;
+  };
 
   if (!hubspotCompanyId || typeof hubspotCompanyId !== "string") {
     res.status(400).json({ error: "hubspotCompanyId is required" });
@@ -645,7 +822,12 @@ router.post("/:id/parties", async (req, res) => {
   const [project] = await db
     .select()
     .from(lienProjectsTable)
-    .where(and(eq(lienProjectsTable.id, projectId), eq(lienProjectsTable.orgId, orgId)))
+    .where(
+      and(
+        eq(lienProjectsTable.id, projectId),
+        eq(lienProjectsTable.orgId, orgId),
+      ),
+    )
     .limit(1);
 
   if (!project) {
@@ -688,7 +870,8 @@ router.post("/:id/parties", async (req, res) => {
 
   if (!legalName) {
     res.status(400).json({
-      error: "cachedLegalName is required (or hubspotCompanyId must match a known company)",
+      error:
+        "cachedLegalName is required (or hubspotCompanyId must match a known company)",
     });
     return;
   }
@@ -698,7 +881,10 @@ router.post("/:id/parties", async (req, res) => {
     .values({
       orgId,
       lienProjectId: projectId,
-      partyRelationType: partyRelationType as "owner" | "original_contractor" | "hiring_party",
+      partyRelationType: partyRelationType as
+        | "owner"
+        | "original_contractor"
+        | "hiring_party",
       hubspotCompanyId,
       cachedLegalName: legalName,
       cachedMailingAddress: mailingAddress ?? null,
@@ -713,10 +899,18 @@ router.post("/:id/parties", async (req, res) => {
   const warnings: string[] = [];
   if (project.contractorTier === "second_tier") {
     const allParties = [...existingParties, party];
-    const hasHP = allParties.some((p) => p.partyRelationType === "hiring_party");
-    const hasOC = allParties.some((p) => p.partyRelationType === "original_contractor");
-    if (!hasHP) warnings.push("hiring_party is still required for 2nd-tier projects");
-    if (!hasOC) warnings.push("original_contractor is still required for 2nd-tier projects");
+    const hasHP = allParties.some(
+      (p) => p.partyRelationType === "hiring_party",
+    );
+    const hasOC = allParties.some(
+      (p) => p.partyRelationType === "original_contractor",
+    );
+    if (!hasHP)
+      warnings.push("hiring_party is still required for 2nd-tier projects");
+    if (!hasOC)
+      warnings.push(
+        "original_contractor is still required for 2nd-tier projects",
+      );
   }
 
   res.status(201).json({ party, warnings });
@@ -777,7 +971,12 @@ router.get("/:id/last-timelog", async (req, res) => {
   const [project] = await db
     .select({ id: lienProjectsTable.id })
     .from(lienProjectsTable)
-    .where(and(eq(lienProjectsTable.id, projectId), eq(lienProjectsTable.orgId, orgId)))
+    .where(
+      and(
+        eq(lienProjectsTable.id, projectId),
+        eq(lienProjectsTable.orgId, orgId),
+      ),
+    )
     .limit(1);
 
   if (!project) {
@@ -800,12 +999,22 @@ router.get("/:id/last-timelog", async (req, res) => {
         eq(timesheetLinksTable.orgId, orgId),
       ),
     )
-    .groupBy(timesheetLinksTable.connecteamUserId, timesheetLinksTable.displayName);
+    .groupBy(
+      timesheetLinksTable.connecteamUserId,
+      timesheetLinksTable.displayName,
+    );
 
   // When a single user has records both with and without a displayName (e.g. seeded rows
   // before the column was added), we may get duplicate userId rows. Merge them: prefer the
   // row with a displayName and keep the latest workDate across both.
-  const merged = new Map<string, { connecteamUserId: string; displayName: string | null; lastWorkDate: Date | null }>();
+  const merged = new Map<
+    string,
+    {
+      connecteamUserId: string;
+      displayName: string | null;
+      lastWorkDate: Date | null;
+    }
+  >();
   for (const row of rows) {
     const existing = merged.get(row.connecteamUserId);
     if (!existing) {
@@ -820,7 +1029,8 @@ router.get("/:id/last-timelog", async (req, res) => {
       const rowMs = row.lastWorkDate?.getTime() ?? 0;
       if (rowMs > existingMs) existing.lastWorkDate = row.lastWorkDate ?? null;
       // Prefer a non-null displayName
-      if (!existing.displayName && row.displayName) existing.displayName = row.displayName;
+      if (!existing.displayName && row.displayName)
+        existing.displayName = row.displayName;
     }
   }
 

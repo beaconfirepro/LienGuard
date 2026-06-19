@@ -30,7 +30,10 @@ router.get("/departments", async (req, res) => {
   const [departments, systemTypes, subSystemTypes] = await Promise.all([
     db.select().from(departmentsTable).where(eq(departmentsTable.orgId, orgId)),
     db.select().from(systemTypesTable).where(eq(systemTypesTable.orgId, orgId)),
-    db.select().from(subSystemTypesTable).where(eq(subSystemTypesTable.orgId, orgId)),
+    db
+      .select()
+      .from(subSystemTypesTable)
+      .where(eq(subSystemTypesTable.orgId, orgId)),
   ]);
 
   const tree = departments.map((dept) => ({
@@ -39,7 +42,9 @@ router.get("/departments", async (req, res) => {
       .filter((st) => st.departmentId === dept.id)
       .map((st) => ({
         ...st,
-        subSystemTypes: subSystemTypes.filter((sst) => sst.systemTypeId === st.id),
+        subSystemTypes: subSystemTypes.filter(
+          (sst) => sst.systemTypeId === st.id,
+        ),
       })),
   }));
 
@@ -112,7 +117,10 @@ router.get("/system-types", async (req, res) => {
     .from(systemTypesTable)
     .where(
       departmentId
-        ? and(eq(systemTypesTable.orgId, orgId), eq(systemTypesTable.departmentId, departmentId))
+        ? and(
+            eq(systemTypesTable.orgId, orgId),
+            eq(systemTypesTable.departmentId, departmentId),
+          )
         : eq(systemTypesTable.orgId, orgId),
     );
 
@@ -170,7 +178,12 @@ router.post("/system-types", requireAdmin, async (req, res) => {
   const [dept] = await db
     .select()
     .from(departmentsTable)
-    .where(and(eq(departmentsTable.id, departmentId), eq(departmentsTable.orgId, orgId)))
+    .where(
+      and(
+        eq(departmentsTable.id, departmentId),
+        eq(departmentsTable.orgId, orgId),
+      ),
+    )
     .limit(1);
 
   if (!dept) {
@@ -203,7 +216,10 @@ router.get("/sub-system-types", async (req, res) => {
     .from(subSystemTypesTable)
     .where(
       systemTypeId
-        ? and(eq(subSystemTypesTable.orgId, orgId), eq(subSystemTypesTable.systemTypeId, systemTypeId))
+        ? and(
+            eq(subSystemTypesTable.orgId, orgId),
+            eq(subSystemTypesTable.systemTypeId, systemTypeId),
+          )
         : eq(subSystemTypesTable.orgId, orgId),
     );
 
@@ -232,12 +248,18 @@ router.post("/sub-system-types", requireAdmin, async (req, res) => {
   }
   if (!lienWorkflowType || typeof lienWorkflowType !== "string") {
     res.status(400).json({
-      error: "lienWorkflowType is required — every sub-system type must declare its lien workflow (L05)",
+      error:
+        "lienWorkflowType is required — every sub-system type must declare its lien workflow (L05)",
     });
     return;
   }
 
-  const validTypes = ["residential_sub", "commercial_sub", "public_bond", "none"];
+  const validTypes = [
+    "residential_sub",
+    "commercial_sub",
+    "public_bond",
+    "none",
+  ];
   if (!validTypes.includes(lienWorkflowType)) {
     res.status(400).json({
       error: `lienWorkflowType must be one of: ${validTypes.join(", ")}`,
@@ -248,7 +270,12 @@ router.post("/sub-system-types", requireAdmin, async (req, res) => {
   const [st] = await db
     .select()
     .from(systemTypesTable)
-    .where(and(eq(systemTypesTable.id, systemTypeId), eq(systemTypesTable.orgId, orgId)))
+    .where(
+      and(
+        eq(systemTypesTable.id, systemTypeId),
+        eq(systemTypesTable.orgId, orgId),
+      ),
+    )
     .limit(1);
 
   if (!st) {
@@ -288,7 +315,9 @@ router.patch("/sub-system-types/:id", requireAdmin, async (req, res) => {
   const [existing] = await db
     .select()
     .from(subSystemTypesTable)
-    .where(and(eq(subSystemTypesTable.id, id), eq(subSystemTypesTable.orgId, orgId)))
+    .where(
+      and(eq(subSystemTypesTable.id, id), eq(subSystemTypesTable.orgId, orgId)),
+    )
     .limit(1);
 
   if (!existing) {
@@ -296,9 +325,17 @@ router.patch("/sub-system-types/:id", requireAdmin, async (req, res) => {
     return;
   }
 
-  const validTypes = ["residential_sub", "commercial_sub", "public_bond", "none"];
+  const validTypes = [
+    "residential_sub",
+    "commercial_sub",
+    "public_bond",
+    "none",
+  ];
 
-  if (lienWorkflowType !== undefined && !validTypes.includes(lienWorkflowType)) {
+  if (
+    lienWorkflowType !== undefined &&
+    !validTypes.includes(lienWorkflowType)
+  ) {
     res.status(400).json({
       error: `lienWorkflowType must be one of: ${validTypes.join(", ")}`,
     });
@@ -308,7 +345,11 @@ router.patch("/sub-system-types/:id", requireAdmin, async (req, res) => {
   const setName = name !== undefined ? name.trim() : undefined;
   const setWorkflowType =
     lienWorkflowType !== undefined
-      ? (lienWorkflowType as "residential_sub" | "commercial_sub" | "public_bond" | "none")
+      ? (lienWorkflowType as
+          | "residential_sub"
+          | "commercial_sub"
+          | "public_bond"
+          | "none")
       : undefined;
 
   if (setName === undefined && setWorkflowType === undefined) {
@@ -320,9 +361,13 @@ router.patch("/sub-system-types/:id", requireAdmin, async (req, res) => {
     .update(subSystemTypesTable)
     .set({
       ...(setName !== undefined && { name: setName }),
-      ...(setWorkflowType !== undefined && { lienWorkflowType: setWorkflowType }),
+      ...(setWorkflowType !== undefined && {
+        lienWorkflowType: setWorkflowType,
+      }),
     })
-    .where(and(eq(subSystemTypesTable.id, id), eq(subSystemTypesTable.orgId, orgId)))
+    .where(
+      and(eq(subSystemTypesTable.id, id), eq(subSystemTypesTable.orgId, orgId)),
+    )
     .returning();
 
   res.json({ subSystemType: updated });
@@ -384,7 +429,10 @@ router.post("/stage-triggers", requireAdmin, async (req, res) => {
       orgId,
       hubspotStageKey: hubspotStageKey.trim(),
       label: label.trim(),
-      lienClockTrigger: lienClockTrigger as "none" | "design_start" | "field_work_start",
+      lienClockTrigger: lienClockTrigger as
+        | "none"
+        | "design_start"
+        | "field_work_start",
     })
     .returning();
 
@@ -402,8 +450,14 @@ router.post("/stage-triggers", requireAdmin, async (req, res) => {
 router.get("/jurisdictions", async (req, res) => {
   const { orgId } = getSession(req);
   const [jurisdictions, ruleSets] = await Promise.all([
-    db.select().from(jurisdictionsTable).where(eq(jurisdictionsTable.orgId, orgId)),
-    db.select().from(lienRuleSetsTable).where(eq(lienRuleSetsTable.orgId, orgId)),
+    db
+      .select()
+      .from(jurisdictionsTable)
+      .where(eq(jurisdictionsTable.orgId, orgId)),
+    db
+      .select()
+      .from(lienRuleSetsTable)
+      .where(eq(lienRuleSetsTable.orgId, orgId)),
   ]);
 
   const result = jurisdictions.map((j) => ({
@@ -465,10 +519,16 @@ router.post("/rule-sets", requireAdmin, async (req, res) => {
     return;
   }
   if (!effectiveDate || isNaN(Date.parse(effectiveDate))) {
-    res.status(400).json({ error: "effectiveDate must be a valid ISO date string" });
+    res
+      .status(400)
+      .json({ error: "effectiveDate must be a valid ISO date string" });
     return;
   }
-  if (!statuteRef || typeof statuteRef !== "string" || statuteRef.trim() === "") {
+  if (
+    !statuteRef ||
+    typeof statuteRef !== "string" ||
+    statuteRef.trim() === ""
+  ) {
     res.status(400).json({ error: "statuteRef is required" });
     return;
   }
@@ -476,7 +536,12 @@ router.post("/rule-sets", requireAdmin, async (req, res) => {
   const [jur] = await db
     .select()
     .from(jurisdictionsTable)
-    .where(and(eq(jurisdictionsTable.id, jurisdictionId), eq(jurisdictionsTable.orgId, orgId)))
+    .where(
+      and(
+        eq(jurisdictionsTable.id, jurisdictionId),
+        eq(jurisdictionsTable.orgId, orgId),
+      ),
+    )
     .limit(1);
 
   if (!jur) {
@@ -513,7 +578,9 @@ router.get("/rule-sets/:id/rules", async (req, res) => {
   const [rs] = await db
     .select()
     .from(lienRuleSetsTable)
-    .where(and(eq(lienRuleSetsTable.id, id), eq(lienRuleSetsTable.orgId, orgId)))
+    .where(
+      and(eq(lienRuleSetsTable.id, id), eq(lienRuleSetsTable.orgId, orgId)),
+    )
     .limit(1);
 
   if (!rs) {
@@ -524,7 +591,9 @@ router.get("/rule-sets/:id/rules", async (req, res) => {
   const rules = await db
     .select()
     .from(lienRulesTable)
-    .where(and(eq(lienRulesTable.ruleSetId, id), eq(lienRulesTable.orgId, orgId)));
+    .where(
+      and(eq(lienRulesTable.ruleSetId, id), eq(lienRulesTable.orgId, orgId)),
+    );
 
   res.json({ rules });
 });
@@ -595,7 +664,12 @@ router.post("/rules", requireAdmin, async (req, res) => {
   const [rs] = await db
     .select()
     .from(lienRuleSetsTable)
-    .where(and(eq(lienRuleSetsTable.id, ruleSetId), eq(lienRuleSetsTable.orgId, orgId)))
+    .where(
+      and(
+        eq(lienRuleSetsTable.id, ruleSetId),
+        eq(lienRuleSetsTable.orgId, orgId),
+      ),
+    )
     .limit(1);
 
   if (!rs) {
@@ -660,7 +734,9 @@ router.patch("/rule-sets/:id/review", requireAdmin, async (req, res) => {
   const [existing] = await db
     .select()
     .from(lienRuleSetsTable)
-    .where(and(eq(lienRuleSetsTable.id, id), eq(lienRuleSetsTable.orgId, orgId)))
+    .where(
+      and(eq(lienRuleSetsTable.id, id), eq(lienRuleSetsTable.orgId, orgId)),
+    )
     .limit(1);
 
   if (!existing) {
@@ -671,7 +747,9 @@ router.patch("/rule-sets/:id/review", requireAdmin, async (req, res) => {
   const [updated] = await db
     .update(lienRuleSetsTable)
     .set({ legalReviewed: true })
-    .where(and(eq(lienRuleSetsTable.id, id), eq(lienRuleSetsTable.orgId, orgId)))
+    .where(
+      and(eq(lienRuleSetsTable.id, id), eq(lienRuleSetsTable.orgId, orgId)),
+    )
     .returning();
 
   res.json({ ruleSet: updated });
@@ -691,6 +769,17 @@ router.get("/qbo-status", (_req, res) => {
     process.env.QBO_REFRESH_TOKEN &&
     process.env.QBO_REALM_ID
   );
+  res.json({ connected });
+});
+
+/**
+ * GET /config/hubspot-status
+ *
+ * Returns whether a HubSpot API key is present in the environment.
+ * The UI uses this to show connection status. No credential values are returned.
+ */
+router.get("/hubspot-status", (_req, res) => {
+  const connected = !!process.env.HUBSPOT_API_KEY;
   res.json({ connected });
 });
 
