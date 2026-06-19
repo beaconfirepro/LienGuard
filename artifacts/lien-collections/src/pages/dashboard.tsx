@@ -144,7 +144,7 @@ export default function DashboardPage() {
     {
       label: "In Collections",
       value: inCollections,
-      sub: inCollections > 0 ? "active dunning" : "all current",
+      sub: inCollections > 0 ? "active escalations" : "all current",
       color: inCollections > 0 ? "#eb143f" : "#14eba3",
     },
     {

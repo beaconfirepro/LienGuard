@@ -434,7 +434,7 @@ export default function CollectionsPage() {
                       advanceMut.mutate({ accountId: a.id });
                     }}
                     disabled={a.hasOpenPromise}
-                    title={a.hasOpenPromise ? "Suppressed — promise on file" : "Advance dunning"}
+                    title={a.hasOpenPromise ? "Suppressed — promise on file" : "Escalate"}
                     className="flex shrink-0 items-center gap-1 rounded-md border px-2 py-1.5 text-[11.5px] font-semibold disabled:opacity-40"
                     style={{ color: "#f59f0a", background: alpha("#f59f0a", 0.1), borderColor: alpha("#f59f0a", 0.25) }}
                   >

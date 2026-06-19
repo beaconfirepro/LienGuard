@@ -165,9 +165,9 @@ export default function AccountDetailPage() {
       <QueueList
         items={[
           { id: "x1", title: "Log activity", sub: "Writes to HubSpot", action: "Log", actionTone: "#6366f1" },
-          { id: "x2", title: "Record promise-to-pay", sub: "Suppresses dunning", action: "Add", actionTone: "#14eba3" },
+          { id: "x2", title: "Record promise-to-pay", sub: "Suppresses escalation", action: "Add", actionTone: "#14eba3" },
           { id: "x3", title: "Payment plan", sub: "Create installments" },
-          { id: "x4", title: "Escalate stage", sub: "Advance dunning", action: "Escalate", actionTone: "#eb143f" },
+          { id: "x4", title: "Escalate stage", sub: "Escalate to next stage", action: "Escalate", actionTone: "#eb143f" },
         ]}
       />
     </Panel>,
