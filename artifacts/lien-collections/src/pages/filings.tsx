@@ -184,7 +184,7 @@ export default function FilingsPage() {
                 return (
                   <button
                     key={row.streamId}
-                    onClick={() => setLocation(`/projects/${row.lienProjectId}?tab=filing&stream=${row.streamId}`)}
+                    onClick={() => setLocation(`/filing/${row.streamId}`)}
                     className="cursor-pointer rounded-md border px-3 py-2 text-left transition-colors"
                     style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)" }}
                   >
@@ -225,7 +225,7 @@ export default function FilingsPage() {
             .map((f) => (
               <button
                 key={f.streamId}
-                onClick={() => setLocation(`/projects/${f.projectId}?tab=filing&stream=${f.streamId}`)}
+                onClick={() => setLocation(`/filing/${f.streamId}`)}
                 className="flex flex-col gap-1 rounded-md border px-3 py-2 text-left"
                 style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)" }}
               >
@@ -352,7 +352,7 @@ export default function FilingsPage() {
           columns={columns}
           rows={filtered}
           gridTemplate="1.6fr .8fr .8fr .9fr"
-          onRowClick={(r: FilingRow) => setLocation(`/projects/${r.projectId}?tab=filing&stream=${r.streamId}`)}
+          onRowClick={(r: FilingRow) => setLocation(`/filing/${r.streamId}`)}
         />
       )}
     </>

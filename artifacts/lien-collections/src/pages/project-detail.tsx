@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useParams, useLocation, useSearch } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { Screen } from "@/components/primitives/Screen";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,8 +60,7 @@ import { cn } from "@/lib/utils";
 import { DeadlineCountdown } from "@/components/ui/deadline-countdown";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Panel, useLeftPanel, useRightPanel } from "@/components/nav/AppShell";
-import { WorkspaceHeader, WorkspaceTabs } from "@/components/nav/WorkspaceLayout";
-import FilingWorkspace from "@/components/filing/FilingWorkspace";
+import { WorkspaceHeader } from "@/components/nav/WorkspaceLayout";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -2162,7 +2161,6 @@ function DeadlinesTab({
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
-  const search = useSearch();
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["project", id],
@@ -2178,59 +2176,14 @@ export default function ProjectDetailPage() {
     enabled: !!id,
   });
 
-  const [tab, setTab] = React.useState<"deadlines" | "filing">(() =>
-    new URLSearchParams(search).get("tab") === "filing" ? "filing" : "deadlines",
-  );
-  const [selectedStreamId, setSelectedStreamId] = React.useState<string>(
-    () => new URLSearchParams(search).get("stream") ?? "",
-  );
   const [showHolds, setShowHolds] = React.useState(false);
 
   const streams = data?.streams ?? [];
-  const streamIds = streams.map((s) => s.id).join(",");
 
-  // Re-sync tab + stream from the URL whenever the query string changes. This
-  // matters when navigating between /projects/:id?tab=...&stream=... URLs while
-  // this page is already mounted (e.g. compliance links, Filings rows), since
-  // wouter reuses the component instead of remounting it.
-  React.useEffect(() => {
-    const params = new URLSearchParams(search);
-    setTab(params.get("tab") === "filing" ? "filing" : "deadlines");
-    const s = params.get("stream");
-    if (s) setSelectedStreamId(s);
-  }, [search]);
-
-  // Default the selected stream to the first one once data arrives.
-  React.useEffect(() => {
-    if (streams.length === 0) return;
-    setSelectedStreamId((cur) =>
-      cur && streams.some((s) => s.id === cur) ? cur : streams[0].id,
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [streamIds]);
-
-  function syncUrl(nextTab: "deadlines" | "filing", nextStream: string) {
-    const params = new URLSearchParams();
-    params.set("tab", nextTab);
-    if (nextTab === "filing" && nextStream) params.set("stream", nextStream);
-    setLocation(`/projects/${id}?${params.toString()}`, { replace: true });
-  }
-
-  function changeTab(next: string) {
-    const t = next === "filing" ? "filing" : "deadlines";
-    setTab(t);
-    syncUrl(t, selectedStreamId);
-  }
-
+  // Filing Workspace now lives at its own route (/filing/:streamId), reached via
+  // the Filings menu or a stream's "Open filing" action.
   function openFiling(streamId: string) {
-    setSelectedStreamId(streamId);
-    setTab("filing");
-    syncUrl("filing", streamId);
-  }
-
-  function selectStream(streamId: string) {
-    setSelectedStreamId(streamId);
-    syncUrl("filing", streamId);
+    setLocation(`/filing/${streamId}`);
   }
 
   if (isLoading) {
@@ -2257,10 +2210,9 @@ export default function ProjectDetailPage() {
 
   const { project, subSystemType } = data;
   const activeHolds = holdsData?.holds ?? [];
-  const activeStreamId =
-    selectedStreamId && streams.some((s) => s.id === selectedStreamId)
-      ? selectedStreamId
-      : streams[0]?.id ?? "";
+  // "Link to Filing" is only unambiguous when there's exactly one stream; with
+  // multiple streams, use each stream card's "Open filing" action instead.
+  const soleStream = streams.length === 1 ? streams[0] : null;
 
   return (
     <Screen className="pt-0 md:pt-0">
@@ -2294,15 +2246,32 @@ export default function ProjectDetailPage() {
           }
           right={
             <div className="flex flex-col items-end gap-2">
-              <button
-                type="button"
-                onClick={() => setLocation("/liens")}
-                className="inline-flex items-center gap-1 text-[12px] transition-colors hover:opacity-80"
-                style={{ color: "var(--text-dim)" }}
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-                Back to Projects
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setLocation("/liens")}
+                  className="inline-flex items-center gap-1 text-[12px] transition-colors hover:opacity-80"
+                  style={{ color: "var(--text-dim)" }}
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  Back to Projects
+                </button>
+                {soleStream && (
+                  <button
+                    type="button"
+                    onClick={() => openFiling(soleStream.id)}
+                    className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[12px] font-semibold transition-colors hover:opacity-80"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--helm-border)",
+                      color: "var(--text-dim)",
+                    }}
+                  >
+                    <Gavel className="h-3.5 w-3.5" />
+                    Link to Filing
+                  </button>
+                )}
+              </div>
               <div className="flex items-center gap-2 flex-wrap justify-end">
                 {activeHolds.length > 0 && (
                   <button
@@ -2337,74 +2306,13 @@ export default function ProjectDetailPage() {
           }
         />
 
-        <WorkspaceTabs
-          tabs={[
-            { key: "deadlines", label: "Lien Streams", Icon: GitBranch },
-            { key: "filing", label: "Filing Workspace", Icon: Gavel },
-          ]}
-          active={tab}
-          onChange={changeTab}
+        <DeadlinesTab
+          id={id!}
+          data={data}
+          holdsData={holdsData}
+          onOpenFiling={openFiling}
+          showHolds={showHolds}
         />
-
-        {tab === "deadlines" ? (
-          <DeadlinesTab
-            id={id!}
-            data={data}
-            holdsData={holdsData}
-            onOpenFiling={openFiling}
-            showHolds={showHolds}
-          />
-        ) : streams.length === 0 ? (
-          <div
-            className="rounded-lg border p-6 text-center text-[13px]"
-            style={{
-              background: "var(--surface)",
-              borderColor: "var(--helm-border)",
-              color: "var(--text-dim)",
-            }}
-          >
-            No lien streams yet. Open a stream on the Deadlines tab to start a filing.
-          </div>
-        ) : (
-          <div className="flex flex-col gap-4">
-            {streams.length > 1 && (
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className="text-[11.5px] font-semibold uppercase tracking-wide"
-                  style={{ color: "var(--text-muted-color)" }}
-                >
-                  Stream
-                </span>
-                {streams.map((s) => {
-                  const isActive = s.id === activeStreamId;
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => selectStream(s.id)}
-                      className="rounded-md border px-3 py-1.5 text-[12px] font-semibold capitalize transition-colors"
-                      style={
-                        isActive
-                          ? {
-                              background: "var(--surface-3)",
-                              borderColor: "var(--helm-accent)",
-                              color: "var(--text-base)",
-                            }
-                          : {
-                              background: "var(--surface-2)",
-                              borderColor: "var(--helm-border)",
-                              color: "var(--text-dim)",
-                            }
-                      }
-                    >
-                      {s.workStream.replace(/_/g, " ")}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            <FilingWorkspace key={activeStreamId} streamId={activeStreamId} />
-          </div>
-        )}
       </div>
     </Screen>
   );

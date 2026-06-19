@@ -470,7 +470,7 @@ export default function FilingWorkspace({ streamId }: { streamId: string }) {
             return (
               <Link
                 key={row.streamId}
-                href={`/projects/${row.lienProjectId}?tab=filing&stream=${row.streamId}`}
+                href={`/filing/${row.streamId}`}
               >
                 <div
                   className="cursor-pointer rounded-md border px-3 py-2 transition-colors"
