@@ -11,6 +11,8 @@ import streamsRouter from "./routes/streams";
 import deadlinesRouter from "./routes/deadlines";
 import invoicesRouter from "./routes/invoices";
 import holdsRouter from "./routes/holds";
+import monthlyRouter from "./routes/monthly";
+import noticesRouter from "./routes/notices";
 import devRouter from "./routes/dev";
 import { logger } from "./lib/logger";
 import { parseSession } from "./lib/session";
@@ -54,6 +56,8 @@ app.use("/api", streamsRouter);             // POST /api/streams/open, PATCH /ap
 app.use("/api", deadlinesRouter);           // GET /api/deadlines/:workMonthId
 app.use("/api", invoicesRouter);            // GET/POST /api/invoices/*
 app.use("/api", holdsRouter);               // GET/POST /api/holds/*
+app.use("/api/monthly", monthlyRouter);     // POST /api/monthly/run, GET /api/monthly/report, etc.
+app.use("/api", noticesRouter);             // POST /api/notices, PATCH /api/notices/:id, etc.
 app.use("/api", apiRouter);                 // GET /api/org, etc.                  (session, catch-all)
 
 export default app;

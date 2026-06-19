@@ -231,11 +231,11 @@ export default function HomePage() {
           {projects.length === 0 ? "No projects yet. Create one to get started." : "No projects match the current filters."}
         </div>
       ) : (
-        <ResponsiveTable<ProjectRow>
+        <ResponsiveTable
           columns={columns}
           rows={rows}
           gridTemplate="1.5fr .4fr .4fr .8fr .9fr"
-          onRowClick={(r) => {
+          onRowClick={(r: ProjectRow) => {
             window.location.href = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/projects/${r.id}`;
           }}
         />

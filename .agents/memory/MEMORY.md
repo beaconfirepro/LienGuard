@@ -3,3 +3,5 @@
 - [lib/db declarations](lib-db-build.md) — run `pnpm --filter @workspace/db exec tsc -p tsconfig.json` before typechecking api-server to generate .d.ts so TS project-references resolve.
 - [Replit proxy prefix passthrough](replit-proxy-prefix.md) — Replit artifact-router does NOT strip path prefixes; all API server routes must include /api/* to match what the proxy delivers.
 - [Phase 3 deadline engine](phase3-deadline-engine.md) — Texas § 53.003(e) business-day engine verified: Mar 2026 notice→Jun 15, retainage Feb 14(Sat) skips Presidents' Day(Feb 16)→Feb 17.
+- [Express sub-router path doubling](router-path-mounting.md) — when a router is mounted at /api/monthly, its handlers must use /run not /monthly/run; doubled path = silent 404.
+- [Replit cartographer + generic JSX](cartographer-generic-jsx.md) — cartographer plugin breaks on <Component<T> syntax; remove explicit type param and let TypeScript infer from props.

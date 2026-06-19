@@ -1,82 +1,407 @@
 import * as React from "react";
-import { Pencil, Check, Send } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Pencil, Check, Send, FileText, ChevronRight } from "lucide-react";
 import { Panel, useRightPanel } from "@/components/nav/AppShell";
 import { QueueList } from "@/components/ui/queue-list";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { DeadlineCountdown } from "@/components/ui/deadline-countdown";
 import { money, alpha } from "@/lib/utils";
 
-type NoticeStatus = "draft" | "approved" | "sent";
+// ── Types ──────────────────────────────────────────────────────────────────
+
+interface Recipient {
+  id: string;
+  recipientType: string;
+  legalName: string;
+  mailingAddress: string;
+}
+
+interface QueueNotice {
+  id: string;
+  status: string;
+  noticeType: string;
+  claimAmount: string;
+  workDescription: string | null;
+  monthListed: string;
+  createdAt: string;
+  noticeDeadline: string | null;
+  recipients: Recipient[];
+  stream: { id: string; workStream: string; status: string } | null;
+  project: {
+    id: string;
+    projectName: string;
+    contractorTier: string;
+    lienWorkflowType: string;
+    county: string | null;
+    legalPropertyAddress: string | null;
+  } | null;
+}
+
+// ── API helpers ────────────────────────────────────────────────────────────
+
+function apiFetch<T>(path: string): Promise<T> {
+  return fetch(`/api${path}`, { credentials: "include" }).then((r) => r.json());
+}
+
+function apiPost(path: string, body?: unknown) {
+  return fetch(`/api${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  }).then((r) => r.json());
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function daysUntil(iso: string | null): number {
+  if (!iso) return 99;
+  return Math.round((new Date(iso).getTime() - Date.now()) / 86_400_000);
+}
+
+function fmtMonthListed(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function statuteRef(noticeType: string): string {
+  if (noticeType === "retainage_claim") return "§ 53.057";
+  if (noticeType === "early_warning") return "§ 53.056 (courtesy)";
+  return "§ 53.056";
+}
+
+function noticeBody(n: QueueNotice): string {
+  const project = n.project?.projectName ?? "this property";
+  const month = fmtMonthListed(n.monthListed);
+  const amt = money(Number(n.claimAmount));
+
+  if (n.noticeType === "retainage_claim") {
+    return `This notice is to advise you that Beacon Fire Protection has furnished labor and materials for fire-protection work at ${project}. The unpaid retainage balance is ${amt}. If this balance is not paid, the property may be subject to a mechanic's lien.`;
+  }
+  if (n.noticeType === "early_warning") {
+    return `This is a courtesy notice from Beacon Fire Protection. We have furnished labor and materials for fire-protection work at ${project} in ${month}. The unpaid balance is ${amt}. Payment within 10 days will avoid the issuance of a formal statutory notice.`;
+  }
+  return `This notice is to advise you that Beacon Fire Protection has furnished labor and materials for fire-protection work at ${project}. The unpaid balance for work performed in ${month} is ${amt}. If this balance is not paid, the property may be subject to a mechanic's lien.`;
+}
+
+// ── Component ──────────────────────────────────────────────────────────────
 
 export default function SendQueuePage() {
-  const [status, setStatus] = React.useState<NoticeStatus>("draft");
+  const queryClient = useQueryClient();
 
-  useRightPanel(
-    <Panel title="Send Queue" count={4}>
-      <QueueList items={[
-        { id: "q1", title: "Harbor Logistics — May", sub: status[0].toUpperCase() + status.slice(1) },
-        { id: "q2", title: "Northgate — June", sub: "Approved" },
-        { id: "q3", title: "Lincoln — bond claim", sub: "Draft" },
-        { id: "q4", title: "Riverside — May", sub: "Delivered" },
-      ]} />
-    </Panel>,
-    [status],
+  const { data, isLoading, isError } = useQuery<{ notices: QueueNotice[] }>({
+    queryKey: ["send-queue"],
+    queryFn: () => apiFetch<{ notices: QueueNotice[] }>("/monthly/send-queue"),
+    retry: false,
+    staleTime: 30_000,
+  });
+
+  const notices = data?.notices ?? [];
+  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+
+  const selected: QueueNotice | undefined = React.useMemo(
+    () => notices.find((n) => n.id === selectedId) ?? notices[0],
+    [notices, selectedId],
   );
 
+  const approveMutation = useMutation({
+    mutationFn: (id: string) => apiPost(`/notices/${id}/approve`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["send-queue"] }),
+  });
+
+  useRightPanel(
+    <Panel title="Send Queue" count={notices.length}>
+      <QueueList
+        items={
+          notices.length > 0
+            ? notices.map((n) => ({
+                id: n.id,
+                title: n.project?.projectName ?? "Unknown project",
+                sub: `${n.status[0].toUpperCase()}${n.status.slice(1)} · ${fmtMonthListed(n.monthListed)}`,
+                active: n.id === selected?.id,
+                onClick: () => setSelectedId(n.id),
+              }))
+            : [{ id: "empty", title: "No notices in queue", sub: "All caught up" }]
+        }
+      />
+    </Panel>,
+    [notices.length, selected?.id],
+  );
+
+  if (isError) {
+    return (
+      <div
+        className="rounded-lg border px-4 py-8 text-center text-[12px]"
+        style={{
+          background: "var(--surface)",
+          borderColor: "var(--helm-border)",
+          color: "var(--text-muted-color)",
+        }}
+      >
+        Unable to load send queue. Visit{" "}
+        <a href="/api/dev/session" className="underline">
+          /api/dev/session
+        </a>{" "}
+        first.
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div
+        className="rounded-lg border px-4 py-10 text-center text-[12px]"
+        style={{
+          background: "var(--surface)",
+          borderColor: "var(--helm-border)",
+          color: "var(--text-muted-color)",
+        }}
+      >
+        Loading notices…
+      </div>
+    );
+  }
+
+  if (!selected) {
+    return (
+      <div
+        className="rounded-lg border px-4 py-8 text-center text-[12px]"
+        style={{
+          background: "var(--surface)",
+          borderColor: "var(--helm-border)",
+          color: "var(--text-muted-color)",
+        }}
+      >
+        No draft or approved notices in queue.
+        <br />
+        <span style={{ color: "var(--text-muted-color)" }}>
+          Run the monthly engine on the Monthly Report page to generate notices.
+        </span>
+      </div>
+    );
+  }
+
+  const recipientNames = selected.recipients.map((r) => r.legalName).join(" · ") || "No recipients";
+
   return (
-    <div className="overflow-hidden rounded-lg border" style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}>
-      <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: "var(--helm-border)" }}>
-        <div>
-          <div className="text-[14.5px] font-semibold" style={{ color: "var(--text-base)" }}>Notice preview</div>
-          <div className="mt-0.5 text-[12px]" style={{ color: "var(--text-dim)" }}>Harbor Logistics — Bay 3 · Monthly Notice § 53.056</div>
-        </div>
-        <StatusBadge status={status} />
+    <div className="flex flex-col gap-4">
+      {/* Breadcrumb / summary strip */}
+      <div className="flex flex-wrap items-center gap-2">
+        {notices.map((n) => (
+          <button
+            key={n.id}
+            onClick={() => setSelectedId(n.id)}
+            className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px]"
+            style={{
+              background: n.id === selected.id ? "var(--surface-3)" : "var(--surface)",
+              borderColor: n.id === selected.id ? "var(--helm-accent)" : "var(--helm-border)",
+              color: n.id === selected.id ? "var(--text-base)" : "var(--text-dim)",
+            }}
+          >
+            <span className="truncate max-w-[120px]">{n.project?.projectName ?? "Notice"}</span>
+            <StatusBadge status={n.status} />
+          </button>
+        ))}
       </div>
-      <div className="flex flex-col gap-3.5 p-5">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Claim amount" value="$33,250.00" mono />
-          <Field label="Month listed" value="May 2026" />
-        </div>
-        <Field label="Recipients" value="Harbor Logistics LLC · Turnbull Construction" dim />
-        <div className="rounded-lg border p-[18px] font-mono text-[11.5px] leading-relaxed" style={{ background: "#0f1117", borderColor: "var(--helm-border)", color: "var(--text-dim)" }}>
-          <div className="mb-2.5 text-[10px] uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>
-            Tex. Prop. Code § 53.056 — Notice to Owner &amp; Original Contractor
+
+      {/* Notice preview card */}
+      <div
+        className="overflow-hidden rounded-lg border"
+        style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
+      >
+        <div
+          className="flex items-center justify-between border-b px-5 py-4"
+          style={{ borderColor: "var(--helm-border)" }}
+        >
+          <div className="min-w-0">
+            <div
+              className="text-[14.5px] font-semibold"
+              style={{ color: "var(--text-base)" }}
+            >
+              {selected.project?.projectName ?? "Notice preview"}
+            </div>
+            <div className="mt-0.5 text-[12px]" style={{ color: "var(--text-dim)" }}>
+              {selected.stream?.workStream ?? ""} stream ·{" "}
+              {fmtMonthListed(selected.monthListed)} · {statuteRef(selected.noticeType)}
+            </div>
           </div>
-          This notice is to advise you that <span style={{ color: "var(--text-base)" }}>Beacon Fire Protection</span> has furnished labor and materials for fire-protection work at <span style={{ color: "var(--text-base)" }}>Harbor Logistics — Bay 3</span>. The unpaid balance for work performed in <span style={{ color: "var(--text-base)" }}>May 2026</span> is <span style={{ color: "var(--text-base)" }}>{money(33250)}</span>. If this balance is not paid, the property may be subject to a mechanic's lien.
+          <div className="flex items-center gap-3">
+            {selected.noticeDeadline && (
+              <DeadlineCountdown days={daysUntil(selected.noticeDeadline)} />
+            )}
+            <StatusBadge status={selected.status} />
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            className="flex items-center gap-1.5 rounded-md border px-3.5 py-2 text-[13px] font-semibold"
-            style={{ background: "var(--surface-3)", borderColor: "var(--helm-border)", color: "var(--text-base)" }}
+
+        <div className="flex flex-col gap-3.5 p-5">
+          <div className="grid grid-cols-2 gap-3">
+            <Field
+              label="Claim amount"
+              value={money(Number(selected.claimAmount))}
+              mono
+            />
+            <Field
+              label="Month listed"
+              value={fmtMonthListed(selected.monthListed)}
+            />
+          </div>
+          <Field label="Recipients" value={recipientNames} dim />
+          {selected.project?.legalPropertyAddress && (
+            <Field label="Property" value={selected.project.legalPropertyAddress} dim />
+          )}
+
+          {/* Statutory notice body */}
+          <div
+            className="rounded-lg border p-[18px] font-mono text-[11.5px] leading-relaxed"
+            style={{
+              background: "#0f1117",
+              borderColor: "var(--helm-border)",
+              color: "var(--text-dim)",
+            }}
           >
-            <Pencil className="h-3.5 w-3.5" />Edit notice
-          </button>
-          <button
-            onClick={() => setStatus("approved")}
-            className="flex items-center gap-1.5 rounded-md border px-3.5 py-2 text-[13px] font-semibold text-[#14eba3]"
-            style={{ background: alpha("#14eba3", 0.14), borderColor: alpha("#14eba3", 0.3) }}
-          >
-            <Check className="h-3.5 w-3.5" />Approve
-          </button>
-          <button
-            onClick={() => setStatus("sent")}
-            className="flex items-center gap-1.5 rounded-md px-4 py-2 text-[13px] font-semibold text-[#1a1205]"
-            style={{ background: "#f59e0b" }}
-          >
-            <Send className="h-3.5 w-3.5" />Send certified
-          </button>
+            <div
+              className="mb-2.5 text-[10px] uppercase tracking-wide"
+              style={{ color: "var(--text-muted-color)" }}
+            >
+              Tex. Prop. Code {statuteRef(selected.noticeType)} — Notice to Owner &amp; Original Contractor
+            </div>
+            {noticeBody(selected)}
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex flex-wrap gap-2">
+            <a
+              href={`/api/notices/${selected.id}/pdf`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 rounded-md border px-3.5 py-2 text-[13px] font-semibold no-underline"
+              style={{
+                background: "var(--surface-3)",
+                borderColor: "var(--helm-border)",
+                color: "var(--text-dim)",
+              }}
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Preview PDF
+            </a>
+
+            {selected.status === "draft" && (
+              <button
+                onClick={() => approveMutation.mutate(selected.id)}
+                disabled={approveMutation.isPending}
+                className="flex items-center gap-1.5 rounded-md border px-3.5 py-2 text-[13px] font-semibold"
+                style={{
+                  background: alpha("#14eba3", 0.14),
+                  borderColor: alpha("#14eba3", 0.3),
+                  color: "#14eba3",
+                }}
+              >
+                <Check className="h-3.5 w-3.5" />
+                {approveMutation.isPending ? "Approving…" : "Approve"}
+              </button>
+            )}
+
+            {selected.status === "approved" && (
+              <button
+                className="flex items-center gap-1.5 rounded-md px-4 py-2 text-[13px] font-semibold"
+                style={{ background: "#f59e0b", color: "#1a1205" }}
+                onClick={() =>
+                  alert(
+                    "Certified mail sending is wired in Phase 5 (Sending, Waivers & Notarization).",
+                  )
+                }
+              >
+                <Send className="h-3.5 w-3.5" />
+                Send certified
+              </button>
+            )}
+
+            {(selected.status === "sent" || selected.status === "delivered") && (
+              <div
+                className="flex items-center gap-1.5 rounded-md px-3.5 py-2 text-[13px]"
+                style={{ color: "#14eba3" }}
+              >
+                <Check className="h-3.5 w-3.5" />
+                Sent via certified mail
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Recipients detail */}
+      {selected.recipients.length > 0 && (
+        <div
+          className="overflow-hidden rounded-lg border"
+          style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
+        >
+          <div
+            className="border-b px-5 py-3 text-[12px] font-semibold uppercase tracking-wide"
+            style={{ borderColor: "var(--helm-border)", color: "var(--text-muted-color)" }}
+          >
+            Recipients
+          </div>
+          <div className="divide-y" style={{ borderColor: "var(--helm-border)" }}>
+            {selected.recipients.map((r) => (
+              <div
+                key={r.id}
+                className="flex items-start justify-between gap-4 px-5 py-3"
+              >
+                <div>
+                  <div className="text-[12px] font-semibold" style={{ color: "var(--text-base)" }}>
+                    {r.legalName}
+                  </div>
+                  <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>
+                    {r.mailingAddress}
+                  </div>
+                </div>
+                <span
+                  className="shrink-0 rounded px-2 py-0.5 text-[10px] uppercase tracking-wide"
+                  style={{
+                    background: "var(--surface-2)",
+                    color: "var(--text-muted-color)",
+                  }}
+                >
+                  {r.recipientType === "original_contractor" ? "General Contractor" : "Owner"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function Field({ label, value, mono, dim }: { label: string; value: string; mono?: boolean; dim?: boolean }) {
+function Field({
+  label,
+  value,
+  mono,
+  dim,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  dim?: boolean;
+}) {
   return (
     <div>
-      <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>{label}</div>
+      <div
+        className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide"
+        style={{ color: "var(--text-muted-color)" }}
+      >
+        {label}
+      </div>
       <div
         className={`rounded-md border px-3 py-2.5 text-[13px] ${mono ? "font-mono" : ""}`}
-        style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)", color: dim ? "var(--text-dim)" : "var(--text-base)" }}
+        style={{
+          background: "var(--surface-2)",
+          borderColor: "var(--helm-border)",
+          color: dim ? "var(--text-dim)" : "var(--text-base)",
+        }}
       >
         {value}
       </div>
