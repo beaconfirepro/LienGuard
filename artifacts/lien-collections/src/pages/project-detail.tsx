@@ -38,8 +38,10 @@ import {
   XCircle,
   Receipt,
   Link as LinkIcon,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DeadlineCountdown } from "@/components/ui/deadline-countdown";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -135,6 +137,15 @@ interface Invoice {
   clearedFlag: boolean;
   clearedAt: string | null;
   isSupplierInvoice: boolean;
+}
+
+interface StreamNotice {
+  id: string;
+  status: "draft" | "approved" | "sent" | "delivered";
+  noticeType: string;
+  workMonthId: string | null;
+  claimAmount: string;
+  monthListed: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -293,6 +304,68 @@ function ChecklistPanel({
 }
 
 // ---------------------------------------------------------------------------
+// Notice status badge + countdown — inline per work month
+// ---------------------------------------------------------------------------
+
+const NOTICE_STATUS_STYLES: Record<string, string> = {
+  draft:     "bg-gray-100 text-gray-700 border-gray-300",
+  approved:  "bg-blue-100 text-blue-700 border-blue-300",
+  sent:      "bg-amber-100 text-amber-700 border-amber-300",
+  delivered: "bg-green-100 text-green-700 border-green-300",
+};
+
+const NOTICE_STATUS_LABELS: Record<string, string> = {
+  draft:     "Draft",
+  approved:  "Approved",
+  sent:      "Sent",
+  delivered: "Delivered",
+};
+
+function NoticeBadge({
+  notice,
+  onNavigate,
+}: {
+  notice: StreamNotice;
+  onNavigate: () => void;
+}) {
+  const styleClass = NOTICE_STATUS_STYLES[notice.status] ?? "bg-gray-100 text-gray-700 border-gray-300";
+  const label = NOTICE_STATUS_LABELS[notice.status] ?? notice.status;
+
+  return (
+    <button
+      type="button"
+      title="Open in Send Queue"
+      onClick={onNavigate}
+      className={cn(
+        "inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs font-medium transition-opacity hover:opacity-80 cursor-pointer",
+        styleClass,
+      )}
+    >
+      <Bell className="h-3 w-3" />
+      {label}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Deadline countdown helper — days until the earliest open notice deadline
+// ---------------------------------------------------------------------------
+
+function earliestNoticeDays(deadlines: Deadline[]): number | null {
+  const open = deadlines
+    .filter((dl) => !dl.satisfiedAt && (dl.ruleKind === "notice" || dl.ruleKind === "retainage"))
+    .map((dl) => {
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+      const d = new Date(dl.adjustedDate);
+      d.setUTCHours(0, 0, 0, 0);
+      return Math.floor((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    });
+  if (!open.length) return null;
+  return Math.min(...open);
+}
+
+// ---------------------------------------------------------------------------
 // Stream deadlines panel
 // ---------------------------------------------------------------------------
 
@@ -305,11 +378,19 @@ function StreamDeadlinesPanel({
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["stream-work-months", streamId],
     queryFn: () => apiFetch<StreamWithWorkMonths>(`/streams/${streamId}/work-months`),
   });
+
+  const { data: noticesData } = useQuery({
+    queryKey: ["stream-notices", streamId],
+    queryFn: () => apiFetch<{ notices: StreamNotice[] }>(`/notices?streamId=${streamId}`),
+    staleTime: 30_000,
+  });
+  const streamNotices = noticesData?.notices ?? [];
 
   const recompute = useMutation({
     mutationFn: () =>
@@ -378,139 +459,156 @@ function StreamDeadlinesPanel({
         </p>
       ) : (
         <div className="space-y-3">
-          {workMonths.map((wm) => (
-            <div key={wm.id} className="rounded-lg border bg-card p-3 space-y-2">
-              {/* Work month header */}
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-sm font-medium">{formatMonth(wm.month)}</span>
-                  {wm.derivedOverdue && !wm.clearedFlag && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 text-red-700 px-2 py-0.5 text-xs font-medium">
-                      <AlertTriangle className="h-3 w-3" />
-                      Overdue
-                    </span>
-                  )}
-                  {wm.clearedFlag && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-medium">
-                      <CheckCircle2 className="h-3 w-3" />
-                      Cleared
-                    </span>
+          {workMonths.map((wm) => {
+            const wmNotices = streamNotices.filter((n) => n.workMonthId === wm.id);
+            const noticeDays = earliestNoticeDays(wm.deadlines);
+
+            return (
+              <div key={wm.id} className="rounded-lg border bg-card p-3 space-y-2">
+                {/* Work month header */}
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-sm font-medium">{formatMonth(wm.month)}</span>
+                    {wm.derivedOverdue && !wm.clearedFlag && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 text-red-700 px-2 py-0.5 text-xs font-medium">
+                        <AlertTriangle className="h-3 w-3" />
+                        Overdue
+                      </span>
+                    )}
+                    {wm.clearedFlag && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-medium">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Cleared
+                      </span>
+                    )}
+                    {/* Notice badges */}
+                    {wmNotices.map((notice) => (
+                      <NoticeBadge
+                        key={notice.id}
+                        notice={notice}
+                        onNavigate={() => navigate(`/send-queue?notice=${notice.id}`)}
+                      />
+                    ))}
+                    {/* Countdown for open notice deadlines when no notice exists yet */}
+                    {wmNotices.length === 0 && noticeDays !== null && (
+                      <DeadlineCountdown days={noticeDays} />
+                    )}
+                  </div>
+                  {wm.invoiceLinkId && !wm.clearedFlag && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 text-xs text-green-700 hover:text-green-800 hover:bg-green-50 px-2"
+                      disabled={clearInvoice.isPending}
+                      onClick={() => clearInvoice.mutate(wm.invoiceLinkId!)}
+                    >
+                      Mark Cleared
+                    </Button>
                   )}
                 </div>
-                {wm.invoiceLinkId && !wm.clearedFlag && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 text-xs text-green-700 hover:text-green-800 hover:bg-green-50 px-2"
-                    disabled={clearInvoice.isPending}
-                    onClick={() => clearInvoice.mutate(wm.invoiceLinkId!)}
-                  >
-                    Mark Cleared
-                  </Button>
-                )}
-              </div>
 
-              {/* Deadlines */}
-              {wm.deadlines.length === 0 ? (
-                <p className="text-xs text-muted-foreground pl-5">
-                  No deadlines computed — run Recompute above.
-                </p>
-              ) : (
-                <div className="space-y-1.5 pl-1">
-                  {wm.deadlines.map((dl) => {
-                    const urgency = deadlineUrgency(dl.adjustedDate);
-                    const isSatisfied = !!dl.satisfiedAt;
+                {/* Deadlines */}
+                {wm.deadlines.length === 0 ? (
+                  <p className="text-xs text-muted-foreground pl-5">
+                    No deadlines computed — run Recompute above.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5 pl-1">
+                    {wm.deadlines.map((dl) => {
+                      const urgency = deadlineUrgency(dl.adjustedDate);
+                      const isSatisfied = !!dl.satisfiedAt;
 
-                    return (
-                      <div
-                        key={dl.id}
-                        className={cn(
-                          "rounded border px-3 py-2 flex items-start justify-between gap-3",
-                          isSatisfied
-                            ? "bg-gray-50 border-gray-200 opacity-60"
-                            : RULE_KIND_COLORS[dl.ruleKind] ?? "bg-gray-50 border-gray-200",
-                        )}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-semibold">
-                              {RULE_KIND_LABELS[dl.ruleKind] ?? dl.ruleKind}
-                            </span>
-                            {dl.rule?.statuteCitation && (
-                              <span className="text-xs opacity-70 font-mono">
-                                {dl.rule.statuteCitation}
+                      return (
+                        <div
+                          key={dl.id}
+                          className={cn(
+                            "rounded border px-3 py-2 flex items-start justify-between gap-3",
+                            isSatisfied
+                              ? "bg-gray-50 border-gray-200 opacity-60"
+                              : RULE_KIND_COLORS[dl.ruleKind] ?? "bg-gray-50 border-gray-200",
+                          )}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-semibold">
+                                {RULE_KIND_LABELS[dl.ruleKind] ?? dl.ruleKind}
                               </span>
-                            )}
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Info className="h-3 w-3 text-muted-foreground cursor-help shrink-0" />
-                                </TooltipTrigger>
-                                <TooltipContent side="bottom" className="max-w-xs text-xs font-mono p-2">
-                                  <p className="font-semibold mb-1 text-foreground not-italic">Source data</p>
-                                  {Object.entries(dl.sourceData ?? {}).map(([k, v]) => (
-                                    <div key={k} className="flex gap-1">
-                                      <span className="text-muted-foreground w-28 shrink-0">{k}:</span>
-                                      <span className="break-all">
-                                        {Array.isArray(v) ? v.join(", ") : String(v)}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            {isSatisfied && (
-                              <Badge variant="outline" className="text-xs h-4 px-1 text-green-700 border-green-300">
-                                Satisfied
-                              </Badge>
-                            )}
-                          </div>
-                          {dl.rule?.description && (
-                            <p className="text-xs opacity-70 mt-0.5 truncate">{dl.rule.description}</p>
-                          )}
-                        </div>
-                        <div className="text-right shrink-0">
-                          <div
-                            className={cn(
-                              "text-xs font-semibold tabular-nums",
-                              !isSatisfied && urgency === "overdue" && "text-red-700",
-                              !isSatisfied && urgency === "urgent" && "text-orange-700",
-                              !isSatisfied && urgency === "upcoming" && "text-amber-700",
-                              (isSatisfied || urgency === "future") && "text-muted-foreground",
-                            )}
-                          >
-                            {formatDate(dl.adjustedDate)}
-                          </div>
-                          {dl.computedDate !== dl.adjustedDate && (
-                            <div className="text-xs text-muted-foreground line-through">
-                              {formatDate(dl.computedDate)}
+                              {dl.rule?.statuteCitation && (
+                                <span className="text-xs opacity-70 font-mono">
+                                  {dl.rule.statuteCitation}
+                                </span>
+                              )}
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Info className="h-3 w-3 text-muted-foreground cursor-help shrink-0" />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="bottom" className="max-w-xs text-xs font-mono p-2">
+                                    <p className="font-semibold mb-1 text-foreground not-italic">Source data</p>
+                                    {Object.entries(dl.sourceData ?? {}).map(([k, v]) => (
+                                      <div key={k} className="flex gap-1">
+                                        <span className="text-muted-foreground w-28 shrink-0">{k}:</span>
+                                        <span className="break-all">
+                                          {Array.isArray(v) ? v.join(", ") : String(v)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              {isSatisfied && (
+                                <Badge variant="outline" className="text-xs h-4 px-1 text-green-700 border-green-300">
+                                  Satisfied
+                                </Badge>
+                              )}
                             </div>
-                          )}
-                          {!isSatisfied && (
+                            {dl.rule?.description && (
+                              <p className="text-xs opacity-70 mt-0.5 truncate">{dl.rule.description}</p>
+                            )}
+                          </div>
+                          <div className="text-right shrink-0">
                             <div
                               className={cn(
-                                "text-xs mt-0.5",
-                                urgency === "overdue" && "text-red-600 font-medium",
-                                urgency === "urgent" && "text-orange-600",
-                                urgency === "upcoming" && "text-amber-600",
-                                urgency === "future" && "text-muted-foreground",
+                                "text-xs font-semibold tabular-nums",
+                                !isSatisfied && urgency === "overdue" && "text-red-700",
+                                !isSatisfied && urgency === "urgent" && "text-orange-700",
+                                !isSatisfied && urgency === "upcoming" && "text-amber-700",
+                                (isSatisfied || urgency === "future") && "text-muted-foreground",
                               )}
                             >
-                              {urgency === "overdue" && "Past due"}
-                              {urgency === "urgent" && "≤7 days"}
-                              {urgency === "upcoming" && "≤30 days"}
-                              {urgency === "future" && "Upcoming"}
+                              {formatDate(dl.adjustedDate)}
                             </div>
-                          )}
+                            {dl.computedDate !== dl.adjustedDate && (
+                              <div className="text-xs text-muted-foreground line-through">
+                                {formatDate(dl.computedDate)}
+                              </div>
+                            )}
+                            {!isSatisfied && (
+                              <div
+                                className={cn(
+                                  "text-xs mt-0.5",
+                                  urgency === "overdue" && "text-red-600 font-medium",
+                                  urgency === "urgent" && "text-orange-600",
+                                  urgency === "upcoming" && "text-amber-600",
+                                  urgency === "future" && "text-muted-foreground",
+                                )}
+                              >
+                                {urgency === "overdue" && "Past due"}
+                                {urgency === "urgent" && "≤7 days"}
+                                {urgency === "upcoming" && "≤30 days"}
+                                {urgency === "future" && "Upcoming"}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          ))}
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearch } from "wouter";
 import { Pencil, Check, Send, FileText, ChevronRight } from "lucide-react";
 import { Panel, useRightPanel } from "@/components/nav/AppShell";
 import { QueueList } from "@/components/ui/queue-list";
@@ -100,6 +101,11 @@ function noticeBody(n: QueueNotice): string {
 
 export default function SendQueuePage() {
   const queryClient = useQueryClient();
+  const search = useSearch();
+  const deepLinkNoticeId = React.useMemo(() => {
+    const params = new URLSearchParams(search);
+    return params.get("notice");
+  }, [search]);
 
   const { data, isLoading, isError } = useQuery<{ notices: QueueNotice[] }>({
     queryKey: ["send-queue"],
@@ -109,7 +115,13 @@ export default function SendQueuePage() {
   });
 
   const notices = data?.notices ?? [];
-  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [selectedId, setSelectedId] = React.useState<string | null>(deepLinkNoticeId);
+
+  React.useEffect(() => {
+    if (deepLinkNoticeId && notices.some((n) => n.id === deepLinkNoticeId)) {
+      setSelectedId(deepLinkNoticeId);
+    }
+  }, [deepLinkNoticeId, notices.length]);
 
   const selected: QueueNotice | undefined = React.useMemo(
     () => notices.find((n) => n.id === selectedId) ?? notices[0],

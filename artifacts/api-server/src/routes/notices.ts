@@ -37,7 +37,11 @@ router.use(requireSession);
 
 router.get("/notices", async (req, res) => {
   const { orgId } = getSession(req);
-  const { status, projectId } = req.query as { status?: string; projectId?: string };
+  const { status, projectId, streamId } = req.query as {
+    status?: string;
+    projectId?: string;
+    streamId?: string;
+  };
 
   const conditions = [eq(noticesTable.orgId, orgId)];
 
@@ -50,7 +54,18 @@ router.get("/notices", async (req, res) => {
     }
   }
 
-  if (projectId) {
+  if (streamId) {
+    const [stream] = await db
+      .select({ id: lienStreamsTable.id })
+      .from(lienStreamsTable)
+      .where(and(eq(lienStreamsTable.orgId, orgId), eq(lienStreamsTable.id, streamId as string)))
+      .limit(1);
+    if (!stream) {
+      res.json({ notices: [] });
+      return;
+    }
+    conditions.push(eq(noticesTable.lienStreamId, streamId as string));
+  } else if (projectId) {
     const streams = await db
       .select({ id: lienStreamsTable.id })
       .from(lienStreamsTable)
