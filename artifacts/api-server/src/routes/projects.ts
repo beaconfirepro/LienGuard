@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import {
   lienProjectsTable,
   projectPartyLinksTable,
+  linkedClientsTable,
   subSystemTypesTable,
   lienStreamsTable,
   jurisdictionsTable,
@@ -276,6 +277,103 @@ router.post("/", async (req, res) => {
     .returning();
 
   res.status(201).json({ project });
+});
+
+// ---------------------------------------------------------------------------
+// POST /projects/:id/sync
+// Re-fetches project and party data from HubSpot and updates cached fields +
+// lastSyncedAt on lienProjectsTable, projectPartyLinksTable, and any matching
+// linkedClientsTable rows.
+// ---------------------------------------------------------------------------
+router.post("/:id/sync", async (req, res) => {
+  const { orgId } = getSession(req);
+  const id = req.params["id"] as string;
+
+  const [project] = await db
+    .select()
+    .from(lienProjectsTable)
+    .where(and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)))
+    .limit(1);
+
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  const now = new Date();
+
+  // --- Sync project from HubSpot ---
+  const hsProject = await hubspotClient.getProject(project.hubspotProjectId);
+
+  await db
+    .update(lienProjectsTable)
+    .set({
+      cachedProjectName: hsProject?.projectName ?? project.cachedProjectName,
+      cachedHubspotStatus: hsProject?.status ?? project.cachedHubspotStatus,
+      lastSyncedAt: now,
+    })
+    .where(and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)));
+
+  // --- Sync parties ---
+  const parties = await db
+    .select()
+    .from(projectPartyLinksTable)
+    .where(
+      and(eq(projectPartyLinksTable.lienProjectId, id), eq(projectPartyLinksTable.orgId, orgId)),
+    );
+
+  const partySyncResults: { partyId: string; hubspotCompanyId: string; synced: boolean }[] = [];
+
+  for (const party of parties) {
+    const hsCompany = await hubspotClient.getCompany(party.hubspotCompanyId);
+    if (hsCompany) {
+      // Update projectPartyLinksTable cached fields
+      await db
+        .update(projectPartyLinksTable)
+        .set({
+          cachedLegalName: hsCompany.legalName,
+          cachedMailingAddress: hsCompany.mailingAddress ?? party.cachedMailingAddress,
+          lastSyncedAt: now,
+        })
+        .where(
+          and(eq(projectPartyLinksTable.id, party.id), eq(projectPartyLinksTable.orgId, orgId)),
+        );
+
+      // Update matching linkedClientsTable row if one exists
+      await db
+        .update(linkedClientsTable)
+        .set({
+          cachedName: hsCompany.legalName,
+          cachedEmail: hsCompany.email ?? null,
+          cachedPhone: hsCompany.phone ?? null,
+          lastSyncedAt: now,
+        })
+        .where(
+          and(
+            eq(linkedClientsTable.orgId, orgId),
+            eq(linkedClientsTable.hubspotCompanyId, party.hubspotCompanyId),
+          ),
+        );
+
+      partySyncResults.push({ partyId: party.id, hubspotCompanyId: party.hubspotCompanyId, synced: true });
+    } else {
+      partySyncResults.push({ partyId: party.id, hubspotCompanyId: party.hubspotCompanyId, synced: false });
+    }
+  }
+
+  // Return refreshed project
+  const [refreshed] = await db
+    .select()
+    .from(lienProjectsTable)
+    .where(and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)))
+    .limit(1);
+
+  res.json({
+    project: refreshed,
+    parties: partySyncResults,
+    syncedAt: now.toISOString(),
+    live: !!process.env.HUBSPOT_API_KEY,
+  });
 });
 
 // ---------------------------------------------------------------------------
