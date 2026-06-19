@@ -1357,6 +1357,19 @@ const HUBSPOT_ENV_VARS = [
   },
 ];
 
+const NOTARYLIVE_ENV_VARS = [
+  {
+    key: "NOTARYLIVE_API_USER",
+    purpose:
+      "NotaryLive API user (the username half of the HTTP Basic credentials from your NotaryLive account).",
+  },
+  {
+    key: "NOTARYLIVE_API_KEY",
+    purpose:
+      "NotaryLive API key (the password half of the HTTP Basic credentials).",
+  },
+];
+
 function IntegrationsTab() {
   const { data: qboStatus } = useQuery({
     queryKey: ["config-qbo-status"],
@@ -1370,8 +1383,16 @@ function IntegrationsTab() {
     retry: false,
   });
 
+  const { data: notaryStatus } = useQuery({
+    queryKey: ["config-notarylive-status"],
+    queryFn: () =>
+      apiFetch<{ connected: boolean }>("/config/notarylive-status"),
+    retry: false,
+  });
+
   const connected = qboStatus?.connected ?? false;
   const hubspotConnected = hubspotStatus?.connected ?? false;
+  const notaryConnected = notaryStatus?.connected ?? false;
 
   return (
     <div className="space-y-6">
@@ -1523,6 +1544,81 @@ function IntegrationsTab() {
             your Replit workspace. When absent, project/company reads fall back
             to fixture data and activity write-back uses a local placeholder so
             development still works.
+          </p>
+        </CardContent>
+      </Card>
+
+      <SectionHeader
+        icon={ShieldAlert}
+        title="NotaryLive (Remote Online Notarization)"
+        subtitle="Powers waiver notarization and the generic notarize-anything flow. Credentials are stored as Replit secrets — never in code."
+      />
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <CardTitle className="text-sm font-semibold">
+                Connection Status
+              </CardTitle>
+              <CardDescription className="text-xs mt-0.5">
+                Both secrets must be present for live notarization to activate.
+              </CardDescription>
+            </div>
+            {notaryConnected ? (
+              <div className="flex items-center gap-1.5 text-green-700 text-xs font-medium">
+                <CheckCircle2 className="h-4 w-4" />
+                Connected
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-amber-600 text-xs font-medium">
+                <Clock className="h-4 w-4" />
+                Sandbox mode — add secrets below
+              </div>
+            )}
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b bg-muted/40">
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                    Secret Name
+                  </th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                    Purpose
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {NOTARYLIVE_ENV_VARS.map((v, i) => (
+                  <tr
+                    key={v.key}
+                    className={cn(
+                      "border-b last:border-0",
+                      i % 2 === 0 ? "bg-background" : "bg-muted/20",
+                    )}
+                  >
+                    <td className="px-3 py-2 font-mono font-semibold text-foreground whitespace-nowrap">
+                      {v.key}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {v.purpose}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="mt-3 text-xs text-muted-foreground">
+            Add these in the{" "}
+            <span className="font-medium text-foreground">Secrets</span> tab of
+            your Replit workspace. When absent, the integration runs against
+            NotaryLive's public sandbox so the flow works end-to-end in
+            development, but orders never reach a true notarized state.
           </p>
         </CardContent>
       </Card>

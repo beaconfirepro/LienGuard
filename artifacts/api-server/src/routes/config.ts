@@ -783,4 +783,19 @@ router.get("/hubspot-status", (_req, res) => {
   res.json({ connected });
 });
 
+/**
+ * GET /config/notarylive-status
+ *
+ * Returns whether real (non-sandbox) NotaryLive credentials are present.
+ * When absent, the integration still works against NotaryLive's public
+ * sandbox, but orders never reach a true notarized state. No credential
+ * values are ever returned.
+ */
+router.get("/notarylive-status", (_req, res) => {
+  const connected = !!(
+    process.env.NOTARYLIVE_API_USER && process.env.NOTARYLIVE_API_KEY
+  );
+  res.json({ connected });
+});
+
 export default router;
