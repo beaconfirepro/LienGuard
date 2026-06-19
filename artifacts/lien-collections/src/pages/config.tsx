@@ -207,6 +207,8 @@ function ReferenceTreeTab() {
 
   const [newDeptName, setNewDeptName] = React.useState("");
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
+  const [stNames, setStNames] = React.useState<Record<string, string>>({});
+  const [sstForms, setSstForms] = React.useState<Record<string, { name: string; lienWorkflowType: string }>>({});
 
   const addDept = useMutation({
     mutationFn: (name: string) =>
@@ -218,6 +220,34 @@ function ReferenceTreeTab() {
       qc.invalidateQueries({ queryKey: ["config-departments"] });
       setNewDeptName("");
       toast({ title: "Department added" });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const addSt = useMutation({
+    mutationFn: ({ name, departmentId }: { name: string; departmentId: string }) =>
+      apiFetch("/config/system-types", {
+        method: "POST",
+        body: JSON.stringify({ name, departmentId }),
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["config-departments"] });
+      setStNames((prev) => ({ ...prev, [vars.departmentId]: "" }));
+      toast({ title: "System type added" });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const addSst = useMutation({
+    mutationFn: ({ name, systemTypeId, lienWorkflowType }: { name: string; systemTypeId: string; lienWorkflowType: string }) =>
+      apiFetch("/config/sub-system-types", {
+        method: "POST",
+        body: JSON.stringify({ name, systemTypeId, lienWorkflowType }),
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["config-departments"] });
+      setSstForms((prev) => ({ ...prev, [vars.systemTypeId]: { name: "", lienWorkflowType: "" } }));
+      toast({ title: "Sub-system type added" });
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -287,35 +317,116 @@ function ReferenceTreeTab() {
               </button>
 
               {expanded.has(dept.id) && (
-                <div className="border-t px-4 pb-3">
+                <div className="border-t px-4 pb-4">
                   {dept.systemTypes.length === 0 ? (
                     <p className="py-2 text-xs text-muted-foreground">No system types yet.</p>
                   ) : (
                     <div className="mt-2 space-y-3">
-                      {dept.systemTypes.map((st) => (
-                        <div key={st.id} className="pl-4 border-l-2 border-muted">
-                          <div className="flex items-center gap-2 py-1">
-                            <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span className="text-sm font-medium">{st.name}</span>
-                          </div>
-                          {st.subSystemTypes.length > 0 && (
-                            <div className="ml-4 mt-1 space-y-1">
-                              {st.subSystemTypes.map((sst) => (
-                                <div key={sst.id} className="flex items-center gap-2 py-0.5">
-                                  <Layout className="h-3 w-3 text-muted-foreground" />
-                                  <span className="text-xs text-foreground">{sst.name}</span>
-                                  <WorkflowTypeBadge value={sst.lienWorkflowType} />
-                                  <span className="text-xs text-muted-foreground">
-                                    — {WORKFLOW_TYPE_LABELS[sst.lienWorkflowType]?.description}
-                                  </span>
-                                </div>
-                              ))}
+                      {dept.systemTypes.map((st) => {
+                        const sstForm = sstForms[st.id] ?? { name: "", lienWorkflowType: "" };
+                        return (
+                          <div key={st.id} className="pl-4 border-l-2 border-muted">
+                            <div className="flex items-center gap-2 py-1">
+                              <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span className="text-sm font-medium">{st.name}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {st.subSystemTypes.length} sub-type{st.subSystemTypes.length !== 1 ? "s" : ""}
+                              </Badge>
                             </div>
-                          )}
-                        </div>
-                      ))}
+                            {st.subSystemTypes.length > 0 && (
+                              <div className="ml-4 mt-1 space-y-1">
+                                {st.subSystemTypes.map((sst) => (
+                                  <div key={sst.id} className="flex items-center gap-2 py-0.5">
+                                    <Layout className="h-3 w-3 text-muted-foreground" />
+                                    <span className="text-xs text-foreground">{sst.name}</span>
+                                    <WorkflowTypeBadge value={sst.lienWorkflowType} />
+                                    <span className="text-xs text-muted-foreground">
+                                      — {WORKFLOW_TYPE_LABELS[sst.lienWorkflowType]?.description}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <div className="ml-4 mt-2 flex flex-wrap items-end gap-2 border-l border-dashed pl-3 pb-1">
+                              <div className="space-y-0.5">
+                                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Add Sub-System Type</p>
+                                <Input
+                                  placeholder="Name"
+                                  className="h-7 text-xs w-36"
+                                  value={sstForm.name}
+                                  onChange={(e) =>
+                                    setSstForms((prev) => ({ ...prev, [st.id]: { ...sstForm, name: e.target.value } }))
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-0.5">
+                                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Lien Workflow</p>
+                                <Select
+                                  value={sstForm.lienWorkflowType}
+                                  onValueChange={(v) =>
+                                    setSstForms((prev) => ({ ...prev, [st.id]: { ...sstForm, lienWorkflowType: v } }))
+                                  }
+                                >
+                                  <SelectTrigger className="h-7 text-xs w-44">
+                                    <SelectValue placeholder="Select workflow…" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {Object.entries(WORKFLOW_TYPE_LABELS).map(([value, { label, description }]) => (
+                                      <SelectItem key={value} value={value}>
+                                        <span className="font-medium">{label}</span>
+                                        <span className="ml-1 text-muted-foreground text-[10px]">— {description}</span>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs"
+                                disabled={!sstForm.name.trim() || !sstForm.lienWorkflowType || addSst.isPending}
+                                onClick={() =>
+                                  addSst.mutate({ name: sstForm.name.trim(), systemTypeId: st.id, lienWorkflowType: sstForm.lienWorkflowType })
+                                }
+                              >
+                                <Plus className="h-3 w-3 mr-1" />
+                                Add
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
+
+                  <div className="mt-3 flex flex-wrap items-end gap-2 rounded border border-dashed bg-muted/20 px-3 py-2">
+                    <div className="space-y-0.5">
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Add System Type</p>
+                      <Input
+                        placeholder="e.g. Multifamily"
+                        className="h-7 text-xs w-44"
+                        value={stNames[dept.id] ?? ""}
+                        onChange={(e) => setStNames((prev) => ({ ...prev, [dept.id]: e.target.value }))}
+                        onKeyDown={(e) => {
+                          const n = stNames[dept.id]?.trim();
+                          if (e.key === "Enter" && n) addSt.mutate({ name: n, departmentId: dept.id });
+                        }}
+                      />
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      disabled={!stNames[dept.id]?.trim() || addSt.isPending}
+                      onClick={() => {
+                        const n = stNames[dept.id]?.trim();
+                        if (n) addSt.mutate({ name: n, departmentId: dept.id });
+                      }}
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Add System Type
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
@@ -346,9 +457,6 @@ function ReferenceTreeTab() {
             Add
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground mt-2">
-          System types and sub-system types can be added via the API or will be expanded in the UI in Phase 2.
-        </p>
       </div>
     </div>
   );

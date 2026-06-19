@@ -11,6 +11,7 @@ import {
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
+import { requireAdmin } from "../lib/admin";
 
 const router: IRouter = Router();
 
@@ -49,7 +50,7 @@ router.get("/departments", async (req, res) => {
  * POST /config/departments
  * Creates a department. Body: { name }
  */
-router.post("/departments", async (req, res) => {
+router.post("/departments", requireAdmin, async (req, res) => {
   const { orgId } = getSession(req);
   const { name } = req.body as { name?: string };
 
@@ -74,7 +75,7 @@ router.post("/departments", async (req, res) => {
  * POST /config/system-types
  * Body: { name, departmentId }
  */
-router.post("/system-types", async (req, res) => {
+router.post("/system-types", requireAdmin, async (req, res) => {
   const { orgId } = getSession(req);
   const { name, departmentId } = req.body as {
     name?: string;
@@ -117,7 +118,7 @@ router.post("/system-types", async (req, res) => {
  * POST /config/sub-system-types
  * Body: { name, systemTypeId, lienWorkflowType } — lienWorkflowType REQUIRED (L05)
  */
-router.post("/sub-system-types", async (req, res) => {
+router.post("/sub-system-types", requireAdmin, async (req, res) => {
   const { orgId } = getSession(req);
   const { name, systemTypeId, lienWorkflowType } = req.body as {
     name?: string;
@@ -180,9 +181,9 @@ router.post("/sub-system-types", async (req, res) => {
  * PATCH /config/sub-system-types/:id
  * Partial update: name, lienWorkflowType
  */
-router.patch("/sub-system-types/:id", async (req, res) => {
+router.patch("/sub-system-types/:id", requireAdmin, async (req, res) => {
   const { orgId } = getSession(req);
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { name, lienWorkflowType } = req.body as {
     name?: string;
     lienWorkflowType?: string;
@@ -252,7 +253,7 @@ router.get("/stage-triggers", async (req, res) => {
  * POST /config/stage-triggers
  * Body: { hubspotStageKey, label, lienClockTrigger }
  */
-router.post("/stage-triggers", async (req, res) => {
+router.post("/stage-triggers", requireAdmin, async (req, res) => {
   const { orgId } = getSession(req);
   const { hubspotStageKey, label, lienClockTrigger } = req.body as {
     hubspotStageKey?: string;
@@ -321,7 +322,7 @@ router.get("/jurisdictions", async (req, res) => {
  * POST /config/jurisdictions
  * Body: { code, name }
  */
-router.post("/jurisdictions", async (req, res) => {
+router.post("/jurisdictions", requireAdmin, async (req, res) => {
   const { orgId } = getSession(req);
   const { code, name } = req.body as { code?: string; name?: string };
 
@@ -350,7 +351,7 @@ router.post("/jurisdictions", async (req, res) => {
  * POST /config/rule-sets
  * Body: { jurisdictionId, version, effectiveDate, statuteRef }
  */
-router.post("/rule-sets", async (req, res) => {
+router.post("/rule-sets", requireAdmin, async (req, res) => {
   const { orgId } = getSession(req);
   const { jurisdictionId, version, effectiveDate, statuteRef } = req.body as {
     jurisdictionId?: string;
@@ -436,7 +437,7 @@ router.get("/rule-sets/:id/rules", async (req, res) => {
  * POST /config/rules
  * Full LienRule body.
  */
-router.post("/rules", async (req, res) => {
+router.post("/rules", requireAdmin, async (req, res) => {
   const { orgId } = getSession(req);
   const {
     ruleSetId,
@@ -548,9 +549,9 @@ router.post("/rules", async (req, res) => {
  * PATCH /config/rule-sets/:id/review
  * Production gate: sets legalReviewed = true. Body: { legalReviewed: true }
  */
-router.patch("/rule-sets/:id/review", async (req, res) => {
+router.patch("/rule-sets/:id/review", requireAdmin, async (req, res) => {
   const { orgId } = getSession(req);
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { legalReviewed } = req.body as { legalReviewed?: unknown };
 
   if (legalReviewed !== true) {
