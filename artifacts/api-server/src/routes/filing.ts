@@ -559,13 +559,21 @@ router.post("/filing/:id/post-notice", requireSession, async (req, res) => {
         )
     : [];
 
-  // § 53.055 requires certified notice to both the owner and original contractor.
-  // We must succeed for both required recipients before advancing status.
-  if (parties.length === 0) {
+  // § 53.055 requires certified notice to BOTH the owner AND the original contractor.
+  // Verify both required party types are present before proceeding.
+  const ownerParty = parties.find((p) => p.partyRelationType === "owner");
+  const gcParty = parties.find((p) => p.partyRelationType === "original_contractor");
+  const missingTypes: string[] = [];
+  if (!ownerParty) missingTypes.push("owner");
+  if (!gcParty) missingTypes.push("original_contractor");
+
+  if (missingTypes.length > 0) {
     res.status(422).json({
       error:
-        "No owner or original_contractor parties linked to this project. " +
-        "Add project parties before sending post-filing notice.",
+        `Missing required party type(s): ${missingTypes.join(", ")}. ` +
+        "§ 53.055 requires certified notice to both the owner and the original contractor. " +
+        "Add the missing project parties before sending post-filing notice.",
+      missingPartyTypes: missingTypes,
     });
     return;
   }

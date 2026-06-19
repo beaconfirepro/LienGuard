@@ -144,30 +144,27 @@ router.get("/reports/timeline/:projectId", requireSession, async (req, res) => {
 
   const streamIds = streams.map((s) => s.id);
 
-  const [workMonths, notices, filings, waivers] = await Promise.all([
-    streamIds.length
-      ? db
+  // If no streams, skip work-month/notice/filing queries (inArray([]) would error).
+  const [workMonths, notices, filings, waivers] = streams.length === 0
+    ? [[], [], [], await db.select().from(waiversTable).where(and(eq(waiversTable.lienProjectId, projectId), eq(waiversTable.orgId, orgId)))]
+    : await Promise.all([
+        db
           .select()
           .from(workMonthsTable)
-          .where(and(inArray(workMonthsTable.lienStreamId, streamIds), eq(workMonthsTable.orgId, orgId)))
-      : Promise.resolve([]),
-    streamIds.length
-      ? db
+          .where(and(inArray(workMonthsTable.lienStreamId, streamIds), eq(workMonthsTable.orgId, orgId))),
+        db
           .select()
           .from(noticesTable)
-          .where(and(inArray(noticesTable.lienStreamId, streamIds), eq(noticesTable.orgId, orgId)))
-      : Promise.resolve([]),
-    streamIds.length
-      ? db
+          .where(and(inArray(noticesTable.lienStreamId, streamIds), eq(noticesTable.orgId, orgId))),
+        db
           .select()
           .from(lienFilingsTable)
-          .where(and(inArray(lienFilingsTable.lienStreamId, streamIds), eq(lienFilingsTable.orgId, orgId)))
-      : Promise.resolve([]),
-    db
-      .select()
-      .from(waiversTable)
-      .where(and(eq(waiversTable.lienProjectId, projectId), eq(waiversTable.orgId, orgId))),
-  ]);
+          .where(and(inArray(lienFilingsTable.lienStreamId, streamIds), eq(lienFilingsTable.orgId, orgId))),
+        db
+          .select()
+          .from(waiversTable)
+          .where(and(eq(waiversTable.lienProjectId, projectId), eq(waiversTable.orgId, orgId))),
+      ]);
 
   const workMonthIds = workMonths.map((wm) => wm.id);
   const deadlines = workMonthIds.length

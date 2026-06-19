@@ -107,22 +107,23 @@ router.get("/external/exposure", requireServiceKey, async (_req, res) => {
       .from(lienStreamsTable)
       .where(inArray(lienStreamsTable.status, [...openStatuses]));
 
+    if (streams.length === 0) {
+      res.json({
+        openStreamCount: 0, openProjectCount: 0, totalGrossExposure: 0,
+        filedLienCount: 0, collectionsAccountsInCollections: 0, collectionsOverdueTotal: 0,
+        streams: [],
+      });
+      return;
+    }
+
     const streamIds = streams.map((s) => s.id);
     const projectIds = [...new Set(streams.map((s) => s.lienProjectId))];
 
     const [projects, workMonths, notices, filings, collectionAccounts] = await Promise.all([
-      projectIds.length
-        ? db.select().from(lienProjectsTable).where(inArray(lienProjectsTable.id, projectIds))
-        : Promise.resolve([]),
-      streamIds.length
-        ? db.select().from(workMonthsTable).where(inArray(workMonthsTable.lienStreamId, streamIds))
-        : Promise.resolve([]),
-      streamIds.length
-        ? db.select().from(noticesTable).where(inArray(noticesTable.lienStreamId, streamIds))
-        : Promise.resolve([]),
-      streamIds.length
-        ? db.select().from(lienFilingsTable).where(inArray(lienFilingsTable.lienStreamId, streamIds))
-        : Promise.resolve([]),
+      db.select().from(lienProjectsTable).where(inArray(lienProjectsTable.id, projectIds)),
+      db.select().from(workMonthsTable).where(inArray(workMonthsTable.lienStreamId, streamIds)),
+      db.select().from(noticesTable).where(inArray(noticesTable.lienStreamId, streamIds)),
+      db.select().from(lienFilingsTable).where(inArray(lienFilingsTable.lienStreamId, streamIds)),
       db.select().from(collectionAccountsTable),
     ]);
 
