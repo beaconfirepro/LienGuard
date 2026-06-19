@@ -162,6 +162,27 @@ function daysUntil(d: string | null | undefined): string {
   return `${diff} day${diff !== 1 ? "s" : ""} remaining`;
 }
 
+// Post-filing deadline status — drives color-coded badges in the right panel.
+type DeadlineState = "upcoming" | "due_soon" | "overdue" | "satisfied";
+
+const DEADLINE_META: Record<DeadlineState, { label: string; tone: string }> = {
+  satisfied: { label: "Done", tone: "#14eba3" },
+  overdue: { label: "Overdue", tone: "#eb143f" },
+  due_soon: { label: "Due soon", tone: "#f59e0b" },
+  upcoming: { label: "On track", tone: "#14eba3" },
+};
+
+const DUE_SOON_DAYS = 7;
+
+function deadlineState(date: string | null | undefined, satisfied: boolean): DeadlineState {
+  if (satisfied) return "satisfied";
+  if (!date) return "upcoming";
+  const diff = Math.ceil((new Date(date).getTime() - Date.now()) / 86400000);
+  if (diff < 0) return "overdue";
+  if (diff <= DUE_SOON_DAYS) return "due_soon";
+  return "upcoming";
+}
+
 // ── Sub-components ─────────────────────────────────────────────────────────
 
 function StepBadge({
@@ -326,29 +347,88 @@ export default function FilingPage() {
     }
   }, [filing?.id]); // eslint-disable-line
 
-  // Right panel with post-filing deadlines
+  // Right panel with post-filing deadlines — derived from live filing + release data.
+  const filingRecorded = !!(filing?.postFilingNoticeDeadline || filing?.enforcementDeadline);
+
+  const postFilingObligations: Array<{
+    key: string;
+    title: string;
+    date: string | null;
+    satisfied: boolean;
+    satisfiedSub: string;
+    pendingSub?: string;
+  }> = filingRecorded
+    ? [
+        {
+          key: "pf-notice",
+          title: "Send filed copies to owner + GC",
+          date: filing?.postFilingNoticeDeadline ?? null,
+          satisfied: filing?.status === "post_filing_notice_sent",
+          satisfiedSub: "Filed copies sent (§ 53.055)",
+        },
+        {
+          key: "pf-enforce",
+          title: "Suit to foreclose (enforcement)",
+          date: filing?.enforcementDeadline ?? null,
+          satisfied: false,
+          satisfiedSub: "Enforced (§ 53.158)",
+        },
+        {
+          key: "pf-release",
+          title: "Release lien after payoff",
+          date: null,
+          satisfied: !!currentRelease,
+          satisfiedSub: currentRelease?.signedDate
+            ? `Released ${fmtDate(currentRelease.signedDate)}`
+            : `Release ${currentRelease?.status ?? "recorded"}`,
+          pendingSub: "Due once the balance is paid (§ 53.152)",
+        },
+      ]
+    : [];
+
+  const postFilingItems = postFilingObligations.map((o) => {
+    const state = deadlineState(o.date, o.satisfied);
+    const meta = DEADLINE_META[state];
+    let sub: string;
+    if (o.satisfied) {
+      sub = o.satisfiedSub;
+    } else if (o.date) {
+      sub = `${fmtDate(o.date)} · ${daysUntil(o.date)}`;
+    } else {
+      sub = o.pendingSub ?? "Pending";
+    }
+    return { id: o.key, title: o.title, sub, badge: meta.label, badgeTone: meta.tone };
+  });
+
+  const outstandingCount = postFilingObligations.filter((o) => !o.satisfied).length;
+
   useRightPanel(
-    <Panel title="Post-Filing Deadlines" accent="#eb143f" count={2}>
-      <QueueList
-        items={[
-          {
-            id: "pf1",
-            title: "Send filed copies to owner + GC",
-            sub: filing?.postFilingNoticeDeadline
-              ? `${fmtDate(filing.postFilingNoticeDeadline)} · ${daysUntil(filing.postFilingNoticeDeadline)}`
-              : "5 business days after recording (§ 53.055)",
-          },
-          {
-            id: "pf2",
-            title: "Suit to foreclose (enforcement)",
-            sub: filing?.enforcementDeadline
-              ? `${fmtDate(filing.enforcementDeadline)} · ${daysUntil(filing.enforcementDeadline)}`
-              : "1-year enforcement window (§ 53.158)",
-          },
-        ]}
-      />
+    <Panel
+      title="Post-Filing Deadlines"
+      accent="#eb143f"
+      count={filingRecorded ? outstandingCount : undefined}
+    >
+      {filingRecorded ? (
+        <QueueList items={postFilingItems} />
+      ) : (
+        <div
+          className="px-4 py-6 text-[11.5px] leading-relaxed"
+          style={{ color: "var(--text-muted-color)" }}
+        >
+          No post-filing deadlines yet. Record the filing with the county to generate the
+          § 53.055 notice-to-owner and § 53.158 enforcement deadlines.
+        </div>
+      )}
     </Panel>,
-    [filing?.postFilingNoticeDeadline, filing?.enforcementDeadline],
+    [
+      filingRecorded,
+      filing?.status,
+      filing?.postFilingNoticeDeadline,
+      filing?.enforcementDeadline,
+      currentRelease?.id,
+      currentRelease?.status,
+      currentRelease?.signedDate,
+    ],
   );
 
   const compliance = exposureData?.exposure ?? EMPTY_EXPOSURE;

@@ -5,6 +5,7 @@ interface QueueItem {
   title: string;
   sub?: string;
   badge?: string;
+  badgeTone?: string;
   action?: string;
   actionTone?: string;
   active?: boolean;
@@ -38,7 +39,18 @@ export function QueueList({ items = [], onAction }: QueueListProps) {
         >
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 text-[12.5px] font-semibold leading-tight" style={{ color: "var(--text-base)" }}>{q.title}</div>
-            {q.badge && <span className="shrink-0 font-mono text-[10.5px]" style={{ color: "var(--text-muted-color)" }}>{q.badge}</span>}
+            {q.badge && (
+              q.badgeTone ? (
+                <span
+                  className="shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-wide"
+                  style={{ color: q.badgeTone, background: alpha(q.badgeTone, 0.15) }}
+                >
+                  {q.badge}
+                </span>
+              ) : (
+                <span className="shrink-0 font-mono text-[10.5px]" style={{ color: "var(--text-muted-color)" }}>{q.badge}</span>
+              )
+            )}
           </div>
           {q.sub && <div className="mt-1 text-[11px]" style={{ color: "var(--text-muted-color)" }}>{q.sub}</div>}
           {q.action && (
