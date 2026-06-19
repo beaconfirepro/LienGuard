@@ -219,11 +219,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             )}
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
               <Landmark className="h-5 w-5 shrink-0 text-amber-500" />
-              <div className="min-w-0">
-                <div className="text-[17px] font-bold leading-tight tracking-tight" style={{ color: "var(--text-base)" }}>
-                  Liens &amp; Collections
-                </div>
-              </div>
             </div>
             <div className="relative hidden w-56 lg:block">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: "var(--text-muted-color)" }} />
