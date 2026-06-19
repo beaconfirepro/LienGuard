@@ -115,7 +115,7 @@ export default function HomePage() {
   const incompleteCount = projects.filter((p) => !p.completionChecklistComplete).length;
 
   useLeftPanel(
-    <Panel title="Notices to Send" accent="#f59e0b" count={draftNotices.length}>
+    <Panel title="Notices Needed" accent="#f59e0b" count={draftNotices.length}>
       <QueueList
         items={
           draftNotices.length > 0
