@@ -14,65 +14,62 @@ declare global {
 }
 
 /**
- * requireSession — checks that a valid session with orgId is present.
+ * parseSession — reads the SIGNED `lc_session` cookie (set by the server) and
+ * attaches the payload to `req.sessionData` so downstream middleware can read it.
  *
- * Phase 0 dev bypass: if no session cookie is found in development, we auto-
- * inject the test org so the app is usable without a full SSO round-trip.
- * Set NODE_ENV=production to enforce real sessions.
+ * The cookie is signed by Express's cookie-parser using SESSION_SECRET, so
+ * it cannot be forged without the secret.
  *
- * When Helm SSO is wired in a later phase, replace the dev-bypass logic with
- * real token validation while keeping the same `getSession(req).orgId` API.
- */
-export function requireSession(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): void {
-  const session = req.sessionData;
-
-  if (session?.orgId) {
-    return next();
-  }
-
-  if (process.env.NODE_ENV !== "production") {
-    const devOrg =
-      (req.headers["x-dev-org-id"] as string | undefined) ??
-      process.env.DEV_ORG_ID ??
-      "org_beacon_test_001";
-    req.sessionData = { orgId: devOrg };
-    return next();
-  }
-
-  res.status(401).json({ error: "No session" });
-}
-
-/** Typed accessor — use instead of `req.sessionData!` at call sites. */
-export function getSession(req: Request): SessionData {
-  if (!req.sessionData?.orgId) {
-    throw new Error("requireSession must run before getSession");
-  }
-  return req.sessionData;
-}
-
-/**
- * parseSession — reads the lightweight base64-JSON cookie set by app.ts
- * and attaches the payload to req.sessionData for requireSession to read.
+ * Phase 0: Helm SSO is stubbed — the only way to obtain a session is via the
+ * dev-only `GET /dev/session` endpoint.  Real OIDC token exchange is wired in
+ * a later phase but the interface (req.sessionData.orgId) stays the same.
  */
 export function parseSession(
   req: Request,
   _res: Response,
   next: NextFunction,
 ): void {
-  const raw = (req as any).cookies?.["lc_session"];
-  if (raw) {
+  const raw = (req as any).signedCookies?.["lc_session"];
+  if (raw && typeof raw === "string") {
     try {
-      const parsed = JSON.parse(
-        Buffer.from(raw, "base64").toString("utf-8"),
-      ) as SessionData;
-      req.sessionData = parsed;
+      const parsed = JSON.parse(raw) as SessionData;
+      if (parsed?.orgId) {
+        req.sessionData = parsed;
+      }
     } catch {
-      /* ignore malformed cookie */
+      /* ignore malformed cookie payload */
     }
   }
   next();
+}
+
+/**
+ * requireSession — enforces that a valid, server-signed session exists.
+ *
+ * Returns 401 JSON when:
+ *   - no `lc_session` cookie is present, or
+ *   - the cookie signature is invalid (cookie-parser sets the value to `false`
+ *     when the HMAC check fails), or
+ *   - the cookie payload is missing `orgId`.
+ *
+ * No automatic org injection occurs.  To bypass in development, call
+ * `GET /dev/session` once — it sets the signed cookie for the test org.
+ */
+export function requireSession(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  if (req.sessionData?.orgId) {
+    return next();
+  }
+  res.status(401).json({ error: "Unauthorized — valid session required" });
+}
+
+/** Typed accessor — use after requireSession; throws if session is absent. */
+export function getSession(req: Request): SessionData {
+  if (!req.sessionData?.orgId) {
+    throw new Error("requireSession must run before getSession");
+  }
+  return req.sessionData;
 }
