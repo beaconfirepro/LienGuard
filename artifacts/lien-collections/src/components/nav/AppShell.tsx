@@ -4,8 +4,8 @@ import { cn } from "@/lib/utils";
 import { useResponsive } from "@/hooks/use-responsive";
 import {
   LayoutGrid, Landmark, DollarSign, Lock, Settings,
-  ChevronLeft, Bell, Menu, X, Search,
-  Sun, Moon,
+  ChevronLeft, ChevronRight, Bell, Menu, X, Search,
+  Sun, Moon, PanelRightClose, PanelRightOpen,
 } from "lucide-react";
 
 /* ─── Right-panel context ────────────────────────────────────────────────── */
@@ -262,12 +262,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Sub-header */}
           <div
-            className="sticky top-16 z-20 flex flex-wrap items-center gap-3 border-b px-4 py-2.5 md:px-6"
+            className="sticky top-16 z-20 flex items-center gap-3 border-b px-4 py-2.5 md:px-6"
             style={{ background: "var(--bg)", borderColor: "var(--helm-border)" }}
           >
             <div className="min-w-0 flex-1">
               <div className="truncate text-[15.5px] font-semibold" style={{ color: "var(--text-base)" }}>{title}</div>
             </div>
+            {!!right && isDesktop && (
+              <button
+                onClick={() => setRightOpen((o) => !o)}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors"
+                style={{
+                  background: rightOpen ? "var(--surface-3)" : "var(--surface-2)",
+                  borderColor: "var(--helm-border)",
+                  color: rightOpen ? "var(--text-base)" : "var(--text-dim)",
+                }}
+                title={rightOpen ? "Collapse panel" : "Expand panel"}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-3)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = rightOpen ? "var(--surface-3)" : "var(--surface-2)")}
+              >
+                {rightOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+              </button>
+            )}
           </div>
 
           {/* Body — content + optional right panel */}
