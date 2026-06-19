@@ -1,11 +1,11 @@
 /**
- * filings.tsx — Filings index.
- *
- * Route: /filing
+ * streams-view.tsx — Streams (filings) table for the unified Liens workspace.
  *
  * Lists every lien stream across all projects so a user can jump straight into
- * the per-stream Filing Workspace (/filing/:streamId). Previously the filing
- * workspace was only reachable from a project's detail page.
+ * the per-stream Filing Workspace (/filing/:streamId). Registers the
+ * "New Filing" (left) and "At Risk" (right) side panels.
+ *
+ * Previously this was the standalone /filing list page (filings.tsx).
  */
 
 import * as React from "react";
@@ -14,6 +14,7 @@ import { useLocation } from "wouter";
 import { Panel, useRightPanel, useLeftPanel } from "@/components/nav/AppShell";
 import { ResponsiveTable } from "@/components/ui/responsive-table";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ListPageLayout, ListTableState } from "@/components/ui/list-page";
 import { Search, Plus, FileText } from "lucide-react";
 import { money } from "@/lib/utils";
 
@@ -82,7 +83,7 @@ function fmtDate(iso: string | null): string {
   });
 }
 
-export default function FilingsPage() {
+export default function StreamsView() {
   const [, setLocation] = useLocation();
   const [search, setSearch] = React.useState("");
 
@@ -283,32 +284,13 @@ export default function FilingsPage() {
   ];
 
   return (
-    <>
-      {/* Summary KPIs */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: "Total Filings", value: isLoading ? "—" : allFilings.length, color: "#a855f7" },
-          { label: "At Risk", value: isLoading ? "—" : atRiskCount, color: atRiskCount > 0 ? "#eb143f" : "#14eba3" },
-          { label: "Filed", value: isLoading ? "—" : filedCount, color: "#6366f1" },
-        ].map((k) => (
-          <div
-            key={k.label}
-            className="relative overflow-hidden rounded-lg border px-4 pb-3.5 pt-4"
-            style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
-          >
-            <div className="absolute inset-x-0 top-0 h-[3px]" style={{ background: k.color }} />
-            <div className="text-[10.5px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>
-              {k.label}
-            </div>
-            <div className="mt-1.5 font-mono text-[24px] font-bold leading-none" style={{ color: k.color }}>
-              {k.value}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Search */}
-      <div className="flex flex-wrap items-center gap-2">
+    <ListPageLayout
+      kpis={[
+        { label: "Total Filings", value: isLoading ? "—" : allFilings.length, color: "#a855f7" },
+        { label: "At Risk", value: isLoading ? "—" : atRiskCount, color: atRiskCount > 0 ? "#eb143f" : "#14eba3" },
+        { label: "Filed", value: isLoading ? "—" : filedCount, color: "#6366f1" },
+      ]}
+      filters={
         <div className="relative flex-1 min-w-[180px] max-w-xs">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: "var(--text-muted-color)" }} />
           <input
@@ -319,42 +301,31 @@ export default function FilingsPage() {
             style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)", color: "var(--text-base)" }}
           />
         </div>
-      </div>
-
-      {/* Filings list */}
-      {isLoading ? (
-        <div
-          className="rounded-lg border px-4 py-8 text-center text-[12px]"
-          style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-muted-color)" }}
-        >
-          Loading filings…
-        </div>
-      ) : isError ? (
-        <div
-          className="rounded-lg border px-4 py-6 text-center text-[12px]"
-          style={{ background: "rgba(235,20,63,.06)", borderColor: "rgba(235,20,63,.3)", color: "#eb143f" }}
-        >
-          {String((error as Error)?.message ?? "").includes("401")
+      }
+    >
+      <ListTableState
+        isLoading={isLoading}
+        isError={isError}
+        isEmpty={filtered.length === 0}
+        loadingText="Loading filings…"
+        errorText={
+          String((error as Error)?.message ?? "").includes("401")
             ? "Your session has expired — please refresh the page to sign in again."
-            : `Failed to load: ${(error as Error)?.message}`}
-        </div>
-      ) : filtered.length === 0 ? (
-        <div
-          className="rounded-lg border px-4 py-8 text-center text-[12px]"
-          style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-muted-color)" }}
-        >
-          {allFilings.length === 0
+            : `Failed to load: ${(error as Error)?.message}`
+        }
+        emptyText={
+          allFilings.length === 0
             ? "No filings yet. Open a lien stream on a project to start a filing."
-            : "No filings match the current filters."}
-        </div>
-      ) : (
+            : "No filings match the current filters."
+        }
+      >
         <ResponsiveTable
           columns={columns}
           rows={filtered}
           gridTemplate="1.6fr .8fr .8fr .9fr"
           onRowClick={(r: FilingRow) => setLocation(`/filing/${r.streamId}`)}
         />
-      )}
-    </>
+      </ListTableState>
+    </ListPageLayout>
   );
 }

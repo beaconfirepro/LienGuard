@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Redirect, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -13,7 +13,6 @@ import CollectionsPage from "@/pages/collections";
 import AccountDetailPage from "@/pages/account-detail";
 import SendQueuePage from "@/pages/send-queue";
 import WaiversPage from "@/pages/waivers";
-import FilingsPage from "@/pages/filings";
 import FilingWorkspacePage from "@/pages/filing-workspace";
 
 const queryClient = new QueryClient();
@@ -31,7 +30,9 @@ function Router() {
         <Route path="/send-queue" component={SendQueuePage} />
         <Route path="/waivers" component={WaiversPage} />
         <Route path="/filing/:streamId" component={FilingWorkspacePage} />
-        <Route path="/filing" component={FilingsPage} />
+        <Route path="/filing">
+          <Redirect to="/liens?view=streams" />
+        </Route>
         <Route path="/settings" component={ConfigPage} />
         <Route component={NotFound} />
       </Switch>

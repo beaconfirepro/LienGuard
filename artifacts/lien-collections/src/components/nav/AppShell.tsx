@@ -9,7 +9,7 @@ import {
   LayoutGrid, Landmark, DollarSign, Lock, Settings,
   ChevronLeft, Bell, Menu, X,
   Sun, Moon, PanelRightClose, PanelRightOpen,
-  PanelLeftClose, PanelLeftOpen, FileSignature, Gavel, LogOut,
+  PanelLeftClose, PanelLeftOpen, FileSignature, LogOut,
   ChevronDown,
 } from "lucide-react";
 
@@ -89,8 +89,7 @@ function CollapsibleCard({
 /* ─── Navigation config ──────────────────────────────────────────────────── */
 const MODULE_NAV = [
   { key: "dashboard", label: "Dashboard", to: "/", Icon: LayoutGrid },
-  { key: "liens", label: "Projects", to: "/liens", Icon: Landmark },
-  { key: "filings", label: "Filings", to: "/filing", Icon: Gavel },
+  { key: "liens", label: "Liens", to: "/liens", Icon: Landmark },
   { key: "waivers", label: "Waivers", to: "/waivers", Icon: FileSignature },
   { key: "collections", label: "Collections", to: "/collections", Icon: DollarSign },
   { key: "holds", label: "Vendor Holds", to: "/holds", Icon: Lock },
@@ -98,11 +97,10 @@ const MODULE_NAV = [
 
 const TITLES: [RegExp, string][] = [
   [/^\/settings$/, "Company Settings"],
-  [/^\/liens$/, "Projects"],
+  [/^\/liens$/, "Liens"],
   [/^\/send-queue$/, "Ready-to-Send Queue"],
   [/^\/projects\//, "Project Workspace"],
   [/^\/waivers$/, "Waiver Workspace"],
-  [/^\/filing$/, "Filings"],
   [/^\/filing\//, "Filing Workspace"],
   [/^\/holds$/, "Vendor Bill Holds"],
   [/^\/collections\/.+/, "Account Detail"],
@@ -205,6 +203,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isLiensSection =
     location === "/liens" ||
     location.startsWith("/projects") ||
+    location.startsWith("/filing") ||
     location.startsWith("/send-queue");
 
   /* Inner left panel (DD-UI: LP · content · RP) is now page-registered via
