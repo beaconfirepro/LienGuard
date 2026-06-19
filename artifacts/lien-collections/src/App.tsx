@@ -16,6 +16,7 @@ import MonthlyReportPage from "@/pages/monthly-report";
 import SendQueuePage from "@/pages/send-queue";
 import WaiversPage from "@/pages/waivers";
 import FilingPage from "@/pages/filing";
+import ReportsPage from "@/pages/reports";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,8 @@ function Router() {
         <Route path="/send-queue" component={SendQueuePage} />
         <Route path="/waivers" component={WaiversPage} />
         <Route path="/filing/:streamId" component={FilingPage} />
+        <Route path="/reports/:projectId/timeline" component={ReportsPage} />
+        <Route path="/reports" component={ReportsPage} />
         <Route path="/settings" component={ConfigPage} />
         <Route component={NotFound} />
       </Switch>

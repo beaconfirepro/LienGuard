@@ -7,9 +7,14 @@ import {
   stageTriggerConfigsTable,
   holdsTable,
   lienProjectsTable,
+  lienStreamsTable,
+  lienFilingsTable,
+  workMonthsTable,
+  noticesTable,
   linkedClientsTable,
+  collectionAccountsTable,
 } from "@workspace/db";
-import { eq, isNull, and } from "drizzle-orm";
+import { eq, isNull, and, inArray, not } from "drizzle-orm";
 import { requireServiceKey } from "../lib/serviceKey";
 
 const router: IRouter = Router();
@@ -84,6 +89,82 @@ router.get("/external/holds", requireServiceKey, async (_req, res) => {
     res.json({ holds: activeHolds });
   } catch (err) {
     res.status(500).json({ error: "Failed to load holds" });
+  }
+});
+
+/**
+ * GET /external/exposure
+ *
+ * Returns lien exposure + collections status for Helm Core cross-app dashboards.
+ * Service-key authenticated (Phase 6).
+ */
+router.get("/external/exposure", requireServiceKey, async (_req, res) => {
+  try {
+    const openStatuses = ["open", "at_risk", "notice_active", "filing", "filed"] as const;
+
+    const streams = await db
+      .select()
+      .from(lienStreamsTable)
+      .where(inArray(lienStreamsTable.status, [...openStatuses]));
+
+    const streamIds = streams.map((s) => s.id);
+    const projectIds = [...new Set(streams.map((s) => s.lienProjectId))];
+
+    const [projects, workMonths, notices, filings, collectionAccounts] = await Promise.all([
+      projectIds.length
+        ? db.select().from(lienProjectsTable).where(inArray(lienProjectsTable.id, projectIds))
+        : Promise.resolve([]),
+      streamIds.length
+        ? db.select().from(workMonthsTable).where(inArray(workMonthsTable.lienStreamId, streamIds))
+        : Promise.resolve([]),
+      streamIds.length
+        ? db.select().from(noticesTable).where(inArray(noticesTable.lienStreamId, streamIds))
+        : Promise.resolve([]),
+      streamIds.length
+        ? db.select().from(lienFilingsTable).where(inArray(lienFilingsTable.lienStreamId, streamIds))
+        : Promise.resolve([]),
+      db.select().from(collectionAccountsTable),
+    ]);
+
+    const totalGrossExposure = streams.reduce((sum, stream) => {
+      const overdueMonths = workMonths.filter(
+        (wm) => wm.lienStreamId === stream.id && wm.derivedOverdue && !wm.clearedFlag,
+      );
+      const streamNotices = notices.filter((n) => n.lienStreamId === stream.id);
+      return sum + overdueMonths.reduce((s2, wm) => {
+        const n = streamNotices.find((x) => x.workMonthId === wm.id);
+        return s2 + (n ? Number(n.claimAmount) : 0);
+      }, 0);
+    }, 0);
+
+    const filedCount = filings.filter((f) => f.status === "filed" || f.status === "post_filing_notice_sent").length;
+    const inCollections = collectionAccounts.filter((a) => a.status === "in_collections").length;
+    const totalOverdue = collectionAccounts.reduce((sum, a) => sum + Number(a.totalOverdue ?? 0), 0);
+
+    res.json({
+      openStreamCount: streams.length,
+      openProjectCount: projectIds.length,
+      totalGrossExposure,
+      filedLienCount: filedCount,
+      collectionsAccountsInCollections: inCollections,
+      collectionsOverdueTotal: totalOverdue,
+      streams: streams.map((s) => {
+        const project = projects.find((p) => p.id === s.lienProjectId);
+        const filing = filings.find((f) => f.lienStreamId === s.id);
+        return {
+          streamId: s.id,
+          projectId: s.lienProjectId,
+          hubspotProjectId: project?.hubspotProjectId ?? null,
+          workStream: s.workStream,
+          status: s.status,
+          filing: filing
+            ? { status: filing.status, enforcementDeadline: filing.enforcementDeadline }
+            : null,
+        };
+      }),
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load exposure data" });
   }
 });
 

@@ -56,6 +56,8 @@ const MODULE_NAV = [
       { label: "Monthly Report", to: "/monthly" },
       { label: "Send Queue", to: "/send-queue" },
       { label: "Waivers", to: "/waivers" },
+      { label: "Filing", to: "/filing" },
+      { label: "Reports", to: "/reports" },
     ],
   },
   { key: "collections", label: "Collections", to: "/collections", Icon: DollarSign },
@@ -63,7 +65,7 @@ const MODULE_NAV = [
   { key: "config", label: "Settings", to: "/settings", Icon: Settings },
 ];
 
-const LIENS_PATHS = ["/liens", "/monthly", "/send-queue", "/waivers", "/projects", "/filing"];
+const LIENS_PATHS = ["/liens", "/monthly", "/send-queue", "/waivers", "/projects", "/filing", "/reports"];
 
 const TITLES: [RegExp, string][] = [
   [/^\/settings$/, "Settings"],
@@ -74,6 +76,8 @@ const TITLES: [RegExp, string][] = [
   [/^\/projects\//, "Project Lien Detail"],
   [/^\/waivers$/, "Waiver Workspace"],
   [/^\/filing\//, "Filing Workspace"],
+  [/^\/reports\/.+\/timeline$/, "Lien Timeline"],
+  [/^\/reports$/, "Exposure & Reports"],
   [/^\/holds$/, "Vendor Bill Holds"],
   [/^\/collections\/.+/, "Account Detail"],
   [/^\/collections$/, "Collections Pipeline"],

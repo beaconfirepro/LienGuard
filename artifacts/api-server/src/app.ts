@@ -14,6 +14,8 @@ import holdsRouter from "./routes/holds";
 import monthlyRouter from "./routes/monthly";
 import noticesRouter, { mailingWebhookRouter } from "./routes/notices";
 import waiversRouter from "./routes/waivers";
+import filingRouter from "./routes/filing";
+import reportsRouter from "./routes/reports";
 import devRouter from "./routes/dev";
 import { logger } from "./lib/logger";
 import { parseSession } from "./lib/session";
@@ -61,6 +63,8 @@ app.use("/api/monthly", monthlyRouter);     // POST /api/monthly/run, GET /api/m
 app.use("/api", noticesRouter);             // POST /api/notices, PATCH /api/notices/:id, etc.
 app.use("/api", mailingWebhookRouter);      // POST /api/webhooks/mailing           (no auth — Shippo callback)
 app.use("/api", waiversRouter);             // POST /api/waivers, GET /api/waivers/exposure, etc.
+app.use("/api", filingRouter);              // POST /api/filing/:streamId/*, GET /api/filing/stream/:sid
+app.use("/api", reportsRouter);             // GET /api/reports/exposure, /timeline/:id, /lapsed
 app.use("/api", apiRouter);                 // GET /api/org, etc.                  (session, catch-all)
 
 export default app;
