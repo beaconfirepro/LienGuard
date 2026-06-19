@@ -7,6 +7,7 @@ import NotFound from "@/pages/not-found";
 import HomePage from "@/pages/home";
 import ConfigPage from "@/pages/config";
 import ProjectDetailPage from "@/pages/project-detail";
+import ProjectNewPage from "@/pages/project-new";
 
 const queryClient = new QueryClient();
 
@@ -15,6 +16,7 @@ function Router() {
     <AppShell>
       <Switch>
         <Route path="/" component={HomePage} />
+        <Route path="/projects/new" component={ProjectNewPage} />
         <Route path="/projects/:id" component={ProjectDetailPage} />
         <Route path="/settings" component={ConfigPage} />
         <Route component={NotFound} />

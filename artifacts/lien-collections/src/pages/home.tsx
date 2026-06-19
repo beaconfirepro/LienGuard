@@ -75,7 +75,9 @@ const WORKFLOW_COLORS: Record<string, string> = {
   none: "bg-gray-100 text-gray-600",
 };
 
-const STREAM_STATUS_RISK: Record<string, "high" | "medium" | "low" | "ok"> = {
+type RiskLevel = "high" | "medium" | "low" | "ok";
+
+const STREAM_STATUS_RISK: Record<string, RiskLevel> = {
   at_risk: "high",
   filing: "high",
   lapsed: "high",
@@ -86,16 +88,17 @@ const STREAM_STATUS_RISK: Record<string, "high" | "medium" | "low" | "ok"> = {
   closed: "ok",
 };
 
-function highestRisk(streams: LienStream[]): "high" | "medium" | "low" | "ok" | "none" {
+const RISK_ORDER: RiskLevel[] = ["high", "medium", "low", "ok"];
+
+function highestRisk(streams: LienStream[]): RiskLevel | "none" {
   if (!streams.length) return "none";
-  const order = ["high", "medium", "low", "ok"];
-  for (const level of order) {
-    if (streams.some((s) => STREAM_STATUS_RISK[s.status] === level)) return level as "high" | "medium" | "low" | "ok";
+  for (const level of RISK_ORDER) {
+    if (streams.some((s) => STREAM_STATUS_RISK[s.status] === level)) return level;
   }
   return "none";
 }
 
-function RiskBadge({ risk }: { risk: ReturnType<typeof highestRisk> }) {
+function RiskBadge({ risk }: { risk: RiskLevel | "none" }) {
   if (risk === "none") {
     return <span className="text-xs text-muted-foreground">No streams</span>;
   }
@@ -184,6 +187,7 @@ function ProjectRow({ project }: { project: Project }) {
 export default function HomePage() {
   const [search, setSearch] = React.useState("");
   const [filterWorkflow, setFilterWorkflow] = React.useState("all");
+  const [filterRisk, setFilterRisk] = React.useState("all");
   const [filterIncomplete, setFilterIncomplete] = React.useState(false);
 
   const { data, isLoading, isError, error } = useQuery({
@@ -201,6 +205,10 @@ export default function HomePage() {
       return false;
     }
     if (filterWorkflow !== "all" && p.lienWorkflowType !== filterWorkflow) return false;
+    if (filterRisk !== "all") {
+      const risk = highestRisk(p.streams);
+      if (risk !== filterRisk) return false;
+    }
     if (filterIncomplete && p.completionChecklistComplete) return false;
     return true;
   });
@@ -270,7 +278,7 @@ export default function HomePage() {
 
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[180px] max-w-sm">
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
             <Input
               placeholder="Search projects or county…"
@@ -291,6 +299,18 @@ export default function HomePage() {
               <SelectItem value="none">No Lien Tracking</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={filterRisk} onValueChange={setFilterRisk}>
+            <SelectTrigger className="h-9 text-sm w-36">
+              <SelectValue placeholder="All risk levels" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Risk Levels</SelectItem>
+              <SelectItem value="high">At Risk</SelectItem>
+              <SelectItem value="medium">Active</SelectItem>
+              <SelectItem value="low">Open</SelectItem>
+              <SelectItem value="ok">Closed</SelectItem>
+            </SelectContent>
+          </Select>
           <Button
             size="sm"
             variant={filterIncomplete ? "default" : "outline"}
@@ -309,7 +329,8 @@ export default function HomePage() {
           </div>
         ) : isError ? (
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center text-sm text-destructive">
-            {(error as Error)?.message?.includes("401")
+            {String((error as Error)?.message ?? "").includes("401") ||
+            String((error as Error)?.message ?? "").toLowerCase().includes("unauthorized")
               ? "Not authenticated — visit /api/dev/session to establish a dev session."
               : `Failed to load projects: ${(error as Error)?.message}`}
           </div>

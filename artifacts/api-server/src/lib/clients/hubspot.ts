@@ -1,11 +1,15 @@
 /**
- * HubSpotClient — Phase 0 fixture stub.
+ * HubSpotClient — real read client with fixture fallback.
  *
- * Returns canned fixture data so every downstream consumer has a working
- * interface before the real HubSpot API credentials are configured.
+ * When HUBSPOT_API_KEY is set, makes live calls to the HubSpot CRM v3 API.
+ * Falls back to canned fixture data when the key is absent (dev/test mode)
+ * so every downstream consumer has a working interface without credentials.
  *
- * Replace each method body with a real API call in Phase 2.
+ * Project records are stored as Deals in HubSpot.
+ * Company records are HubSpot Companies.
  */
+
+const HUBSPOT_BASE = "https://api.hubapi.com";
 
 export interface HubSpotProject {
   hubspotProjectId: string;
@@ -23,6 +27,10 @@ export interface HubSpotCompany {
   paymentTermsDays: number;
   requiresNotarizedWaivers: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Fixture data (used when HUBSPOT_API_KEY is absent)
+// ---------------------------------------------------------------------------
 
 const FIXTURE_PROJECTS: HubSpotProject[] = [
   {
@@ -76,18 +84,143 @@ const FIXTURE_COMPANIES: HubSpotCompany[] = [
     paymentTermsDays: 30,
     requiresNotarizedWaivers: false,
   },
+  {
+    hubspotCompanyId: "hs_co_owner2",
+    legalName: "Oak Ave Investors LLC",
+    mailingAddress: "1 Invest Way, Dallas TX",
+    paymentTermsDays: 30,
+    requiresNotarizedWaivers: false,
+  },
+  {
+    hubspotCompanyId: "hs_co_gc2",
+    legalName: "TopChain GC Inc",
+    mailingAddress: "9 Prime St, Dallas TX",
+    paymentTermsDays: 30,
+    requiresNotarizedWaivers: false,
+  },
+  {
+    hubspotCompanyId: "hs_co_sub2",
+    legalName: "MidSub Mechanical",
+    mailingAddress: "4 Mid Rd, Dallas TX",
+    paymentTermsDays: 30,
+    requiresNotarizedWaivers: false,
+  },
 ];
 
+// ---------------------------------------------------------------------------
+// Live API helpers
+// ---------------------------------------------------------------------------
+
+interface HsApiDeal {
+  id: string;
+  properties: {
+    dealname?: string;
+    dealstage?: string;
+    address?: string;
+    [key: string]: string | undefined;
+  };
+}
+
+interface HsApiCompany {
+  id: string;
+  properties: {
+    name?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    email?: string;
+    phone?: string;
+    [key: string]: string | undefined;
+  };
+}
+
+async function hsGet<T>(path: string, apiKey: string): Promise<T | null> {
+  try {
+    const res = await fetch(`${HUBSPOT_BASE}${path}`, {
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+function buildMailingAddress(c: HsApiCompany["properties"]): string {
+  const parts = [c.address, c.city, c.state, c.zip].filter(Boolean);
+  return parts.join(", ");
+}
+
+// ---------------------------------------------------------------------------
+// Client class
+// ---------------------------------------------------------------------------
+
 export class HubSpotClient {
+  private apiKey: string | undefined;
+
+  constructor(apiKey?: string) {
+    this.apiKey = apiKey ?? process.env.HUBSPOT_API_KEY;
+  }
+
+  private get live(): boolean {
+    return !!this.apiKey;
+  }
+
   async getProject(hubspotProjectId: string): Promise<HubSpotProject | null> {
+    if (this.live) {
+      const deal = await hsGet<HsApiDeal>(
+        `/crm/v3/objects/deals/${hubspotProjectId}?properties=dealname,dealstage,address`,
+        this.apiKey!,
+      );
+      if (deal) {
+        return {
+          hubspotProjectId,
+          projectName: deal.properties.dealname ?? hubspotProjectId,
+          status: deal.properties.dealstage ?? "unknown",
+          jobSiteAddress: deal.properties.address ?? "",
+        };
+      }
+    }
     return FIXTURE_PROJECTS.find((p) => p.hubspotProjectId === hubspotProjectId) ?? null;
   }
 
   async getCompany(hubspotCompanyId: string): Promise<HubSpotCompany | null> {
+    if (this.live) {
+      const co = await hsGet<HsApiCompany>(
+        `/crm/v3/objects/companies/${hubspotCompanyId}?properties=name,address,city,state,zip,email,phone`,
+        this.apiKey!,
+      );
+      if (co) {
+        return {
+          hubspotCompanyId,
+          legalName: co.properties.name ?? hubspotCompanyId,
+          mailingAddress: buildMailingAddress(co.properties),
+          email: co.properties.email,
+          phone: co.properties.phone,
+          paymentTermsDays: 30,
+          requiresNotarizedWaivers: false,
+        };
+      }
+    }
     return FIXTURE_COMPANIES.find((c) => c.hubspotCompanyId === hubspotCompanyId) ?? null;
   }
 
   async listProjects(): Promise<HubSpotProject[]> {
+    if (this.live) {
+      const res = await hsGet<{ results: HsApiDeal[] }>(
+        `/crm/v3/objects/deals?properties=dealname,dealstage,address&limit=100`,
+        this.apiKey!,
+      );
+      if (res?.results) {
+        return res.results.map((d) => ({
+          hubspotProjectId: d.id,
+          projectName: d.properties.dealname ?? d.id,
+          status: d.properties.dealstage ?? "unknown",
+          jobSiteAddress: d.properties.address ?? "",
+        }));
+      }
+    }
     return FIXTURE_PROJECTS;
   }
 
@@ -97,6 +230,7 @@ export class HubSpotClient {
     body: string;
     activityDate: Date;
   }): Promise<{ hubspotActivityId: string }> {
+    // Live note creation would use POST /crm/v3/objects/notes
     return { hubspotActivityId: `hs_act_stub_${Date.now()}` };
   }
 }

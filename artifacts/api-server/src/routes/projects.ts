@@ -15,7 +15,34 @@ const router = Router();
 router.use(requireSession);
 
 // ---------------------------------------------------------------------------
-// Checklist helper
+// Risk helpers
+// ---------------------------------------------------------------------------
+
+type RiskLevel = "high" | "medium" | "low" | "ok";
+
+const STREAM_STATUS_RISK: Record<string, RiskLevel> = {
+  at_risk: "high",
+  filing: "high",
+  lapsed: "high",
+  notice_active: "medium",
+  filed: "medium",
+  open: "low",
+  released: "ok",
+  closed: "ok",
+};
+
+const RISK_ORDER: RiskLevel[] = ["high", "medium", "low", "ok"];
+
+function highestRisk(statuses: string[]): RiskLevel | null {
+  if (!statuses.length) return null;
+  for (const level of RISK_ORDER) {
+    if (statuses.some((s) => STREAM_STATUS_RISK[s] === level)) return level;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Checklist helpers
 // ---------------------------------------------------------------------------
 
 function computeChecklist(
@@ -78,21 +105,37 @@ async function refreshChecklistComplete(orgId: string, projectId: string) {
 
 // ---------------------------------------------------------------------------
 // GET /projects
-// Query params: status (hubspot status), lienWorkflowType, contractorTier, incomplete
+// Query params: status, lienWorkflowType, contractorTier, incomplete, risk (high|medium|low|ok)
 // ---------------------------------------------------------------------------
 router.get("/", async (req, res) => {
   const { orgId } = getSession(req);
-  const { status, lienWorkflowType, contractorTier, incomplete } = req.query as Record<
+  const { status, lienWorkflowType, contractorTier, incomplete, risk } = req.query as Record<
     string,
     string | undefined
   >;
 
-  const projects = await db
-    .select()
-    .from(lienProjectsTable)
-    .where(eq(lienProjectsTable.orgId, orgId));
+  const [projects, allStreams, allParties] = await Promise.all([
+    db.select().from(lienProjectsTable).where(eq(lienProjectsTable.orgId, orgId)),
+    db.select().from(lienStreamsTable).where(eq(lienStreamsTable.orgId, orgId)),
+    db
+      .select({
+        lienProjectId: projectPartyLinksTable.lienProjectId,
+        partyRelationType: projectPartyLinksTable.partyRelationType,
+      })
+      .from(projectPartyLinksTable)
+      .where(eq(projectPartyLinksTable.orgId, orgId)),
+  ]);
 
-  let filtered = projects;
+  // Attach streams + compute live checklist for each project
+  const projectsWithMeta = projects.map((p) => {
+    const streams = allStreams.filter((s) => s.lienProjectId === p.id);
+    const parties = allParties.filter((pp) => pp.lienProjectId === p.id);
+    const { complete: liveChecklistComplete } = computeChecklist(p, parties);
+    return { ...p, completionChecklistComplete: liveChecklistComplete, streams };
+  });
+
+  let filtered = projectsWithMeta;
+
   if (status) {
     filtered = filtered.filter((p) => p.cachedHubspotStatus === status);
   }
@@ -105,37 +148,33 @@ router.get("/", async (req, res) => {
   if (incomplete === "true") {
     filtered = filtered.filter((p) => !p.completionChecklistComplete);
   }
+  if (risk) {
+    const validRisks: RiskLevel[] = ["high", "medium", "low", "ok"];
+    if (validRisks.includes(risk as RiskLevel)) {
+      filtered = filtered.filter((p) => {
+        const statuses = p.streams.map((s) => s.status);
+        return highestRisk(statuses) === (risk as RiskLevel);
+      });
+    }
+  }
 
-  // Attach stream statuses for each project
-  const projectIds = filtered.map((p) => p.id);
-  const streams =
-    projectIds.length > 0
-      ? await db
-          .select()
-          .from(lienStreamsTable)
-          .where(eq(lienStreamsTable.orgId, orgId))
-      : [];
-
-  const projectsWithStreams = filtered.map((p) => ({
-    ...p,
-    streams: streams.filter((s) => s.lienProjectId === p.id),
-  }));
-
-  res.json({ projects: projectsWithStreams });
+  res.json({ projects: filtered });
 });
 
 // ---------------------------------------------------------------------------
 // POST /projects
-// Body: { hubspotProjectId, subSystemTypeId, jurisdictionId, contractorTier? }
+// Body: { hubspotProjectId, subSystemTypeId, jurisdictionId?, contractorTier? }
+// jurisdictionId is optional — defaults to first active jurisdiction for the org
 // ---------------------------------------------------------------------------
 router.post("/", async (req, res) => {
   const { orgId } = getSession(req);
-  const { hubspotProjectId, subSystemTypeId, jurisdictionId, contractorTier } = req.body as {
-    hubspotProjectId?: string;
-    subSystemTypeId?: string;
-    jurisdictionId?: string;
-    contractorTier?: string;
-  };
+  const { hubspotProjectId, subSystemTypeId, jurisdictionId: jurisdictionIdInput, contractorTier } =
+    req.body as {
+      hubspotProjectId?: string;
+      subSystemTypeId?: string;
+      jurisdictionId?: string;
+      contractorTier?: string;
+    };
 
   if (!hubspotProjectId || typeof hubspotProjectId !== "string") {
     res.status(400).json({ error: "hubspotProjectId is required" });
@@ -143,10 +182,6 @@ router.post("/", async (req, res) => {
   }
   if (!subSystemTypeId || typeof subSystemTypeId !== "string") {
     res.status(400).json({ error: "subSystemTypeId is required" });
-    return;
-  }
-  if (!jurisdictionId || typeof jurisdictionId !== "string") {
-    res.status(400).json({ error: "jurisdictionId is required" });
     return;
   }
 
@@ -161,15 +196,34 @@ router.post("/", async (req, res) => {
     return;
   }
 
-  // Verify jurisdiction exists for this org
-  const [jur] = await db
-    .select()
-    .from(jurisdictionsTable)
-    .where(and(eq(jurisdictionsTable.id, jurisdictionId), eq(jurisdictionsTable.orgId, orgId)))
-    .limit(1);
-  if (!jur) {
-    res.status(404).json({ error: "Jurisdiction not found" });
-    return;
+  // Resolve jurisdictionId — use provided value, or fall back to first active jurisdiction for org
+  let resolvedJurisdictionId = jurisdictionIdInput?.trim() || "";
+  if (!resolvedJurisdictionId) {
+    const [firstJur] = await db
+      .select({ id: jurisdictionsTable.id })
+      .from(jurisdictionsTable)
+      .where(and(eq(jurisdictionsTable.orgId, orgId), eq(jurisdictionsTable.active, true)))
+      .limit(1);
+    if (!firstJur) {
+      res.status(400).json({
+        error: "No active jurisdiction found for this org. Set up a jurisdiction in Settings first.",
+      });
+      return;
+    }
+    resolvedJurisdictionId = firstJur.id;
+  } else {
+    // Verify explicit jurisdiction exists for this org
+    const [jur] = await db
+      .select({ id: jurisdictionsTable.id })
+      .from(jurisdictionsTable)
+      .where(
+        and(eq(jurisdictionsTable.id, resolvedJurisdictionId), eq(jurisdictionsTable.orgId, orgId)),
+      )
+      .limit(1);
+    if (!jur) {
+      res.status(404).json({ error: "Jurisdiction not found" });
+      return;
+    }
   }
 
   // Check for duplicate
@@ -188,7 +242,7 @@ router.post("/", async (req, res) => {
     return;
   }
 
-  // Pull from HubSpot (fixture client for Phase 2; swap for live in Phase 3)
+  // Pull from HubSpot (live if HUBSPOT_API_KEY is set, otherwise fixture)
   const hsProject = await hubspotClient.getProject(hubspotProjectId);
 
   const validTiers = ["first_tier", "second_tier"];
@@ -202,7 +256,7 @@ router.post("/", async (req, res) => {
     .values({
       orgId,
       hubspotProjectId,
-      jurisdictionId,
+      jurisdictionId: resolvedJurisdictionId,
       subSystemTypeId,
       lienWorkflowType: sst.lienWorkflowType,
       contractorTier: tier,
@@ -234,7 +288,7 @@ router.get("/:id", async (req, res) => {
     return;
   }
 
-  const [parties, streams, sst] = await Promise.all([
+  const [parties, streams, sstRows] = await Promise.all([
     db
       .select()
       .from(projectPartyLinksTable)
@@ -248,13 +302,15 @@ router.get("/:id", async (req, res) => {
     db
       .select()
       .from(subSystemTypesTable)
-      .where(and(eq(subSystemTypesTable.id, project.subSystemTypeId), eq(subSystemTypesTable.orgId, orgId)))
+      .where(
+        and(eq(subSystemTypesTable.id, project.subSystemTypeId), eq(subSystemTypesTable.orgId, orgId)),
+      )
       .limit(1),
   ]);
 
   const checklist = computeChecklist(project, parties);
 
-  res.json({ project, parties, streams, subSystemType: sst[0] ?? null, checklist });
+  res.json({ project, parties, streams, subSystemType: sstRows[0] ?? null, checklist });
 });
 
 // ---------------------------------------------------------------------------
@@ -304,11 +360,10 @@ router.patch("/:id", async (req, res) => {
     return;
   }
 
-  const [updated] = await db
+  await db
     .update(lienProjectsTable)
     .set(updates)
-    .where(and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)))
-    .returning();
+    .where(and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)));
 
   // Recompute checklist after update
   await refreshChecklistComplete(orgId, id);
@@ -319,7 +374,7 @@ router.patch("/:id", async (req, res) => {
     .where(and(eq(lienProjectsTable.id, id), eq(lienProjectsTable.orgId, orgId)))
     .limit(1);
 
-  res.json({ project: refreshed ?? updated });
+  res.json({ project: refreshed });
 });
 
 // ---------------------------------------------------------------------------
@@ -354,7 +409,7 @@ router.get("/:id/checklist", async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // POST /projects/:id/parties
-// Body: { hubspotCompanyId, partyRelationType, cachedLegalName, cachedMailingAddress? }
+// Body: { hubspotCompanyId, partyRelationType, cachedLegalName?, cachedMailingAddress? }
 // ---------------------------------------------------------------------------
 router.post("/:id/parties", async (req, res) => {
   const { orgId } = getSession(req);
@@ -428,7 +483,7 @@ router.post("/:id/parties", async (req, res) => {
 
   if (!legalName) {
     res.status(400).json({
-      error: "cachedLegalName is required (or hubspotCompanyId must match a known HubSpot company)",
+      error: "cachedLegalName is required (or hubspotCompanyId must match a known company)",
     });
     return;
   }
@@ -463,7 +518,7 @@ router.post("/:id/parties", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// DELETE /projects/:id/parties/:partyId
+// DELETE /projects/:id/parties/:partyId  →  204 No Content
 // ---------------------------------------------------------------------------
 router.delete("/:id/parties/:partyId", async (req, res) => {
   const { orgId } = getSession(req);
@@ -499,7 +554,7 @@ router.delete("/:id/parties/:partyId", async (req, res) => {
   // Recompute checklist
   await refreshChecklistComplete(orgId, projectId);
 
-  res.json({ success: true });
+  res.status(204).end();
 });
 
 export default router;
