@@ -5,7 +5,7 @@ import { QueueList } from "@/components/ui/queue-list";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ApprovalGateBanner } from "@/components/ui/approval-gate-banner";
 import { money } from "@/lib/utils";
-import { Check, FileText, Landmark, ShieldAlert, Plus, X } from "lucide-react";
+import { Check, FileText, Landmark, ShieldAlert, Plus, X, RefreshCw } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -401,6 +401,14 @@ export default function WaiversPage() {
 
   const notarizeMutation = useMutation({
     mutationFn: (id: string) => apiPost(`/waivers/${id}/notarize`),
+    onSuccess: (data: { signingUrl?: string }) => {
+      if (data?.signingUrl) window.open(data.signingUrl, "_blank", "noopener,noreferrer");
+      queryClient.invalidateQueries({ queryKey: ["waivers"] });
+    },
+  });
+
+  const notaryRefreshMutation = useMutation({
+    mutationFn: (id: string) => apiPost(`/waivers/${id}/notary-refresh`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["waivers"] }),
   });
 
@@ -656,6 +664,19 @@ export default function WaiversPage() {
                     >
                       <ShieldAlert className="h-3.5 w-3.5" />
                       {notarizeMutation.isPending ? "Initiating…" : "Notarize"}
+                    </button>
+                  )}
+
+                  {/* Check notarization status (poll NotaryLive) */}
+                  {!!w.notaryLiveRef && !w.notarized && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); notaryRefreshMutation.mutate(w.id); }}
+                      disabled={notaryRefreshMutation.isPending}
+                      className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[12px] font-semibold"
+                      style={{ background: "var(--surface-3)", borderColor: "var(--helm-border)", color: "var(--text-dim)" }}
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      {notaryRefreshMutation.isPending ? "Checking…" : "Check notary status"}
                     </button>
                   )}
                 </div>

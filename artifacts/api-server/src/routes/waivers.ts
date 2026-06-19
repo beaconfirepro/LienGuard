@@ -6,9 +6,12 @@
  * GET    /waivers/exposure            remaining lien exposure per stream (L34)
  * POST   /waivers/:id/approve-pm      PM approval gate
  * POST   /waivers/:id/approve-finance Finance approval gate
- * POST   /waivers/:id/notarize        trigger NotaryLive session
- * POST   /webhooks/notarylive         NotaryLive completion callback
+ * POST   /waivers/:id/notarize        start NotaryLive RON order
+ * POST   /waivers/:id/notary-refresh  poll NotaryLive order status & sync
  * GET    /waivers/:id/pdf             § 53.284 statutory waiver PDF
+ *
+ * NotaryLive v3 has no webhook — completion is discovered by polling
+ * order/status (see notary-refresh), not by an inbound callback.
  */
 
 import { Router } from "express";
@@ -28,7 +31,7 @@ import {
 } from "@workspace/db";
 import { eq, and, inArray, isNull, not } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
-import { createNotarySession } from "../lib/notarylive";
+import { createNotarySession, getNotaryOrderStatus } from "../lib/notarylive";
 
 const router = Router();
 
@@ -466,15 +469,14 @@ router.post("/waivers/:id/notarize", requireSession, async (req, res) => {
     }
   }
 
-  const docDescription = `Texas Property Code § 53.284 Lien Waiver — ${waiver.waiverType.replace(/_/g, " ")} — ${project?.cachedProjectName ?? waiver.lienProjectId}`;
-
-  const webhookBase = process.env.API_BASE_URL ?? "http://localhost:8080";
-  const session = await createNotarySession(
-    "Beacon Fire Protection Representative",
-    "liens@beaconfp.com",
-    docDescription,
-    `${webhookBase}/api/webhooks/notarylive`,
-  );
+  // Unique per-attempt reference NotaryLive echoes back for status polling.
+  const internalId = `wv_${id}_${Date.now().toString(36)}`;
+  const session = await createNotarySession({
+    internalId,
+    signerFirstName: "HELM",
+    signerLastName: "Fire Protection",
+    signerEmail: "liens@helmfp.com",
+  });
 
   const [updated] = await db
     .update(waiversTable)
@@ -486,58 +488,55 @@ router.post("/waivers/:id/notarize", requireSession, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /webhooks/notarylive — NotaryLive completion callback
+// POST /waivers/:id/notary-refresh — poll NotaryLive and sync completion
+//
+// NotaryLive v3 has no webhook; completion is discovered by polling
+// order/status. Once the order reaches "notarized" we persist the signed
+// document URL and mark the waiver notarized.
 // ---------------------------------------------------------------------------
 
-router.post("/webhooks/notarylive", async (req, res) => {
-  const { session_id, status, document_url, signed_at } = req.body as {
-    session_id?: string;
-    status?: string;
-    document_url?: string;
-    signed_at?: string;
-  };
+router.post("/waivers/:id/notary-refresh", requireSession, async (req, res) => {
+  const { orgId } = getSession(req);
+  const id = req.params["id"] as string;
 
-  if (!session_id) {
-    res.status(400).json({ error: "session_id required" });
-    return;
-  }
-
-  // Validate webhook signature (simple shared-secret header approach).
-  const sigHeader = req.headers["x-notarylive-signature"] as string | undefined;
-  const expectedSig = process.env.NOTARYLIVE_WEBHOOK_SECRET;
-  if (expectedSig && sigHeader !== expectedSig) {
-    res.status(401).json({ error: "Invalid webhook signature" });
-    return;
-  }
-
-  if (status !== "completed") {
-    res.json({ received: true, action: "none" });
-    return;
-  }
-
-  // Find waiver by notaryLiveRef.
   const [waiver] = await db
     .select()
     .from(waiversTable)
-    .where(eq(waiversTable.notaryLiveRef, session_id))
+    .where(and(eq(waiversTable.id, id), eq(waiversTable.orgId, orgId)))
     .limit(1);
 
   if (!waiver) {
-    res.json({ received: true, action: "not_found" });
+    res.status(404).json({ error: "Waiver not found" });
     return;
   }
 
-  await db
-    .update(waiversTable)
-    .set({
-      notarized: true,
-      generatedDocUrl: document_url ?? null,
-      signedDate: signed_at ? new Date(signed_at) : new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(waiversTable.id, waiver.id));
+  if (!waiver.notaryLiveRef) {
+    res.status(409).json({
+      error: "No notarization session has been started for this waiver",
+      code: "NO_NOTARY_SESSION",
+    });
+    return;
+  }
 
-  res.json({ received: true, waiverId: waiver.id });
+  const status = await getNotaryOrderStatus(waiver.notaryLiveRef);
+
+  if (status.notarized && !waiver.notarized) {
+    const [updated] = await db
+      .update(waiversTable)
+      .set({
+        notarized: true,
+        generatedDocUrl: status.documentUrls[0] ?? null,
+        signedDate: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(waiversTable.id, id), eq(waiversTable.orgId, orgId)))
+      .returning();
+
+    res.json({ waiver: updated, status: status.status, notarized: true });
+    return;
+  }
+
+  res.json({ waiver, status: status.status, notarized: waiver.notarized });
 });
 
 // ---------------------------------------------------------------------------

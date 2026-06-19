@@ -7,8 +7,9 @@
 - [Replit cartographer + generic JSX](cartographer-generic-jsx.md) — cartographer plugin breaks on <Component<T> syntax; remove explicit type param and let TypeScript infer from props.
 - [Waivers route order](waivers-route-order.md) — GET /waivers/exposure must be declared BEFORE GET /waivers/:id in the router to avoid Express collision.
 - [Express 5 params strict typing](express5-params-strict.md) — req.params fields type as string|string[]; Drizzle eq() with strict enum columns rejects this; cast with `req.params["id"] as string`.
-- [Shippo + NotaryLive stubs](third-party-stubs.md) — Both clients fall back to deterministic stubs when SHIPPO_API_KEY / NOTARYLIVE_API_KEY are absent; real keys activate live calls.
+- [Shippo stub fallback](third-party-stubs.md) — Shippo client stubs when SHIPPO_API_KEY absent; real key activates live calls. (NotaryLive no longer stubs — see notarylive-v3.md.)
 - [Session lib no requireRole](session-no-requirerole.md) — no requireRole() exported from session.ts; inline admin check via `getSession(req).role !== "admin"` → 403.
 - [Auth gate architecture](auth-gate-architecture.md) — login gate is server-driven via GET /api/auth/user; AUTH_BYPASS=1 (dev only) injects synthetic admin to bypass it.
 - [Authenticated screenshots](screenshot-dev-session.md) — web app now uses real Replit Auth; dev-session priming is gone, screenshots always show the login gate. Roles live in users.role.
 - [Seed drift vs recompute](seed-drift-recompute.md) — collections/stream status & escalationStage are recomputed at runtime; seeds using onConflictDoNothing can't reset drifted rows, so re-assert canonical states with explicit UPDATEs.
+- [NotaryLive v3](notarylive-v3.md) — real v3 API contract + sandbox behavior; no webhook, completion is polled; never reintroduce a webhook completion path.
