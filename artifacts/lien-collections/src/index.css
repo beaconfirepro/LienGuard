@@ -56,6 +56,20 @@
   --color-sidebar-accent-border: var(--sidebar-accent-border);
   --color-sidebar-ring: hsl(var(--sidebar-ring));
 
+  /* Helm design-system semantic tokens */
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-helm-border: var(--helm-border);
+  --color-text-base: var(--text-base);
+  --color-text-dim: var(--text-dim);
+  --color-text-muted: var(--text-muted-color);
+  --color-success: #14eba3;
+  --color-warning: #f59f0a;
+  --color-error: #eb143f;
+  --color-info: #6366f1;
+
   --font-sans: var(--app-font-sans);
   --font-serif: var(--app-font-serif);
   --font-mono: var(--app-font-mono);
@@ -78,14 +92,6 @@
   --text-4xl--line-height: calc(2.5 / 2.25);
   --text-5xl: 3rem;
   --text-5xl--line-height: 1;
-  --text-6xl: 3.75rem;
-  --text-6xl--line-height: 1;
-  --text-7xl: 4.5rem;
-  --text-7xl--line-height: 1;
-  --text-8xl: 6rem;
-  --text-8xl--line-height: 1;
-  --text-9xl: 8rem;
-  --text-9xl--line-height: 1;
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -94,12 +100,6 @@
 }
 
 /* ─── LIGHT MODE ───────────────────────────────────────────────────────────── */
-/*
- * Helm-parity palette — navy-primary, neutral surface, amber accent.
- * Primary:     217 71% 28%  (Helm navy)
- * Accent:       38 92% 50%  (deadline amber)
- * Destructive:   0 84% 60%  (alert red)
- */
 :root {
   --button-outline: rgba(0,0,0, .10);
   --badge-outline: rgba(0,0,0, .05);
@@ -134,11 +134,11 @@
   --sidebar-accent-foreground: 217 71% 20%;
   --sidebar-ring:            217 71% 50%;
 
-  /* Brand primary — Helm navy */
+  /* Brand primary */
   --primary:                 217 71% 28%;
   --primary-foreground:      0 0% 100%;
 
-  /* Secondary — muted steel */
+  /* Secondary */
   --secondary:               214 32% 91%;
   --secondary-foreground:    217 32% 25%;
 
@@ -162,12 +162,12 @@
   --chart-5:                   0 84% 60%;
 
   /* Typography */
-  --app-font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --app-font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   --app-font-serif: Georgia, ui-serif, serif;
   --app-font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   /* Geometry */
-  --radius: 0.5rem;
+  --radius: 0.625rem;
 
   /* Shadows */
   --shadow-2xs: 0px 1px 2px 0px hsl(217 32% 12% / 0.04);
@@ -181,6 +181,16 @@
 
   --tracking-normal: 0em;
   --spacing: 0.25rem;
+
+  /* Helm tokens — light */
+  --bg: #f8f9fb;
+  --surface: #ffffff;
+  --surface-2: #f1f3f6;
+  --surface-3: #e8ebf0;
+  --helm-border: #d9dde5;
+  --text-base: #1a1d24;
+  --text-dim: #5c6170;
+  --text-muted-color: #9095a3;
 
   /* Computed borders */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
@@ -212,7 +222,7 @@
   --foreground:              210 20% 92%;
   --border:                  217 32% 18%;
   --input:                   217 32% 22%;
-  --ring:                    217 71% 60%;
+  --ring:                    38 92% 55%;
 
   /* Cards */
   --card:                    222 35% 11%;
@@ -228,14 +238,14 @@
   --sidebar:                 222 47% 9%;
   --sidebar-foreground:      210 20% 82%;
   --sidebar-border:          217 32% 16%;
-  --sidebar-primary:         217 71% 60%;
+  --sidebar-primary:         38 92% 55%;
   --sidebar-primary-foreground: 222 47% 7%;
   --sidebar-accent:          217 40% 16%;
   --sidebar-accent-foreground: 217 71% 75%;
-  --sidebar-ring:            217 71% 60%;
+  --sidebar-ring:            38 92% 55%;
 
-  /* Brand primary */
-  --primary:                 217 71% 60%;
+  /* Brand primary — amber in dark mode */
+  --primary:                 38 92% 55%;
   --primary-foreground:      222 47% 7%;
 
   /* Secondary */
@@ -271,6 +281,16 @@
   --shadow-xl:  0px 20px 25px -5px hsl(222 47% 3% / 0.40), 0px 8px 10px -6px hsl(222 47% 3% / 0.20);
   --shadow-2xl: 0px 25px 50px -12px hsl(222 47% 3% / 0.50);
 
+  /* Helm tokens — dark */
+  --bg: #0f1117;
+  --surface: #181b24;
+  --surface-2: #1e222d;
+  --surface-3: #252a37;
+  --helm-border: #2a2f3d;
+  --text-base: #e8eaf0;
+  --text-dim: #8b90a0;
+  --text-muted-color: #5c6070;
+
   /* Computed borders */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
@@ -291,41 +311,50 @@
 @layer base {
   * {
     @apply border-border;
+    box-sizing: border-box;
   }
 
   body {
-    @apply font-sans antialiased bg-background text-foreground;
+    @apply antialiased;
+    background: var(--bg);
+    color: var(--text-base);
+    font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   }
 }
 
-/**
- * Elevation system — hover/active brightness overlays.
- * Usage: className="hover-elevate" or "active-elevate-2"
- */
+/* Numeric data — JetBrains Mono */
+.font-mono {
+  font-feature-settings: "tnum" 1;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb {
+  background: var(--helm-border);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
 @layer utilities {
   input[type="search"]::-webkit-search-cancel-button { @apply hidden; }
 
   [contenteditable][data-placeholder]:empty::before {
     content: attr(data-placeholder);
-    color: hsl(var(--muted-foreground));
+    color: var(--text-muted-color);
     pointer-events: none;
   }
 
   .no-default-hover-elevate {}
   .no-default-active-elevate {}
-
-  .toggle-elevate::before,
-  .toggle-elevate-2::before {
-    content: "";
-    pointer-events: none;
-    position: absolute;
-    inset: 0px;
-    border-radius: inherit;
-    z-index: -1;
-  }
-
-  .toggle-elevate.toggle-elevated::before { background-color: var(--elevate-2); }
-  .border.toggle-elevate::before { inset: -1px; }
 
   .hover-elevate:not(.no-default-hover-elevate),
   .active-elevate:not(.no-default-active-elevate),
@@ -355,12 +384,5 @@
   .hover-elevate-2:hover:not(.no-default-hover-elevate)::after,
   .active-elevate-2:active:not(.no-default-active-elevate)::after {
     background-color: var(--elevate-2);
-  }
-
-  .border.hover-elevate:not(.no-hover-interaction-elevate)::after,
-  .border.active-elevate:not(.no-active-interaction-elevate)::after,
-  .border.hover-elevate-2:not(.no-hover-interaction-elevate)::after,
-  .border.active-elevate-2:not(.no-active-interaction-elevate)::after {
-    inset: -1px;
   }
 }

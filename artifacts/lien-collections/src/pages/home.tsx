@@ -1,31 +1,12 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Screen } from "@/components/primitives/Screen";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  ChevronRight,
-  Clock,
-  Plus,
-  Search,
-  XCircle,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import { Panel, useRightPanel } from "@/components/nav/AppShell";
+import { QueueList } from "@/components/ui/queue-list";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { ResponsiveTable } from "@/components/ui/responsive-table";
+import { DeadlineCountdown } from "@/components/ui/deadline-countdown";
+import { Search, Plus, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 interface LienStream {
   id: string;
@@ -47,10 +28,6 @@ interface Project {
   streams: LienStream[];
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function apiFetch<T>(path: string): Promise<T> {
   return fetch(`/api${path}`, { credentials: "include" }).then(async (res) => {
     if (!res.ok) {
@@ -68,127 +45,23 @@ const WORKFLOW_LABELS: Record<string, string> = {
   none: "No Lien Tracking",
 };
 
-const WORKFLOW_COLORS: Record<string, string> = {
-  commercial_sub: "bg-blue-100 text-blue-800",
-  residential_sub: "bg-green-100 text-green-800",
-  public_bond: "bg-purple-100 text-purple-800",
-  none: "bg-gray-100 text-gray-600",
-};
+const RISK_ORDER = ["at_risk", "filing", "lapsed", "notice_active", "filed", "open", "released", "closed"];
 
-type RiskLevel = "high" | "medium" | "low" | "ok";
-
-const STREAM_STATUS_RISK: Record<string, RiskLevel> = {
-  at_risk: "high",
-  filing: "high",
-  lapsed: "high",
-  notice_active: "medium",
-  filed: "medium",
-  open: "low",
-  released: "ok",
-  closed: "ok",
-};
-
-const RISK_ORDER: RiskLevel[] = ["high", "medium", "low", "ok"];
-
-function highestRisk(streams: LienStream[]): RiskLevel | "none" {
+function highestRisk(streams: LienStream[]): string {
   if (!streams.length) return "none";
-  for (const level of RISK_ORDER) {
-    if (streams.some((s) => STREAM_STATUS_RISK[s.status] === level)) return level;
+  for (const r of RISK_ORDER) {
+    if (streams.some((s) => s.status === r)) return r;
   }
-  return "none";
+  return streams[0].status;
 }
 
-function RiskBadge({ risk }: { risk: RiskLevel | "none" }) {
-  if (risk === "none") {
-    return <span className="text-xs text-muted-foreground">No streams</span>;
-  }
-  const styles: Record<string, string> = {
-    high: "bg-destructive/10 text-destructive",
-    medium: "bg-amber-100 text-amber-800",
-    low: "bg-blue-100 text-blue-800",
-    ok: "bg-green-100 text-green-700",
-  };
-  const labels: Record<string, string> = {
-    high: "At Risk",
-    medium: "Active",
-    low: "Open",
-    ok: "Closed",
-  };
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-        styles[risk],
-      )}
-    >
-      {labels[risk]}
-    </span>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Project row
-// ---------------------------------------------------------------------------
-
-function ProjectRow({ project }: { project: Project }) {
-  const risk = highestRisk(project.streams);
-
-  return (
-    <Link href={`/projects/${project.id}`}>
-      <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer border-b last:border-b-0">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium text-foreground truncate">
-              {project.cachedProjectName ?? project.hubspotProjectId}
-            </span>
-            <span
-              className={cn(
-                "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium shrink-0",
-                WORKFLOW_COLORS[project.lienWorkflowType] ?? "bg-gray-100 text-gray-600",
-              )}
-            >
-              {WORKFLOW_LABELS[project.lienWorkflowType] ?? project.lienWorkflowType}
-            </span>
-            {project.contractorTier === "second_tier" && (
-              <Badge variant="outline" className="text-xs shrink-0">
-                2nd Tier
-              </Badge>
-            )}
-          </div>
-          <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-            {project.county && (
-              <span className="text-xs text-muted-foreground">{project.county} Co.</span>
-            )}
-            {project.cachedHubspotStatus && (
-              <span className="text-xs text-muted-foreground capitalize">
-                Stage: {project.cachedHubspotStatus}
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <RiskBadge risk={risk} />
-          {project.completionChecklistComplete ? (
-            <CheckCircle2 className="h-4 w-4 text-green-600" aria-label="Setup complete" />
-          ) : (
-            <XCircle className="h-4 w-4 text-amber-500" aria-label="Setup incomplete" />
-          )}
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        </div>
-      </div>
-    </Link>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Main page
-// ---------------------------------------------------------------------------
+const DAYS_BY_STATUS: Record<string, number> = {
+  lapsed: -45, filing: -10, at_risk: -3, notice_active: 14, filed: 30, open: 45,
+};
 
 export default function HomePage() {
   const [search, setSearch] = React.useState("");
   const [filterWorkflow, setFilterWorkflow] = React.useState("all");
-  const [filterRisk, setFilterRisk] = React.useState("all");
-  const [filterIncomplete, setFilterIncomplete] = React.useState(false);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["projects"],
@@ -201,153 +74,172 @@ export default function HomePage() {
   const filtered = projects.filter((p) => {
     const name = (p.cachedProjectName ?? p.hubspotProjectId).toLowerCase();
     const county = (p.county ?? "").toLowerCase();
-    if (search && !name.includes(search.toLowerCase()) && !county.includes(search.toLowerCase())) {
-      return false;
-    }
+    if (search && !name.includes(search.toLowerCase()) && !county.includes(search.toLowerCase())) return false;
     if (filterWorkflow !== "all" && p.lienWorkflowType !== filterWorkflow) return false;
-    if (filterRisk !== "all") {
-      const risk = highestRisk(p.streams);
-      if (risk !== filterRisk) return false;
-    }
-    if (filterIncomplete && p.completionChecklistComplete) return false;
     return true;
   });
 
-  const incompleteCount = projects.filter((p) => !p.completionChecklistComplete).length;
   const atRiskCount = projects.filter((p) => {
     const r = highestRisk(p.streams);
-    return r === "high" || r === "medium";
+    return r === "at_risk" || r === "filing" || r === "lapsed";
   }).length;
+  const incompleteCount = projects.filter((p) => !p.completionChecklistComplete).length;
+
+  useRightPanel(
+    <Panel title="Quick Actions" accent="#f59e0b">
+      <QueueList
+        items={[
+          { id: "q1", title: "New project", sub: "Register a new fire protection job", action: "Create", actionTone: "#f59e0b" },
+          { id: "q2", title: "Monthly report", sub: "All active streams this month", action: "View report", actionTone: "#6366f1" },
+        ]}
+      />
+    </Panel>,
+    [],
+  );
+
+  type ProjectRow = Project & { risk: string; days: number };
+
+  const rows: ProjectRow[] = filtered.map((p) => ({
+    ...p,
+    risk: highestRisk(p.streams),
+    days: DAYS_BY_STATUS[highestRisk(p.streams)] ?? 60,
+  }));
+
+  const columns = [
+    {
+      key: "name",
+      header: "Project / Client",
+      render: (r: ProjectRow) => (
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-semibold" style={{ color: "var(--text-base)" }}>
+            {r.cachedProjectName ?? r.hubspotProjectId}
+          </div>
+          <div className="mt-0.5 truncate text-[11.5px]" style={{ color: "var(--text-muted-color)" }}>
+            {r.county ? `${r.county} Co.` : ""}
+            {r.county && r.lienWorkflowType ? " · " : ""}
+            {WORKFLOW_LABELS[r.lienWorkflowType] ?? r.lienWorkflowType}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "tier",
+      header: "Tier",
+      render: (r: ProjectRow) => (
+        <span className="font-mono text-[11px]" style={{ color: "var(--text-dim)" }}>
+          {r.contractorTier === "second_tier" ? "T2" : "T1"}
+        </span>
+      ),
+    },
+    {
+      key: "streams",
+      header: "Streams",
+      render: (r: ProjectRow) => (
+        <span className="font-mono text-[11px]" style={{ color: "var(--text-dim)" }}>
+          {r.streams.length}
+        </span>
+      ),
+    },
+    {
+      key: "deadline",
+      header: "Next deadline",
+      render: (r: ProjectRow) => r.streams.length > 0
+        ? <DeadlineCountdown days={r.days} />
+        : <span className="text-[11px]" style={{ color: "var(--text-muted-color)" }}>No streams</span>,
+    },
+    {
+      key: "status",
+      header: "Status",
+      align: "right" as const,
+      render: (r: ProjectRow) => r.risk === "none"
+        ? <span className="text-[11px]" style={{ color: "var(--text-muted-color)" }}>No streams</span>
+        : <StatusBadge status={r.risk} />,
+    },
+  ];
 
   return (
-    <Screen>
-      <div className="space-y-5">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Manage lien rights for all active fire protection projects.
-            </p>
+    <>
+      {/* Summary KPIs */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: "Total Projects", value: isLoading ? "—" : projects.length, color: "#6366f1" },
+          { label: "At Risk", value: isLoading ? "—" : atRiskCount, color: atRiskCount > 0 ? "#eb143f" : "#14eba3" },
+          { label: "Setup Incomplete", value: isLoading ? "—" : incompleteCount, color: incompleteCount > 0 ? "#f59f0a" : "#14eba3" },
+        ].map((k) => (
+          <div key={k.label} className="relative overflow-hidden rounded-lg border px-4 pb-3.5 pt-4" style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}>
+            <div className="absolute inset-x-0 top-0 h-[3px]" style={{ background: k.color }} />
+            <div className="text-[10.5px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>{k.label}</div>
+            <div className="mt-1.5 font-mono text-[24px] font-bold leading-none" style={{ color: k.color }}>{k.value}</div>
           </div>
-          <Link href="/projects/new">
-            <Button size="sm">
-              <Plus className="h-4 w-4 mr-1" />
-              New Project
-            </Button>
-          </Link>
-        </div>
+        ))}
+      </div>
 
-        {/* Summary cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: "var(--text-muted-color)" }} />
+          <input
+            placeholder="Search projects or county…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-md border py-2 pl-9 pr-3 text-[13px] outline-none"
+            style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)", color: "var(--text-base)" }}
+          />
+        </div>
+        <div className="flex gap-0.5 rounded-md border p-0.5" style={{ borderColor: "var(--helm-border)" }}>
           {[
-            {
-              label: "Total Projects",
-              value: isLoading ? "—" : String(projects.length),
-              sub: "in lien tracking",
-              icon: Clock,
-              color: "text-primary",
-            },
-            {
-              label: "Incomplete Setup",
-              value: isLoading ? "—" : String(incompleteCount),
-              sub: "missing required fields",
-              icon: XCircle,
-              color: incompleteCount > 0 ? "text-amber-500" : "text-green-600",
-            },
-            {
-              label: "At Risk",
-              value: isLoading ? "—" : String(atRiskCount),
-              sub: "active or risk streams",
-              icon: AlertTriangle,
-              color: atRiskCount > 0 ? "text-destructive" : "text-green-600",
-            },
-          ].map((card) => (
-            <div key={card.label} className="rounded-lg border bg-card p-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-1">
-                <card.icon className={cn("h-4 w-4", card.color)} />
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  {card.label}
-                </p>
-              </div>
-              <p className="text-2xl font-semibold text-foreground">{card.value}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{card.sub}</p>
-            </div>
+            { v: "all", l: "All" },
+            { v: "commercial_sub", l: "Commercial" },
+            { v: "residential_sub", l: "Residential" },
+          ].map(({ v, l }) => (
+            <button
+              key={v}
+              onClick={() => setFilterWorkflow(v)}
+              className="rounded px-2.5 py-1 text-[12px] font-semibold"
+              style={filterWorkflow === v
+                ? { background: "var(--surface-3)", color: "var(--text-base)" }
+                : { color: "var(--text-dim)" }}
+            >
+              {l}
+            </button>
           ))}
         </div>
-
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[180px] max-w-xs">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Search projects or county…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 h-9 text-sm"
-            />
-          </div>
-          <Select value={filterWorkflow} onValueChange={setFilterWorkflow}>
-            <SelectTrigger className="h-9 text-sm w-44">
-              <SelectValue placeholder="All workflow types" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Workflow Types</SelectItem>
-              <SelectItem value="commercial_sub">Commercial Sub</SelectItem>
-              <SelectItem value="residential_sub">Residential Sub</SelectItem>
-              <SelectItem value="public_bond">Public / Bond</SelectItem>
-              <SelectItem value="none">No Lien Tracking</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={filterRisk} onValueChange={setFilterRisk}>
-            <SelectTrigger className="h-9 text-sm w-36">
-              <SelectValue placeholder="All risk levels" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Risk Levels</SelectItem>
-              <SelectItem value="high">At Risk</SelectItem>
-              <SelectItem value="medium">Active</SelectItem>
-              <SelectItem value="low">Open</SelectItem>
-              <SelectItem value="ok">Closed</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button
-            size="sm"
-            variant={filterIncomplete ? "default" : "outline"}
-            className="h-9 text-sm"
-            onClick={() => setFilterIncomplete((v) => !v)}
+        <Link href="/projects/new">
+          <div
+            className="flex items-center gap-1.5 rounded-md px-3 py-2 text-[12.5px] font-semibold cursor-pointer"
+            style={{ background: "rgba(245,158,11,.14)", color: "#f59e0b", border: "1px solid rgba(245,158,11,.3)" }}
           >
-            <XCircle className="h-3.5 w-3.5 mr-1" />
-            Incomplete Only
-          </Button>
-        </div>
-
-        {/* Project list */}
-        {isLoading ? (
-          <div className="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground">
-            Loading projects…
+            <Plus className="h-3.5 w-3.5" />
+            New Project
           </div>
-        ) : isError ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center text-sm text-destructive">
-            {String((error as Error)?.message ?? "").includes("401") ||
-            String((error as Error)?.message ?? "").toLowerCase().includes("unauthorized")
-              ? "Not authenticated — visit /api/dev/session to establish a dev session."
-              : `Failed to load projects: ${(error as Error)?.message}`}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground">
-            {projects.length === 0
-              ? "No projects yet. Create one to get started."
-              : "No projects match the current filters."}
-          </div>
-        ) : (
-          <div className="rounded-lg border bg-card divide-y overflow-hidden">
-            {filtered.map((p) => (
-              <ProjectRow key={p.id} project={p} />
-            ))}
-          </div>
-        )}
+        </Link>
       </div>
-    </Screen>
+
+      {/* Project list */}
+      {isLoading ? (
+        <div className="rounded-lg border px-4 py-8 text-center text-[12px]" style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-muted-color)" }}>
+          Loading projects…
+        </div>
+      ) : isError ? (
+        <div className="rounded-lg border px-4 py-6 text-center text-[12px]" style={{ background: "rgba(235,20,63,.06)", borderColor: "rgba(235,20,63,.3)", color: "#eb143f" }}>
+          {String((error as Error)?.message ?? "").includes("401")
+            ? "Not authenticated — visit /api/dev/session to establish a dev session."
+            : `Failed to load: ${(error as Error)?.message}`}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-lg border px-4 py-8 text-center text-[12px]" style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-muted-color)" }}>
+          {projects.length === 0 ? "No projects yet. Create one to get started." : "No projects match the current filters."}
+        </div>
+      ) : (
+        <ResponsiveTable<ProjectRow>
+          columns={columns}
+          rows={rows}
+          gridTemplate="1.5fr .4fr .4fr .8fr .9fr"
+          onRowClick={(r) => {
+            window.location.href = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/projects/${r.id}`;
+          }}
+        />
+      )}
+    </>
   );
 }

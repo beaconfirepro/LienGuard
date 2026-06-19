@@ -4,10 +4,18 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/nav/AppShell";
 import NotFound from "@/pages/not-found";
+import DashboardPage from "@/pages/dashboard";
 import HomePage from "@/pages/home";
 import ConfigPage from "@/pages/config";
 import ProjectDetailPage from "@/pages/project-detail";
 import ProjectNewPage from "@/pages/project-new";
+import VendorHoldsPage from "@/pages/vendor-holds";
+import CollectionsPage from "@/pages/collections";
+import AccountDetailPage from "@/pages/account-detail";
+import MonthlyReportPage from "@/pages/monthly-report";
+import SendQueuePage from "@/pages/send-queue";
+import WaiversPage from "@/pages/waivers";
+import FilingPage from "@/pages/filing";
 
 const queryClient = new QueryClient();
 
@@ -15,9 +23,17 @@ function Router() {
   return (
     <AppShell>
       <Switch>
-        <Route path="/" component={HomePage} />
+        <Route path="/" component={DashboardPage} />
+        <Route path="/liens" component={HomePage} />
         <Route path="/projects/new" component={ProjectNewPage} />
         <Route path="/projects/:id" component={ProjectDetailPage} />
+        <Route path="/holds" component={VendorHoldsPage} />
+        <Route path="/collections" component={CollectionsPage} />
+        <Route path="/collections/:accountId" component={AccountDetailPage} />
+        <Route path="/monthly" component={MonthlyReportPage} />
+        <Route path="/send-queue" component={SendQueuePage} />
+        <Route path="/waivers" component={WaiversPage} />
+        <Route path="/filing/:streamId" component={FilingPage} />
         <Route path="/settings" component={ConfigPage} />
         <Route component={NotFound} />
       </Switch>

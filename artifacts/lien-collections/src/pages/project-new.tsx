@@ -235,7 +235,7 @@ export default function ProjectNewPage() {
                 <SelectValue placeholder="Default jurisdiction" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Default jurisdiction</SelectItem>
+                <SelectItem value="__default__">Default jurisdiction</SelectItem>
                 {jurisdictions.map((j) => (
                   <SelectItem key={j.id} value={j.id}>
                     {j.name} ({j.code})
