@@ -49,6 +49,8 @@ import {
   Send,
   Gavel,
   ChevronLeft,
+  ChevronDown,
+  ChevronRight,
   FileSignature,
   Lock,
   ArrowDownCircle,
@@ -482,6 +484,131 @@ function earliestNoticeDays(deadlines: Deadline[]): number | null {
     });
   if (!open.length) return null;
   return Math.min(...open);
+}
+
+// ---------------------------------------------------------------------------
+// Stream card (collapsible)
+// ---------------------------------------------------------------------------
+
+function StreamCard({
+  stream,
+  projectId,
+  onOpenFiling,
+}: {
+  stream: LienStream;
+  projectId: string;
+  onOpenFiling: (streamId: string) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+
+  // Shares the TanStack Query cache with StreamDeadlinesPanel (same queryKey),
+  // so this does not trigger a second network request.
+  const { data } = useQuery({
+    queryKey: ["stream-work-months", stream.id],
+    queryFn: () =>
+      apiFetch<StreamWithWorkMonths>(`/streams/${stream.id}/work-months`),
+  });
+
+  const workMonths = data?.workMonths ?? [];
+  const overdueCount = workMonths.filter(
+    (wm) => wm.derivedOverdue && !wm.clearedFlag,
+  ).length;
+  const nextDeadline = workMonths
+    .flatMap((wm) => wm.deadlines)
+    .filter((dl) => !dl.satisfiedAt)
+    .sort(
+      (a, b) =>
+        new Date(a.adjustedDate).getTime() - new Date(b.adjustedDate).getTime(),
+    )[0];
+
+  return (
+    <div className="rounded-lg border bg-muted/20">
+      {/* Collapsible header */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 p-3 text-left"
+      >
+        {open ? (
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium capitalize">
+              {stream.workStream}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Opened {new Date(stream.openedAt).toLocaleDateString()}
+            </span>
+          </div>
+          {/* Summary line — visible when collapsed and expanded */}
+          <div className="mt-1 flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+            <span>
+              {workMonths.length} work month{workMonths.length === 1 ? "" : "s"}
+            </span>
+            {overdueCount > 0 && (
+              <span className="inline-flex items-center gap-1 font-medium text-red-600">
+                <AlertTriangle className="h-3 w-3" />
+                {overdueCount} overdue
+              </span>
+            )}
+            {nextDeadline && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 tabular-nums",
+                  deadlineUrgency(nextDeadline.adjustedDate) === "overdue" &&
+                    "text-red-600 font-medium",
+                  deadlineUrgency(nextDeadline.adjustedDate) === "urgent" &&
+                    "text-orange-600",
+                  deadlineUrgency(nextDeadline.adjustedDate) === "upcoming" &&
+                    "text-amber-600",
+                )}
+              >
+                <Clock className="h-3 w-3" />
+                Next {formatDate(nextDeadline.adjustedDate)}
+              </span>
+            )}
+          </div>
+        </div>
+        <span
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenFiling(stream.id);
+          }}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              e.stopPropagation();
+              onOpenFiling(stream.id);
+            }
+          }}
+          className="shrink-0 text-xs underline text-muted-foreground hover:text-foreground"
+        >
+          Open filing →
+        </span>
+        <span
+          className={cn(
+            "shrink-0 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+            STREAM_STATUS_COLORS[stream.status] ?? "bg-gray-100 text-gray-600",
+          )}
+        >
+          {STREAM_STATUS_LABELS[stream.status] ?? stream.status}
+        </span>
+      </button>
+
+      {/* Deadlines sub-panel */}
+      {open && (
+        <div className="px-3 pb-3">
+          <StreamDeadlinesPanel streamId={stream.id} projectId={projectId} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1937,35 +2064,12 @@ function DeadlinesTab({
           ) : (
             <div className="space-y-4">
               {streams.map((s) => (
-                <div key={s.id} className="rounded-lg border bg-muted/20 p-3 space-y-2">
-                  {/* Stream header */}
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1">
-                      <span className="text-sm font-medium capitalize">{s.workStream}</span>
-                      <span className="text-xs text-muted-foreground ml-2">
-                        Opened {new Date(s.openedAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => onOpenFiling(s.id)}
-                      className="text-xs underline text-muted-foreground hover:text-foreground"
-                    >
-                      Open filing →
-                    </button>
-                    <span
-                      className={cn(
-                        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-                        STREAM_STATUS_COLORS[s.status] ?? "bg-gray-100 text-gray-600",
-                      )}
-                    >
-                      {STREAM_STATUS_LABELS[s.status] ?? s.status}
-                    </span>
-                  </div>
-
-                  {/* Deadlines sub-panel */}
-                  <StreamDeadlinesPanel streamId={s.id} projectId={id!} />
-                </div>
+                <StreamCard
+                  key={s.id}
+                  stream={s}
+                  projectId={id!}
+                  onOpenFiling={onOpenFiling}
+                />
               ))}
             </div>
           )}
