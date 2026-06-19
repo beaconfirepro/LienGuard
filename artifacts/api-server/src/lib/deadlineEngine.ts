@@ -81,7 +81,7 @@ export function nextBusinessDay(date: Date): Date {
   return d;
 }
 
-function addBusinessDays(date: Date, n: number): Date {
+export function addBusinessDays(date: Date, n: number): Date {
   const d = new Date(date);
   let remaining = n;
   while (remaining > 0) {

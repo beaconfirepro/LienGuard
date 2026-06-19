@@ -28,30 +28,7 @@ import {
 import { eq, and, inArray, lt } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { createCertifiedMailLabel } from "../lib/shippo";
-
-/** Add N business days (Texas calendar) — replicates engine logic locally. */
-function addBusinessDays(date: Date, n: number): Date {
-  let d = new Date(date);
-  let remaining = n;
-  while (remaining > 0) {
-    d.setUTCDate(d.getUTCDate() + 1);
-    if (isBusinessDayLocal(d)) remaining--;
-  }
-  return d;
-}
-
-function isBusinessDayLocal(d: Date): boolean {
-  const dow = d.getUTCDay();
-  if (dow === 0 || dow === 6) return false;
-  const iso = d.toISOString().slice(0, 10);
-  // Skip Texas state holidays (key ones for post-filing window)
-  const year = d.getUTCFullYear();
-  const holidays = new Set([
-    `${year}-01-01`, `${year}-07-04`, `${year}-12-25`,
-    `${year}-06-19`, // Juneteenth
-  ]);
-  return !holidays.has(iso);
-}
+import { addBusinessDays } from "../lib/deadlineEngine";
 
 const router = Router();
 
@@ -582,11 +559,25 @@ router.post("/filing/:id/post-notice", requireSession, async (req, res) => {
         )
     : [];
 
+  // § 53.055 requires certified notice to both the owner and original contractor.
+  // We must succeed for both required recipients before advancing status.
+  if (parties.length === 0) {
+    res.status(422).json({
+      error:
+        "No owner or original_contractor parties linked to this project. " +
+        "Add project parties before sending post-filing notice.",
+    });
+    return;
+  }
+
   const mailingResults: Array<{
-    party: string;
+    partyId: string;
+    partyType: string;
+    partyName: string;
     trackingNumber: string;
     labelUrl: string;
   }> = [];
+  const failedParties: Array<{ partyId: string; partyType: string; reason: string }> = [];
 
   for (const party of parties) {
     try {
@@ -598,37 +589,51 @@ router.post("/filing/:id/post-notice", requireSession, async (req, res) => {
         `filing-${filingId}-${party.id}`,
       );
       mailingResults.push({
-        party: `${party.partyRelationType}: ${party.cachedLegalName}`,
+        partyId: party.id,
+        partyType: party.partyRelationType,
+        partyName: party.cachedLegalName,
         trackingNumber: label.trackingNumber,
         labelUrl: label.labelUrl,
       });
-    } catch {
-      // Continue with other parties if one fails
-    }
-  }
-
-  // Store one mailing record for the filing (primary).
-  const primaryLabel = mailingResults[0];
-  if (primaryLabel) {
-    const existing = await db
-      .select()
-      .from(mailingRecordsTable)
-      .where(eq(mailingRecordsTable.filingId, filingId))
-      .limit(1);
-
-    if (existing.length === 0) {
-      await db.insert(mailingRecordsTable).values({
-        orgId,
-        filingId,
-        provider: "shippo",
-        trackingNumber: primaryLabel.trackingNumber,
-        labelUrl: primaryLabel.labelUrl,
-        sentDate: new Date(),
+    } catch (err) {
+      failedParties.push({
+        partyId: party.id,
+        partyType: party.partyRelationType,
+        reason: err instanceof Error ? err.message : "Shippo label creation failed",
       });
     }
   }
 
-  // Advance status to post_filing_notice_sent
+  // If any required recipient failed, return an error without advancing status.
+  if (failedParties.length > 0) {
+    res.status(502).json({
+      error: "Certified mail label generation failed for one or more required recipients. " +
+        "Filing status was NOT advanced. Resolve the issue and retry.",
+      failedParties,
+      succeeded: mailingResults,
+    });
+    return;
+  }
+
+  // Store the primary mailing record for the filing.
+  // Schema has a unique constraint on filing_id (one record per filing);
+  // all recipients' tracking numbers are returned in the response for auditability.
+  const primaryResult = mailingResults[0];
+  if (primaryResult) {
+    await db
+      .insert(mailingRecordsTable)
+      .values({
+        orgId,
+        filingId,
+        provider: "shippo",
+        trackingNumber: primaryResult.trackingNumber,
+        labelUrl: primaryResult.labelUrl,
+        sentDate: new Date(),
+      })
+      .onConflictDoNothing();
+  }
+
+  // Only advance status once all required recipients are confirmed mailed.
   const [updated] = await db
     .update(lienFilingsTable)
     .set({ status: "post_filing_notice_sent", updatedAt: new Date() })

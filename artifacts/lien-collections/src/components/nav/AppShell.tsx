@@ -56,7 +56,6 @@ const MODULE_NAV = [
       { label: "Monthly Report", to: "/monthly" },
       { label: "Send Queue", to: "/send-queue" },
       { label: "Waivers", to: "/waivers" },
-      { label: "Filing", to: "/filing" },
       { label: "Reports", to: "/reports" },
     ],
   },
