@@ -64,7 +64,7 @@ const MODULE_NAV = [
 
 const TITLES: [RegExp, string][] = [
   [/^\/settings$/, "Company Settings"],
-  [/^\/liens$/, "Liens — Projects"],
+  [/^\/liens$/, "Projects"],
   [/^\/send-queue$/, "Ready-to-Send Queue"],
   [/^\/projects\//, "Project Lien Detail"],
   [/^\/waivers$/, "Waiver Workspace"],
