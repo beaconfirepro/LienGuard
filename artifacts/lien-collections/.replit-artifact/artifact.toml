@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/"
-title = "Liens & Collections by HELM"
+title = "LienGuard by HELM"
 version = "1.0.0"
 id = "artifacts/lien-collections"
 router = "path"

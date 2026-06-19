@@ -78,7 +78,7 @@ const TITLES: [RegExp, string][] = [
 ];
 
 function getTitle(path: string) {
-  return TITLES.find(([re]) => re.test(path))?.[1] ?? "Liens & Collections";
+  return TITLES.find(([re]) => re.test(path))?.[1] ?? "LienGuard";
 }
 
 /* ─── Main AppShell ──────────────────────────────────────────────────────── */
@@ -107,7 +107,7 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
           <Landmark className="h-7 w-7 text-amber-500" />
         </div>
         <div className="text-[18px] font-bold tracking-tight" style={{ color: "var(--text-base)" }}>
-          Liens &amp; Collections
+          LienGuard
         </div>
         <div className="mt-1 text-[11px] font-semibold uppercase tracking-[1.5px]" style={{ color: "var(--text-muted-color)" }}>
           by HELM
@@ -201,7 +201,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Landmark className="h-6 w-6 text-amber-500 shrink-0" />
               {!collapsed && (
                 <div className="leading-none">
-                  <div className="text-[15px] font-bold tracking-tight" style={{ color: "var(--text-base)" }}>Liens &amp; Collections</div>
+                  <div className="text-[15px] font-bold tracking-tight" style={{ color: "var(--text-base)" }}>LienGuard</div>
                   <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[1.5px]" style={{ color: "var(--text-muted-color)" }}>by HELM</div>
                 </div>
               )}
@@ -412,7 +412,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="flex flex-wrap items-center justify-between gap-3 border-t px-6 py-3 text-[11px]"
             style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-muted-color)", marginBottom: isMobile ? 62 : 0 }}
           >
-            <span>© 2026 HELM Fire Protection · Liens &amp; Collections v1.0</span>
+            <span>© 2026 HELM Fire Protection · LienGuard v1.0</span>
             <span className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-[#14eba3]" />
               Status: Operational
@@ -459,7 +459,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               <div className="flex h-16 items-center justify-between border-b px-[18px]" style={{ borderColor: "var(--helm-border)" }}>
                 <span className="text-[15px] font-bold leading-tight" style={{ color: "var(--text-base)" }}>
-                  Liens &amp; Collections
+                  LienGuard
                   <span className="block text-[9.5px] font-semibold uppercase tracking-[0.16em]" style={{ color: "var(--text-muted-color)" }}>By HELM</span>
                 </span>
                 <button onClick={() => setDrawer(false)} style={{ color: "var(--text-dim)" }}>
