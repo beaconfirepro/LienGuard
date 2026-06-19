@@ -1,10 +1,13 @@
 /**
- * notices.ts — Notice generation routes (Phase 4).
+ * notices.ts — Notice generation & sending routes (Phase 4 + 5).
  *
  * POST  /notices              create notice (draft) from lienStreamId + workMonthId + noticeType
  * PATCH /notices/:id          edit claimAmount, workDescription, monthListed, recipients
  * POST  /notices/:id/approve  approve a draft notice
  * GET   /notices/:id/pdf      generate print-ready statutory PDF (§ 53.056 / § 53.057)
+ * POST  /notices/:id/send     send via Shippo certified mail; creates MailingRecord
+ * POST  /notices/:id/proof    attach delivery proof URL to MailingRecord
+ * POST  /webhooks/mailing     Shippo delivery callback → notice status `delivered`
  */
 
 import { Router } from "express";
@@ -19,9 +22,11 @@ import {
   lienProjectsTable,
   projectPartyLinksTable,
   invoiceLinksTable,
+  mailingRecordsTable,
 } from "@workspace/db";
 import { eq, and, inArray } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
+import { createCertifiedMailLabel } from "../lib/shippo";
 
 const router = Router();
 router.use(requireSession);
@@ -479,6 +484,187 @@ router.get("/notices/:id/pdf", async (req, res) => {
     );
 
   doc.end();
+});
+
+// ---------------------------------------------------------------------------
+// POST /notices/:id/send — send via Shippo certified mail
+// ---------------------------------------------------------------------------
+
+router.post("/notices/:id/send", async (req, res) => {
+  const { orgId } = getSession(req);
+  const { id } = req.params;
+
+  const [notice] = await db
+    .select()
+    .from(noticesTable)
+    .where(and(eq(noticesTable.id, id), eq(noticesTable.orgId, orgId)))
+    .limit(1);
+
+  if (!notice) {
+    res.status(404).json({ error: "Notice not found" });
+    return;
+  }
+
+  if (notice.status !== "approved") {
+    res.status(409).json({ error: `Notice must be in 'approved' status to send (current: '${notice.status}')` });
+    return;
+  }
+
+  // Check for existing mailing record.
+  const [existingMailing] = await db
+    .select()
+    .from(mailingRecordsTable)
+    .where(and(eq(mailingRecordsTable.noticeId, id), eq(mailingRecordsTable.orgId, orgId)))
+    .limit(1);
+
+  if (existingMailing) {
+    res.status(409).json({ error: "A mailing record already exists for this notice" });
+    return;
+  }
+
+  // Load recipients for addressing.
+  const recipients = await db
+    .select()
+    .from(noticeRecipientsTable)
+    .where(and(eq(noticeRecipientsTable.noticeId, id), eq(noticeRecipientsTable.orgId, orgId)));
+
+  // For certified mail, we send to the first recipient (typically owner).
+  // In production, generate a label per recipient.
+  const primaryRecipient = recipients.find((r) => r.recipientType === "owner") ?? recipients[0];
+
+  const addressParts = (primaryRecipient?.mailingAddress ?? "").split(",");
+  const shippoAddress = {
+    name: primaryRecipient?.legalName ?? "Property Owner",
+    street1: addressParts[0]?.trim() ?? "Unknown Street",
+    city: addressParts[1]?.trim(),
+    state: addressParts[2]?.trim(),
+  };
+
+  const label = await createCertifiedMailLabel(shippoAddress, id);
+
+  // Create mailing record.
+  const [mailing] = await db
+    .insert(mailingRecordsTable)
+    .values({
+      id: randomUUID(),
+      orgId,
+      noticeId: id,
+      provider: "shippo",
+      trackingNumber: label.trackingNumber,
+      labelUrl: label.labelUrl,
+      sentDate: new Date(),
+    })
+    .returning();
+
+  // Update notice status to sent.
+  const [updated] = await db
+    .update(noticesTable)
+    .set({ status: "sent", sentAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(noticesTable.id, id), eq(noticesTable.orgId, orgId)))
+    .returning();
+
+  res.json({ notice: updated, mailing });
+});
+
+// ---------------------------------------------------------------------------
+// POST /notices/:id/proof — attach delivery proof URL to MailingRecord
+// ---------------------------------------------------------------------------
+
+router.post("/notices/:id/proof", async (req, res) => {
+  const { orgId } = getSession(req);
+  const { id } = req.params;
+  const { proofUrl } = req.body as { proofUrl?: string };
+
+  if (!proofUrl) {
+    res.status(400).json({ error: "proofUrl is required" });
+    return;
+  }
+
+  const [notice] = await db
+    .select({ id: noticesTable.id })
+    .from(noticesTable)
+    .where(and(eq(noticesTable.id, id), eq(noticesTable.orgId, orgId)))
+    .limit(1);
+
+  if (!notice) {
+    res.status(404).json({ error: "Notice not found" });
+    return;
+  }
+
+  const [mailing] = await db
+    .select()
+    .from(mailingRecordsTable)
+    .where(and(eq(mailingRecordsTable.noticeId, id), eq(mailingRecordsTable.orgId, orgId)))
+    .limit(1);
+
+  if (!mailing) {
+    res.status(404).json({ error: "No mailing record found for this notice" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(mailingRecordsTable)
+    .set({ proofUrl, updatedAt: new Date() })
+    .where(eq(mailingRecordsTable.id, mailing.id))
+    .returning();
+
+  res.json({ mailing: updated });
+});
+
+// ---------------------------------------------------------------------------
+// POST /webhooks/mailing — Shippo delivery callback
+// NOTE: This route is intentionally placed inside the session-gated router
+// but the router.use(requireSession) at line 30 is for ALL routes.
+// The webhook needs to be outside that gate — it is re-exported by app.ts
+// separately under /api without requireSession.
+// ---------------------------------------------------------------------------
+
+export const mailingWebhookRouter = Router();
+
+mailingWebhookRouter.post("/webhooks/mailing", async (req, res) => {
+  const { tracking_number, status, event } = req.body as {
+    tracking_number?: string;
+    status?: string;
+    event?: string;
+  };
+
+  // Validate Shippo webhook secret.
+  const sigHeader = req.headers["shippo-webhook-token"] as string | undefined;
+  const expectedSig = process.env.SHIPPO_WEBHOOK_SECRET;
+  if (expectedSig && sigHeader !== expectedSig) {
+    res.status(401).json({ error: "Invalid webhook signature" });
+    return;
+  }
+
+  const deliveryEvents = ["delivered", "transit_delivered", "shippo:delivery:event:delivered"];
+  const isDelivered =
+    status === "DELIVERED" ||
+    (event && deliveryEvents.some((e) => event.includes("delivered")));
+
+  if (!tracking_number || !isDelivered) {
+    res.json({ received: true, action: "none" });
+    return;
+  }
+
+  // Find the mailing record by tracking number.
+  const [mailing] = await db
+    .select()
+    .from(mailingRecordsTable)
+    .where(eq(mailingRecordsTable.trackingNumber, tracking_number))
+    .limit(1);
+
+  if (!mailing?.noticeId) {
+    res.json({ received: true, action: "not_found" });
+    return;
+  }
+
+  // Update notice to delivered.
+  await db
+    .update(noticesTable)
+    .set({ status: "delivered", deliveredAt: new Date(), updatedAt: new Date() })
+    .where(eq(noticesTable.id, mailing.noticeId));
+
+  res.json({ received: true, noticeId: mailing.noticeId });
 });
 
 export default router;

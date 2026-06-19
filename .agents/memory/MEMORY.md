@@ -5,3 +5,6 @@
 - [Phase 3 deadline engine](phase3-deadline-engine.md) — Texas § 53.003(e) business-day engine verified: Mar 2026 notice→Jun 15, retainage Feb 14(Sat) skips Presidents' Day(Feb 16)→Feb 17.
 - [Express sub-router path doubling](router-path-mounting.md) — when a router is mounted at /api/monthly, its handlers must use /run not /monthly/run; doubled path = silent 404.
 - [Replit cartographer + generic JSX](cartographer-generic-jsx.md) — cartographer plugin breaks on <Component<T> syntax; remove explicit type param and let TypeScript infer from props.
+- [Waivers route order](waivers-route-order.md) — GET /waivers/exposure must be declared BEFORE GET /waivers/:id in the router to avoid Express collision.
+- [Express 5 params strict typing](express5-params-strict.md) — req.params fields type as string|string[]; Drizzle eq() with strict enum columns rejects this; cast with `req.params["id"] as string`.
+- [Shippo + NotaryLive stubs](third-party-stubs.md) — Both clients fall back to deterministic stubs when SHIPPO_API_KEY / NOTARYLIVE_API_KEY are absent; real keys activate live calls.
