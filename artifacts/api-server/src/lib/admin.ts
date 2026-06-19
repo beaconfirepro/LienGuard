@@ -2,10 +2,13 @@ import { Request, Response, NextFunction } from "express";
 import { getSession } from "./session";
 
 // Comma-separated list of user IDs with admin privileges.
-// In production, set ADMIN_USER_IDS env var to a secure list.
-// Default permits the dev test user so local development works without extra setup.
+// In production, ADMIN_USER_IDS MUST be set — if missing, the set is empty and
+// every write is denied (fail-closed).  In development the default "user_dev_001"
+// is used so local sessions work without extra setup.
+const isProduction = process.env.NODE_ENV === "production";
+const rawAdminIds = process.env.ADMIN_USER_IDS;
 const ADMIN_USER_IDS = new Set<string>(
-  (process.env.ADMIN_USER_IDS ?? "user_dev_001")
+  (rawAdminIds ?? (isProduction ? "" : "user_dev_001"))
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),

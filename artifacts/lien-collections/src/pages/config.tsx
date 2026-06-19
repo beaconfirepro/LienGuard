@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { ChevronRight, Plus, CheckCircle2, Clock, ShieldAlert, Building2, Layers, Layout, GitBranch } from "lucide-react";
+import { ChevronRight, Plus, CheckCircle2, Clock, ShieldAlert, Building2, Layers, Layout, GitBranch, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -252,6 +252,45 @@ function ReferenceTreeTab() {
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
+  type EditName = { id: string; name: string };
+  type EditSst = { id: string; name: string; lienWorkflowType: string };
+  const [editDept, setEditDept] = React.useState<EditName | null>(null);
+  const [editSt, setEditSt] = React.useState<EditName | null>(null);
+  const [editSst, setEditSst] = React.useState<EditSst | null>(null);
+
+  const patchDept = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      apiFetch(`/config/departments/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["config-departments"] });
+      setEditDept(null);
+      toast({ title: "Department renamed" });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const patchSt = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      apiFetch(`/config/system-types/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["config-departments"] });
+      setEditSt(null);
+      toast({ title: "System type renamed" });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const patchSst = useMutation({
+    mutationFn: ({ id, name, lienWorkflowType }: { id: string; name: string; lienWorkflowType: string }) =>
+      apiFetch(`/config/sub-system-types/${id}`, { method: "PATCH", body: JSON.stringify({ name, lienWorkflowType }) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["config-departments"] });
+      setEditSst(null);
+      toast({ title: "Sub-system type updated" });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
   function toggleExpand(id: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -296,25 +335,39 @@ function ReferenceTreeTab() {
         <div className="space-y-2">
           {departments.map((dept) => (
             <div key={dept.id} className="rounded-lg border bg-card">
-              <button
-                type="button"
-                onClick={() => toggleExpand(dept.id)}
-                className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-muted-foreground" />
-                  <span>{dept.name}</span>
-                  <Badge variant="secondary" className="text-xs">
-                    {dept.systemTypes.length} type{dept.systemTypes.length !== 1 ? "s" : ""}
-                  </Badge>
-                </div>
-                <ChevronRight
-                  className={cn(
-                    "h-4 w-4 text-muted-foreground transition-transform",
-                    expanded.has(dept.id) && "rotate-90",
-                  )}
-                />
-              </button>
+              <div className="flex w-full items-center px-4 py-2.5 text-sm font-medium text-foreground">
+                {editDept?.id === dept.id ? (
+                  <div className="flex flex-1 items-center gap-2">
+                    <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <Input
+                      className="h-7 text-xs w-44"
+                      value={editDept.name}
+                      autoFocus
+                      onChange={(e) => setEditDept({ id: dept.id, name: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && editDept.name.trim()) patchDept.mutate({ id: dept.id, name: editDept.name.trim() });
+                        if (e.key === "Escape") setEditDept(null);
+                      }}
+                    />
+                    <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!editDept.name.trim() || patchDept.isPending} onClick={() => patchDept.mutate({ id: dept.id, name: editDept.name.trim() })}>Save</Button>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditDept(null)}>Cancel</Button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => toggleExpand(dept.id)} className="flex flex-1 items-center gap-2 hover:opacity-80 transition-opacity text-left">
+                    <Building2 className="h-4 w-4 text-muted-foreground" />
+                    <span>{dept.name}</span>
+                    <Badge variant="secondary" className="text-xs">
+                      {dept.systemTypes.length} type{dept.systemTypes.length !== 1 ? "s" : ""}
+                    </Badge>
+                    <ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform ml-auto", expanded.has(dept.id) && "rotate-90")} />
+                  </button>
+                )}
+                {editDept?.id !== dept.id && (
+                  <button type="button" title="Rename department" className="ml-2 p-1 text-muted-foreground hover:text-foreground rounded transition-colors" onClick={() => setEditDept({ id: dept.id, name: dept.name })}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
 
               {expanded.has(dept.id) && (
                 <div className="border-t px-4 pb-4">
@@ -327,22 +380,82 @@ function ReferenceTreeTab() {
                         return (
                           <div key={st.id} className="pl-4 border-l-2 border-muted">
                             <div className="flex items-center gap-2 py-1">
-                              <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-                              <span className="text-sm font-medium">{st.name}</span>
-                              <Badge variant="outline" className="text-xs">
-                                {st.subSystemTypes.length} sub-type{st.subSystemTypes.length !== 1 ? "s" : ""}
-                              </Badge>
+                              {editSt?.id === st.id ? (
+                                <>
+                                  <Layers className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                  <Input
+                                    className="h-7 text-xs w-40"
+                                    value={editSt.name}
+                                    autoFocus
+                                    onChange={(e) => setEditSt({ id: st.id, name: e.target.value })}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter" && editSt.name.trim()) patchSt.mutate({ id: st.id, name: editSt.name.trim() });
+                                      if (e.key === "Escape") setEditSt(null);
+                                    }}
+                                  />
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!editSt.name.trim() || patchSt.isPending} onClick={() => patchSt.mutate({ id: st.id, name: editSt.name.trim() })}>Save</Button>
+                                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditSt(null)}>Cancel</Button>
+                                </>
+                              ) : (
+                                <>
+                                  <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                                  <span className="text-sm font-medium">{st.name}</span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {st.subSystemTypes.length} sub-type{st.subSystemTypes.length !== 1 ? "s" : ""}
+                                  </Badge>
+                                  <button type="button" title="Rename system type" className="ml-1 p-0.5 text-muted-foreground hover:text-foreground rounded transition-colors" onClick={() => setEditSt({ id: st.id, name: st.name })}>
+                                    <Pencil className="h-3 w-3" />
+                                  </button>
+                                </>
+                              )}
                             </div>
                             {st.subSystemTypes.length > 0 && (
                               <div className="ml-4 mt-1 space-y-1">
                                 {st.subSystemTypes.map((sst) => (
-                                  <div key={sst.id} className="flex items-center gap-2 py-0.5">
-                                    <Layout className="h-3 w-3 text-muted-foreground" />
-                                    <span className="text-xs text-foreground">{sst.name}</span>
-                                    <WorkflowTypeBadge value={sst.lienWorkflowType} />
-                                    <span className="text-xs text-muted-foreground">
-                                      — {WORKFLOW_TYPE_LABELS[sst.lienWorkflowType]?.description}
-                                    </span>
+                                  <div key={sst.id}>
+                                    {editSst?.id === sst.id ? (
+                                      <div className="flex flex-wrap items-end gap-2 py-1 pl-1 border-l border-dashed">
+                                        <div className="space-y-0.5">
+                                          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Name</p>
+                                          <Input
+                                            className="h-7 text-xs w-36"
+                                            value={editSst.name}
+                                            autoFocus
+                                            onChange={(e) => setEditSst({ ...editSst, name: e.target.value })}
+                                          />
+                                        </div>
+                                        <div className="space-y-0.5">
+                                          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Lien Workflow</p>
+                                          <Select value={editSst.lienWorkflowType} onValueChange={(v) => setEditSst({ ...editSst, lienWorkflowType: v })}>
+                                            <SelectTrigger className="h-7 text-xs w-44">
+                                              <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              {Object.entries(WORKFLOW_TYPE_LABELS).map(([value, { label, description }]) => (
+                                                <SelectItem key={value} value={value}>
+                                                  <span className="font-medium">{label}</span>
+                                                  <span className="ml-1 text-muted-foreground text-[10px]">— {description}</span>
+                                                </SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                        </div>
+                                        <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!editSst.name.trim() || !editSst.lienWorkflowType || patchSst.isPending} onClick={() => patchSst.mutate({ id: sst.id, name: editSst.name.trim(), lienWorkflowType: editSst.lienWorkflowType })}>Save</Button>
+                                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditSst(null)}>Cancel</Button>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-2 py-0.5">
+                                        <Layout className="h-3 w-3 text-muted-foreground" />
+                                        <span className="text-xs text-foreground">{sst.name}</span>
+                                        <WorkflowTypeBadge value={sst.lienWorkflowType} />
+                                        <span className="text-xs text-muted-foreground">
+                                          — {WORKFLOW_TYPE_LABELS[sst.lienWorkflowType]?.description}
+                                        </span>
+                                        <button type="button" title="Edit sub-system type" className="ml-1 p-0.5 text-muted-foreground hover:text-foreground rounded transition-colors" onClick={() => setEditSst({ id: sst.id, name: sst.name, lienWorkflowType: sst.lienWorkflowType })}>
+                                          <Pencil className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
                                 ))}
                               </div>

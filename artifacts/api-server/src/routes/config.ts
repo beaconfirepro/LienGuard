@@ -47,6 +47,34 @@ router.get("/departments", async (req, res) => {
 });
 
 /**
+ * PATCH /config/departments/:id
+ * Partial update: name
+ */
+router.patch("/departments/:id", requireAdmin, async (req, res) => {
+  const { orgId } = getSession(req);
+  const id = req.params.id as string;
+  const { name } = req.body as { name?: string };
+
+  if (!name || typeof name !== "string" || name.trim() === "") {
+    res.status(400).json({ error: "name is required" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(departmentsTable)
+    .set({ name: name.trim() })
+    .where(and(eq(departmentsTable.id, id), eq(departmentsTable.orgId, orgId)))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "Department not found" });
+    return;
+  }
+
+  res.json({ department: updated });
+});
+
+/**
  * POST /config/departments
  * Creates a department. Body: { name }
  */
@@ -70,6 +98,54 @@ router.post("/departments", requireAdmin, async (req, res) => {
 // ---------------------------------------------------------------------------
 // System Types
 // ---------------------------------------------------------------------------
+
+/**
+ * GET /config/system-types
+ * Returns all system types for the org. Optional ?departmentId= filter.
+ */
+router.get("/system-types", async (req, res) => {
+  const { orgId } = getSession(req);
+  const { departmentId } = req.query as { departmentId?: string };
+
+  const rows = await db
+    .select()
+    .from(systemTypesTable)
+    .where(
+      departmentId
+        ? and(eq(systemTypesTable.orgId, orgId), eq(systemTypesTable.departmentId, departmentId))
+        : eq(systemTypesTable.orgId, orgId),
+    );
+
+  res.json({ systemTypes: rows });
+});
+
+/**
+ * PATCH /config/system-types/:id
+ * Partial update: name
+ */
+router.patch("/system-types/:id", requireAdmin, async (req, res) => {
+  const { orgId } = getSession(req);
+  const id = req.params.id as string;
+  const { name } = req.body as { name?: string };
+
+  if (!name || typeof name !== "string" || name.trim() === "") {
+    res.status(400).json({ error: "name is required" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(systemTypesTable)
+    .set({ name: name.trim() })
+    .where(and(eq(systemTypesTable.id, id), eq(systemTypesTable.orgId, orgId)))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "SystemType not found" });
+    return;
+  }
+
+  res.json({ systemType: updated });
+});
 
 /**
  * POST /config/system-types
@@ -113,6 +189,26 @@ router.post("/system-types", requireAdmin, async (req, res) => {
 // ---------------------------------------------------------------------------
 // Sub-System Types
 // ---------------------------------------------------------------------------
+
+/**
+ * GET /config/sub-system-types
+ * Returns all sub-system types for the org. Optional ?systemTypeId= filter.
+ */
+router.get("/sub-system-types", async (req, res) => {
+  const { orgId } = getSession(req);
+  const { systemTypeId } = req.query as { systemTypeId?: string };
+
+  const rows = await db
+    .select()
+    .from(subSystemTypesTable)
+    .where(
+      systemTypeId
+        ? and(eq(subSystemTypesTable.orgId, orgId), eq(subSystemTypesTable.systemTypeId, systemTypeId))
+        : eq(subSystemTypesTable.orgId, orgId),
+    );
+
+  res.json({ subSystemTypes: rows });
+});
 
 /**
  * POST /config/sub-system-types
