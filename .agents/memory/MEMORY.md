@@ -1,0 +1,3 @@
+- [Drizzle over Prisma](drizzle-prisma-decision.md) — workspace uses Drizzle ORM not Prisma; all schema/queries must use Drizzle.
+- [Seed runner](seed-runner.md) — `tsx` is not in PATH; run TypeScript seed scripts with `pnpm dlx tsx <file>` from the package dir.
+- [lib/db declarations](lib-db-build.md) — run `pnpm --filter @workspace/db exec tsc -p tsconfig.json` before typechecking api-server to generate .d.ts so TS project-references resolve.
