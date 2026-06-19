@@ -14,7 +14,8 @@ import { useLocation } from "wouter";
 import { Panel, useRightPanel, useLeftPanel } from "@/components/nav/AppShell";
 import { ResponsiveTable } from "@/components/ui/responsive-table";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { Search } from "lucide-react";
+import { Search, Plus, FileText } from "lucide-react";
+import { money } from "@/lib/utils";
 
 interface LienStream {
   id: string;
@@ -42,22 +43,24 @@ interface FilingRow {
   openedAt: string | null;
 }
 
+interface ExposureRow {
+  streamId: string;
+  lienProjectId: string;
+  projectName: string;
+  workStream: string;
+  streamStatus: string;
+  overdueMonths: number;
+  grossExposure: number;
+  waivedAmount: number;
+  netExposure: number;
+}
+
+const EMPTY_EXPOSURE: ExposureRow[] = [];
+
 const WORKSTREAM_LABELS: Record<string, string> = {
   construction: "Construction",
   design: "Design",
 };
-
-const STATUS_FILTERS: { v: string; l: string }[] = [
-  { v: "all", l: "All Filings" },
-  { v: "at_risk", l: "At Risk" },
-  { v: "filing", l: "Filing" },
-  { v: "lapsed", l: "Rights Lapsed" },
-  { v: "notice_active", l: "Notice Active" },
-  { v: "filed", l: "Filed" },
-  { v: "open", l: "Open" },
-  { v: "released", l: "Released" },
-  { v: "closed", l: "Closed" },
-];
 
 function apiFetch<T>(path: string): Promise<T> {
   return fetch(`/api${path}`, { credentials: "include" }).then(async (res) => {
@@ -82,12 +85,16 @@ function fmtDate(iso: string | null): string {
 export default function FilingsPage() {
   const [, setLocation] = useLocation();
   const [search, setSearch] = React.useState("");
-  const [filterStatus, setFilterStatus] = React.useState("all");
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["projects", "all"],
     queryFn: () => apiFetch<{ projects: Project[] }>("/projects?limit=200"),
     retry: false,
+  });
+
+  const { data: exposureData } = useQuery({
+    queryKey: ["filing-exposure"],
+    queryFn: () => apiFetch<{ exposure: ExposureRow[] }>("/waivers/exposure"),
   });
 
   const projects = data?.projects ?? [];
@@ -104,11 +111,7 @@ export default function FilingsPage() {
     })),
   );
 
-  const statusCounts: Record<string, number> = {};
-  for (const f of allFilings) statusCounts[f.status] = (statusCounts[f.status] ?? 0) + 1;
-
   const filtered = allFilings.filter((f) => {
-    if (filterStatus !== "all" && f.status !== filterStatus) return false;
     if (search) {
       const q = search.toLowerCase();
       const name = f.projectName.toLowerCase();
@@ -123,37 +126,90 @@ export default function FilingsPage() {
   ).length;
   const filedCount = allFilings.filter((f) => f.status === "filed").length;
 
-  const statusSig = Object.entries(statusCounts)
-    .map(([k, v]) => `${k}:${v}`)
-    .join(",");
+  const statusSig = allFilings.map((f) => f.status).sort().join(",");
+
+  // Upcoming compliance gaps: projects whose lien notices/documents are coming
+  // due, due, or overdue (overdue months or unresolved net exposure).
+  const compliance = (exposureData?.exposure ?? EMPTY_EXPOSURE)
+    .filter((row) => row.overdueMonths > 0 || row.netExposure > 0)
+    .sort((a, b) => b.overdueMonths - a.overdueMonths || b.netExposure - a.netExposure);
+
+  // The "New Filing" / "New Affidavit" actions run inside a stream's filing
+  // workspace, so route to the most urgent compliance gap (falling back to the
+  // first filing) where those actions live.
+  const startStreamId = compliance[0]?.streamId ?? allFilings[0]?.streamId ?? null;
+  const complianceSig = compliance.map((r) => `${r.streamId}:${r.overdueMonths}:${r.netExposure}`).join(",");
 
   useLeftPanel(
-    <Panel title="Filing Status" accent="#a855f7" count={allFilings.length}>
-      <div className="flex flex-col gap-0.5 p-2">
-        {STATUS_FILTERS.map(({ v, l }) => {
-          const count = v === "all" ? allFilings.length : statusCounts[v] ?? 0;
-          const active = filterStatus === v;
-          return (
-            <button
-              key={v}
-              onClick={() => setFilterStatus(v)}
-              className="flex items-center justify-between rounded-md px-2.5 py-2 text-[12.5px]"
-              style={
-                active
-                  ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
-                  : { color: "var(--text-dim)", fontWeight: 500 }
-              }
-            >
-              <span className="truncate">{l}</span>
-              <span className="ml-2 font-mono text-[11px]" style={{ color: "var(--text-muted-color)" }}>
-                {count}
-              </span>
-            </button>
-          );
-        })}
+    <Panel title="New Filing" accent="#f59e0b">
+      <div className="flex flex-col">
+        {/* Section 1 — New Filing actions */}
+        <div className="flex flex-col gap-2 p-3">
+          <button
+            onClick={() => startStreamId && setLocation(`/filing/${startStreamId}`)}
+            disabled={!startStreamId}
+            className="flex items-center gap-2 rounded-md px-3 py-2.5 text-[12.5px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+            style={{ background: "#f59e0b", color: "#1a1205" }}
+          >
+            <Plus className="h-3.5 w-3.5 shrink-0" />
+            New Filing
+          </button>
+          <button
+            onClick={() => startStreamId && setLocation(`/filing/${startStreamId}`)}
+            disabled={!startStreamId}
+            className="flex items-center gap-2 rounded-md border px-3 py-2.5 text-[12.5px] font-semibold transition-opacity hover:opacity-80 disabled:opacity-50"
+            style={{ background: "var(--surface-3)", borderColor: "var(--helm-border)", color: "var(--text-dim)" }}
+          >
+            <FileText className="h-3.5 w-3.5 shrink-0" />
+            New Affidavit
+          </button>
+        </div>
+
+        {/* Section 2 — Upcoming Compliance */}
+        <div className="border-t" style={{ borderColor: "var(--helm-border)" }}>
+          <div
+            className="px-4 pb-2 pt-3 text-[10.5px] font-semibold uppercase tracking-[0.12em]"
+            style={{ color: "var(--text-muted-color)" }}
+          >
+            Upcoming Compliance
+          </div>
+          <div className="flex flex-col gap-2 px-3 pb-3">
+            {compliance.length > 0 ? (
+              compliance.map((row) => {
+                const dot = row.overdueMonths > 0 ? "#eb143f" : "#f59e0b";
+                const sub =
+                  row.overdueMonths > 0
+                    ? `${row.overdueMonths} overdue month${row.overdueMonths !== 1 ? "s" : ""}`
+                    : `Net exposure ${money(row.netExposure)}`;
+                return (
+                  <button
+                    key={row.streamId}
+                    onClick={() => setLocation(`/filing/${row.streamId}`)}
+                    className="cursor-pointer rounded-md border px-3 py-2 text-left transition-colors"
+                    style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)" }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dot }} />
+                      <span className="min-w-0 truncate text-[12px] font-semibold" style={{ color: "var(--text-base)" }}>
+                        {row.projectName}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 pl-3.5 text-[11px]" style={{ color: "var(--text-muted-color)" }}>
+                      {sub}
+                    </div>
+                  </button>
+                );
+              })
+            ) : (
+              <div className="px-1 py-2 text-[11px]" style={{ color: "var(--text-muted-color)" }}>
+                No compliance gaps flagged.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </Panel>,
-    [filterStatus, statusSig],
+    [complianceSig, startStreamId],
   );
 
   useRightPanel(
