@@ -14,6 +14,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertTriangle,
@@ -68,6 +74,7 @@ interface Project {
   legalPropertyAddress: string | null;
   county: string | null;
   contractStartDate: string | null;
+  completionDate: string | null;
   completionChecklistComplete: boolean;
   jurisdictionId: string;
   subSystemTypeId: string;
@@ -421,6 +428,24 @@ function StreamDeadlinesPanel({
                                 {dl.rule.statuteCitation}
                               </span>
                             )}
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="h-3 w-3 text-muted-foreground cursor-help shrink-0" />
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="max-w-xs text-xs font-mono p-2">
+                                  <p className="font-semibold mb-1 text-foreground not-italic">Source data</p>
+                                  {Object.entries(dl.sourceData ?? {}).map(([k, v]) => (
+                                    <div key={k} className="flex gap-1">
+                                      <span className="text-muted-foreground w-28 shrink-0">{k}:</span>
+                                      <span className="break-all">
+                                        {Array.isArray(v) ? v.join(", ") : String(v)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                             {isSatisfied && (
                               <Badge variant="outline" className="text-xs h-4 px-1 text-green-700 border-green-300">
                                 Satisfied

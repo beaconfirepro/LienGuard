@@ -256,6 +256,7 @@ export const lienProjectsTable = pgTable(
     legalPropertyAddress: text("legal_property_address"),
     county: text("county"),
     contractStartDate: timestamp("contract_start_date", { withTimezone: true }),
+    completionDate: timestamp("completion_date", { withTimezone: true }),
     cachedProjectName: text("cached_project_name"),
     cachedHubspotStatus: text("cached_hubspot_status"),
     completionChecklistComplete: boolean("completion_checklist_complete").notNull().default(false),

@@ -21,7 +21,9 @@ import {
   invoiceLinksTable,
   lienFilingsTable,
 } from "@workspace/db";
-import { eq, and, lt } from "drizzle-orm";
+import { eq, and, lt, inArray } from "drizzle-orm";
+import { connecteamSyncClient } from "../lib/clients/connecteam";
+import { qboSyncClient } from "../lib/clients/qbo";
 import { requireSession, getSession } from "../lib/session";
 import { computeDeadline } from "../lib/deadlineEngine";
 import { randomUUID } from "crypto";
@@ -156,15 +158,39 @@ router.get("/streams/:id/work-months", async (req, res) => {
     .from(workMonthsTable)
     .where(and(eq(workMonthsTable.lienStreamId, id), eq(workMonthsTable.orgId, orgId)));
 
-  const enriched = await Promise.all(
-    workMonths.map(async (wm) => {
-      const deadlines = await db
-        .select()
-        .from(lienDeadlinesTable)
-        .where(and(eq(lienDeadlinesTable.workMonthId, wm.id), eq(lienDeadlinesTable.orgId, orgId)));
-      return { ...wm, deadlines };
-    }),
-  );
+  // Batch-load all rule metadata so each deadline carries statute citation + description
+  const allDeadlineRows = (
+    await Promise.all(
+      workMonths.map((wm) =>
+        db
+          .select()
+          .from(lienDeadlinesTable)
+          .where(and(eq(lienDeadlinesTable.workMonthId, wm.id), eq(lienDeadlinesTable.orgId, orgId))),
+      ),
+    )
+  ).flat();
+
+  const ruleIds = [...new Set(allDeadlineRows.map((d) => d.ruleId))];
+  const ruleRows =
+    ruleIds.length > 0
+      ? await db
+          .select({
+            id: lienRulesTable.id,
+            statuteCitation: lienRulesTable.statuteCitation,
+            description: lienRulesTable.description,
+            ruleKind: lienRulesTable.ruleKind,
+          })
+          .from(lienRulesTable)
+          .where(inArray(lienRulesTable.id, ruleIds))
+      : [];
+  const ruleMap = new Map(ruleRows.map((r) => [r.id, r]));
+
+  const enriched = workMonths.map((wm) => ({
+    ...wm,
+    deadlines: allDeadlineRows
+      .filter((d) => d.workMonthId === wm.id)
+      .map((d) => ({ ...d, rule: ruleMap.get(d.ruleId) ?? null })),
+  }));
 
   return res.json({ stream, workMonths: enriched });
 });
@@ -199,6 +225,28 @@ router.post("/streams/:id/recompute", async (req, res) => {
   if (!project) return res.status(404).json({ error: "Project not found" });
 
   const now = new Date();
+
+  // ------------------------------------------------------------------
+  // Step 0: Sync from external sources (graceful skip when unconfigured)
+  //
+  // ConnecteamSyncClient and QboSyncClient write into timesheet_links /
+  // invoice_links respectively, then Steps 1-3 read from those tables.
+  // In dev (no credentials set), they log a warning and skip; the seed
+  // data in the link tables is used instead.
+  // ------------------------------------------------------------------
+
+  const [connecteamResult, qboResult] = await Promise.all([
+    connecteamSyncClient.syncTimesheetsForProject({
+      orgId,
+      lienProjectId: project.id,
+      hubspotProjectId: project.hubspotProjectId,
+    }),
+    qboSyncClient.syncInvoicesForProject({
+      orgId,
+      lienProjectId: project.id,
+      hubspotProjectId: project.hubspotProjectId,
+    }),
+  ]);
 
   // ------------------------------------------------------------------
   // Step 1: Load timesheets and group by YYYY-MM, tracking record IDs
@@ -344,7 +392,7 @@ router.post("/streams/:id/recompute", async (req, res) => {
     .limit(1);
 
   const filingDate = filingRows[0]?.filingDate ? new Date(filingRows[0].filingDate) : null;
-  const completionDate = project.contractStartDate ? new Date(project.contractStartDate) : null;
+  const completionDate = project.completionDate ? new Date(project.completionDate) : null;
 
   // ------------------------------------------------------------------
   // Step 5: Compute deadlines for ALL work months (no overdue gate)

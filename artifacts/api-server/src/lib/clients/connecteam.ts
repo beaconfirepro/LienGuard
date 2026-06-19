@@ -1,49 +1,159 @@
 /**
- * ConnecteamClient — Phase 0 fixture stub.
+ * ConnecteamSyncClient — syncs Connecteam time-clock records into timesheet_links.
  *
- * Returns canned timesheet entries so the deadline engine has input data
- * during development. Replace with real Connecteam API in Phase 3.
+ * When CONNECTEAM_API_KEY is set: calls the Connecteam v1 API, upserts records
+ * into timesheet_links with lastSyncedAt, and returns the count synced.
+ *
+ * When not configured: logs a warning and skips sync. Callers should continue
+ * reading from the existing link-table cache (populated by seed in dev).
+ *
+ * Environment variables required:
+ *   CONNECTEAM_API_KEY  — Connecteam API key from Settings › Integrations
  */
 
-export interface ConnecteamTimeEntry {
-  connecteamTimeRecordId: string;
-  connecteamUserId: string;
-  stageTag: string;
-  workStream: "construction" | "design";
-  hours: number;
-  workDate: Date;
-  hubspotProjectId: string;
+import { db } from "@workspace/db";
+import { timesheetLinksTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
+import { randomUUID } from "crypto";
+
+const CONNECTEAM_BASE = "https://api.connecteam.com/v1";
+
+// Mapping from Connecteam stage tag → LienStream workStream
+function stageTagToWorkStream(tag: string): "construction" | "design" | null {
+  const lower = tag.toLowerCase();
+  if (/install|rough|trim|const|build|plumb|elec|mech|fire/.test(lower)) return "construction";
+  if (/design|eng|plan|draw|arch/.test(lower)) return "design";
+  return null; // unknown — skip record
 }
 
-const FIXTURE_TIMESHEETS: ConnecteamTimeEntry[] = [
-  {
-    connecteamTimeRecordId: "ct_tr_1",
-    connecteamUserId: "ct_u1",
-    stageTag: "install",
-    workStream: "construction",
-    hours: 38.5,
-    workDate: new Date("2026-03-12"),
-    hubspotProjectId: "hs_proj_900",
-  },
-  {
-    connecteamTimeRecordId: "ct_tr_2",
-    connecteamUserId: "ct_u2",
-    stageTag: "design",
-    workStream: "design",
-    hours: 10.0,
-    workDate: new Date("2026-01-22"),
-    hubspotProjectId: "hs_proj_900",
-  },
-];
+export interface SyncResult {
+  synced: number;
+  skipped: boolean;
+  reason?: string;
+}
 
-export class ConnecteamClient {
-  async getTimesheetsByProject(hubspotProjectId: string): Promise<ConnecteamTimeEntry[]> {
-    return FIXTURE_TIMESHEETS.filter((t) => t.hubspotProjectId === hubspotProjectId);
+export class ConnecteamSyncClient {
+  private readonly apiKey: string | null;
+
+  constructor() {
+    this.apiKey = process.env.CONNECTEAM_API_KEY ?? null;
   }
 
-  async getAllTimesheets(): Promise<ConnecteamTimeEntry[]> {
-    return FIXTURE_TIMESHEETS;
+  isConfigured(): boolean {
+    return this.apiKey !== null;
+  }
+
+  /**
+   * Sync Connecteam time-clock records for a project into timesheet_links.
+   *
+   * Connecteam time records are filtered by job tag matching the
+   * hubspotProjectId. Records are upserted on (orgId, connecteamTimeRecordId)
+   * and lastSyncedAt is stamped on every touched row.
+   */
+  async syncTimesheetsForProject(params: {
+    orgId: string;
+    lienProjectId: string;
+    hubspotProjectId: string;
+    from?: Date;
+    to?: Date;
+  }): Promise<SyncResult> {
+    if (!this.apiKey) {
+      console.warn(
+        `[ConnecteamSyncClient] CONNECTEAM_API_KEY not configured — ` +
+          `skipping sync for project ${params.lienProjectId}. ` +
+          `Using cached timesheet_links data.`,
+      );
+      return { synced: 0, skipped: true, reason: "CONNECTEAM_API_KEY not set" };
+    }
+
+    const { orgId, lienProjectId, hubspotProjectId, from, to } = params;
+    const now = new Date();
+
+    // Build query params for the Connecteam time-clock records endpoint
+    const qs = new URLSearchParams({ job_id: hubspotProjectId, limit: "200" });
+    if (from) qs.set("from", from.toISOString().slice(0, 10));
+    if (to) qs.set("to", to.toISOString().slice(0, 10));
+
+    let records: ConnecteamTimeRecord[];
+    try {
+      const resp = await fetch(`${CONNECTEAM_BASE}/time-clock/records?${qs}`, {
+        headers: { "x-api-key": this.apiKey, "Content-Type": "application/json" },
+      });
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => "");
+        throw new Error(`Connecteam API ${resp.status}: ${body.slice(0, 200)}`);
+      }
+      const data = (await resp.json()) as ConnecteamApiResponse;
+      records = data.data ?? [];
+    } catch (err) {
+      console.error(`[ConnecteamSyncClient] API call failed:`, err);
+      return { synced: 0, skipped: true, reason: String(err) };
+    }
+
+    let synced = 0;
+    for (const record of records) {
+      const workStream = stageTagToWorkStream(record.tag ?? "");
+      if (!workStream) continue; // skip unrecognised tags
+
+      const workDate = new Date(record.clock_in ?? record.date ?? new Date().toISOString());
+
+      // Check for existing record by unique key (orgId, connecteamTimeRecordId)
+      const existing = await db
+        .select({ id: timesheetLinksTable.id })
+        .from(timesheetLinksTable)
+        .where(
+          and(
+            eq(timesheetLinksTable.orgId, orgId),
+            eq(timesheetLinksTable.connecteamTimeRecordId, String(record.id)),
+          ),
+        )
+        .limit(1);
+
+      if (existing.length > 0) {
+        await db
+          .update(timesheetLinksTable)
+          .set({
+            hours: String(record.total_hours ?? record.hours ?? 0),
+            workDate,
+            stageTag: record.tag ?? "",
+            workStream,
+            lastSyncedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(timesheetLinksTable.id, existing[0].id));
+      } else {
+        await db.insert(timesheetLinksTable).values({
+          id: randomUUID(),
+          orgId,
+          lienProjectId,
+          connecteamUserId: String(record.user_id ?? ""),
+          connecteamTimeRecordId: String(record.id),
+          stageTag: record.tag ?? "",
+          workStream,
+          hours: String(record.total_hours ?? record.hours ?? 0),
+          workDate,
+          lastSyncedAt: now,
+        });
+      }
+      synced++;
+    }
+
+    return { synced, skipped: false };
   }
 }
 
-export const connecteamClient = new ConnecteamClient();
+// Connecteam API response shape (relevant fields only)
+interface ConnecteamTimeRecord {
+  id: string | number;
+  user_id?: string | number;
+  tag?: string;
+  date?: string;
+  clock_in?: string;
+  total_hours?: number;
+  hours?: number;
+}
+interface ConnecteamApiResponse {
+  data?: ConnecteamTimeRecord[];
+}
+
+export const connecteamSyncClient = new ConnecteamSyncClient();

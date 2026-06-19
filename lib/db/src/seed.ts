@@ -3,6 +3,7 @@
  * Ported from the Prisma seed spec in lien_collections_SEED_DATA.md.
  * Run: pnpm --filter @workspace/db run seed
  */
+import { sql } from "drizzle-orm";
 import { db } from "./index";
 import {
   organizationsTable,
@@ -293,6 +294,7 @@ async function main() {
         legalPropertyAddress: "100 Main St, Austin, TX",
         county: "Travis",
         contractStartDate: d("2026-01-15"),
+        completionDate: d("2026-04-15"),
         cachedProjectName: "Travis Office Retrofit",
         cachedHubspotStatus: "install",
         completionChecklistComplete: true,
@@ -308,6 +310,7 @@ async function main() {
         legalPropertyAddress: "55 Oak Ave, Dallas, TX",
         county: "Dallas",
         contractStartDate: d("2026-02-01"),
+        completionDate: d("2026-05-20"),
         cachedProjectName: "Oak Ave Apartments",
         cachedHubspotStatus: "install",
         completionChecklistComplete: false,
@@ -323,12 +326,16 @@ async function main() {
         legalPropertyAddress: "7 Cedar Ct, Houston, TX",
         county: "Harris",
         contractStartDate: d("2026-03-01"),
+        completionDate: d("2026-06-01"),
         cachedProjectName: "Cedar Custom Home",
         cachedHubspotStatus: "install",
         completionChecklistComplete: true,
       },
     ])
-    .onConflictDoNothing();
+    .onConflictDoUpdate({
+      target: [lienProjectsTable.id],
+      set: { completionDate: sql`excluded.completion_date` },
+    });
 
   // ── Parties ───────────────────────────────────────────────────────────────
   await db
