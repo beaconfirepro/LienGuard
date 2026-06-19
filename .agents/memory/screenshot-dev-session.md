@@ -1,10 +1,14 @@
 ---
-name: Authenticated screenshots (dev session priming)
-description: How to capture data-filled screenshots of the Lien & Collections app, which requires a dev session cookie.
+name: Authenticated screenshots (Replit Auth, no dev priming)
+description: Why data-filled screenshots of the Lien & Collections app can no longer be primed; what the auth setup is.
 ---
 
-The Lien & Collections frontend has no auto-login; every API call returns 401 until the `lc_session` cookie is set by visiting `GET /api/dev/session` (dev-only route, sets signed cookie for `org_beacon_test_001`, role=admin by default; `?role=pm|finance|coordinator` to simulate).
+The Lien & Collections web app now uses real Replit Auth (OIDC/PKCE). The old dev-only `GET /api/dev/session` route and `lc_session` stub cookie were removed.
 
-**To screenshot authenticated pages:** the `app_preview` screenshot browser persists cookies across calls. First call `screenshot(path="/api/dev/session")` to set the cookie (returns JSON), then screenshot the actual app pages — they now render with data. Without this priming step, every page shows "Unauthorized — valid session required".
+**Screenshot limitation:** there is NO way to prime an authenticated session in the screenshot browser anymore — real OIDC login can't be completed headlessly. `app_preview` screenshots of the web app will always show the **login gate** (a centered "Log in" card in `AppShell.tsx`), not data pages. To verify authenticated/data UI, test via the API directly (curl against the server port 8080) or rely on a real browser login.
 
-**Why:** the preview proxy serves the app at localhost:80 root; the dev session cookie is set on that same origin, so a prior navigation to `/api/dev/session` carries into subsequent app-preview screenshots.
+**Auth contract (verified):** `GET /api/auth/user` → `{"user":null}` when logged out; protected `/api/*` routes → 401; `GET /api/login` → 302 to `replit.com/oidc/auth`. M2M `/api/external/*` routes are unaffected.
+
+**Roles:** app-managed roles (admin/pm/finance/coordinator) live in `users.role` (nullable) in DB, loaded onto `req.user`. Set roles directly in the DB — there is no role-management UI. Login upsert must never overwrite an existing role.
+
+**Single-tenant orgId:** Replit Auth has no org concept; `lib/session.ts` `getSession()` shim returns a fixed default orgId (`org_beacon_test_001`) so the ~60 existing `getSession` callsites keep working unchanged.

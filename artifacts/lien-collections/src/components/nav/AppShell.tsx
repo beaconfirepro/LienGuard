@@ -2,11 +2,12 @@ import * as React from "react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useResponsive } from "@/hooks/use-responsive";
+import { useAuth } from "@workspace/replit-auth-web";
 import {
   LayoutGrid, Landmark, DollarSign, Lock, Settings,
   ChevronLeft, Bell, Menu, X, Search,
   Sun, Moon, PanelRightClose, PanelRightOpen,
-  PanelLeftClose, PanelLeftOpen, FileSignature, Gavel,
+  PanelLeftClose, PanelLeftOpen, FileSignature, Gavel, LogOut,
 } from "lucide-react";
 
 /* ─── Panel context (inner left + right) ─────────────────────────────────── */
@@ -81,8 +82,54 @@ function getTitle(path: string) {
 }
 
 /* ─── Main AppShell ──────────────────────────────────────────────────────── */
+function userInitials(user: { firstName: string | null; lastName: string | null; email: string | null }): string {
+  const f = user.firstName?.trim()?.[0] ?? "";
+  const l = user.lastName?.trim()?.[0] ?? "";
+  const initials = `${f}${l}`.toUpperCase();
+  if (initials) return initials;
+  return (user.email?.trim()?.[0] ?? "?").toUpperCase();
+}
+
+function userDisplayName(user: { firstName: string | null; lastName: string | null; email: string | null }): string {
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  return name || user.email || "Account";
+}
+
+/* ─── Login gate (unauthenticated) ───────────────────────────────────────── */
+function LoginScreen({ onLogin }: { onLogin: () => void }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center px-4 dark" style={{ background: "var(--bg)" }}>
+      <div
+        className="w-full max-w-sm rounded-xl border p-8 text-center shadow-xl"
+        style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
+      >
+        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-xl" style={{ background: "var(--surface-3)" }}>
+          <Landmark className="h-7 w-7 text-amber-500" />
+        </div>
+        <div className="text-[18px] font-bold tracking-tight" style={{ color: "var(--text-base)" }}>
+          Liens &amp; Collections
+        </div>
+        <div className="mt-1 text-[11px] font-semibold uppercase tracking-[1.5px]" style={{ color: "var(--text-muted-color)" }}>
+          by HELM
+        </div>
+        <p className="mt-5 text-[13.5px] leading-relaxed" style={{ color: "var(--text-dim)" }}>
+          Please log in to access the workspace.
+        </p>
+        <button
+          onClick={onLogin}
+          className="mt-6 w-full rounded-md py-2.5 text-[14px] font-semibold text-[#1a1205] transition-opacity hover:opacity-90"
+          style={{ background: "linear-gradient(135deg,#f59e0b,#f97316)" }}
+        >
+          Log in
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { isDesktop, isMobile, width } = useResponsive();
+  const { user, isLoading, isAuthenticated, login, logout } = useAuth();
   const [location] = useLocation();
   const [collapsed, setCollapsed] = React.useState(false);
   const [theme, setTheme] = React.useState<"dark" | "light">("dark");
@@ -96,6 +143,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     document.documentElement.classList.toggle("dark", theme === "dark");
     document.body.classList.toggle("dark", theme === "dark");
   }, [theme]);
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center dark" style={{ background: "var(--bg)", color: "var(--text-dim)" }}>
+        <span className="text-[13.5px]">Loading…</span>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginScreen onLogin={login} />;
+  }
 
   const title = getTitle(location);
 
@@ -241,8 +300,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               {theme === "dark" ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
             </button>
-            <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-[#1a1205]" style={{ background: "linear-gradient(135deg,#f59e0b,#f97316)" }}>
-              DB
+            <div className="flex shrink-0 items-center gap-2.5">
+              {user?.profileImageUrl ? (
+                <img
+                  src={user.profileImageUrl}
+                  alt={userDisplayName(user)}
+                  className="h-[38px] w-[38px] shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-[#1a1205]" style={{ background: "linear-gradient(135deg,#f59e0b,#f97316)" }}>
+                  {user ? userInitials(user) : "?"}
+                </div>
+              )}
+              {user && (
+                <span className="hidden text-[13px] font-medium lg:block" style={{ color: "var(--text-base)" }}>
+                  {userDisplayName(user)}
+                </span>
+              )}
+              <button
+                onClick={logout}
+                className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-md border"
+                style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)", color: "var(--text-dim)" }}
+                title="Log out"
+              >
+                <LogOut className="h-[18px] w-[18px]" />
+              </button>
             </div>
           </header>
 

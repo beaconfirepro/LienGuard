@@ -103,7 +103,7 @@ router.post("/invoices/:id/clear", async (req, res) => {
 
   if (!invoice) return res.status(404).json({ error: "Invoice not found" });
 
-  const userId = req.sessionData?.userId ?? null;
+  const userId = req.user?.id ?? null;
   const now = new Date();
 
   const [updated] = await db

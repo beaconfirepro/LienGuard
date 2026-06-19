@@ -8,71 +8,54 @@ export interface SessionData {
   role?: UserRole;
 }
 
-declare global {
-  namespace Express {
-    interface Request {
-      sessionData?: SessionData;
-    }
-  }
-}
-
 /**
- * parseSession — reads the SIGNED `lc_session` cookie (set by the server) and
- * attaches the payload to `req.sessionData` so downstream middleware can read it.
+ * Single-tenant default org.
  *
- * The cookie is signed by Express's cookie-parser using SESSION_SECRET, so
- * it cannot be forged without the secret.
- *
- * Phase 0: Helm SSO is stubbed — the only way to obtain a session is via the
- * dev-only `GET /dev/session` endpoint.  Real OIDC token exchange is wired in
- * a later phase but the interface (req.sessionData.orgId) stays the same.
+ * Replit Auth carries no organization concept — it identifies a person, not a
+ * tenant. This app currently serves a single organization, so every
+ * authenticated user operates within DEFAULT_ORG_ID. Override via env when the
+ * deployment serves a different org.
  */
-export function parseSession(
-  req: Request,
-  _res: Response,
-  next: NextFunction,
-): void {
-  const raw = (req as any).signedCookies?.["lc_session"];
-  if (raw && typeof raw === "string") {
-    try {
-      const parsed = JSON.parse(raw) as SessionData;
-      if (parsed?.orgId) {
-        req.sessionData = parsed;
-      }
-    } catch {
-      /* ignore malformed cookie payload */
-    }
-  }
-  next();
-}
+const DEFAULT_ORG_ID =
+  process.env.DEFAULT_ORG_ID ??
+  process.env.DEV_ORG_ID ??
+  "org_beacon_test_001";
 
 /**
- * requireSession — enforces that a valid, server-signed session exists.
+ * requireSession — thin wrapper over Replit Auth's `req.isAuthenticated()`.
  *
- * Returns 401 JSON when:
- *   - no `lc_session` cookie is present, or
- *   - the cookie signature is invalid (cookie-parser sets the value to `false`
- *     when the HMAC check fails), or
- *   - the cookie payload is missing `orgId`.
- *
- * No automatic org injection occurs.  To bypass in development, call
- * `GET /dev/session` once — it sets the signed cookie for the test org.
+ * The real OIDC session is loaded by `authMiddleware` (mounted globally before
+ * the routers). This guard rejects requests without a valid session with 401,
+ * preserving the contract every protected route already relies on.
  */
 export function requireSession(
   req: Request,
   res: Response,
   next: NextFunction,
 ): void {
-  if (req.sessionData?.orgId) {
+  if (req.isAuthenticated()) {
     return next();
   }
   res.status(401).json({ error: "Unauthorized — valid session required" });
 }
 
-/** Typed accessor — use after requireSession; throws if session is absent. */
+/**
+ * getSession — typed accessor used by route handlers after `requireSession`.
+ *
+ * Derives the legacy `{ orgId, userId, role }` shape from the Replit-Auth
+ * `req.user`. `orgId` is the single-tenant default; `userId` and `role` come
+ * from the authenticated user (role is the app-managed DB column).
+ *
+ * Throws if called on an unauthenticated request — always run after
+ * `requireSession`.
+ */
 export function getSession(req: Request): SessionData {
-  if (!req.sessionData?.orgId) {
+  if (!req.isAuthenticated()) {
     throw new Error("requireSession must run before getSession");
   }
-  return req.sessionData;
+  return {
+    orgId: DEFAULT_ORG_ID,
+    userId: req.user.id,
+    role: req.user.role ?? undefined,
+  };
 }
