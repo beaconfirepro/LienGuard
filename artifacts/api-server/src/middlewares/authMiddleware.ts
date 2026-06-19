@@ -30,10 +30,11 @@ declare global {
 }
 
 // ── TEMPORARY LOGIN BYPASS ───────────────────────────────────────────────
-// When AUTH_BYPASS=1 every request is treated as an authenticated user so we
-// can use the app without going through the real Replit Auth / OIDC flow during
-// development. This is a full authorization bypass, so it is triple-guarded:
-//   1. opt-in via AUTH_BYPASS=1 (set development-scoped only),
+// When AUTH_BYPASS=1 (or NODE_ENV=test) every request is treated as an
+// authenticated user so we can use the app without going through the real
+// Replit Auth / OIDC flow during development and in the automated test suite.
+// This is a full authorization bypass, so it is triple-guarded:
+//   1. opt-in via AUTH_BYPASS=1 or NODE_ENV=test (development/test only),
 //   2. refuses to activate when NODE_ENV === "production",
 //   3. refuses to activate inside a Replit deployment (REPLIT_DEPLOYMENT set).
 // Remove this block (and the AUTH_BYPASS env var) to restore normal login.
@@ -45,7 +46,7 @@ declare global {
 // (disallowed → 403) without editing the database by hand. Each role maps to
 // the matching seeded user so approval attributions look correct.
 export const AUTH_BYPASS =
-  process.env.AUTH_BYPASS === "1" &&
+  (process.env.AUTH_BYPASS === "1" || process.env.NODE_ENV === "test") &&
   process.env.NODE_ENV !== "production" &&
   !process.env.REPLIT_DEPLOYMENT;
 
