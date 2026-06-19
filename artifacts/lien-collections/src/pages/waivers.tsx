@@ -512,14 +512,6 @@ export default function WaiversPage() {
           <div className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>
             {waivers.length} waiver{waivers.length !== 1 ? "s" : ""}
           </div>
-          <button
-            onClick={() => setCreateType("conditional_progress")}
-            className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[12.5px] font-semibold"
-            style={{ background: alpha("#14eba3", 0.1), borderColor: alpha("#14eba3", 0.25), color: "#14eba3" }}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            New waiver
-          </button>
         </div>
 
         {/* Waiver cards */}
@@ -528,7 +520,7 @@ export default function WaiversPage() {
             className="rounded-lg border px-4 py-10 text-center text-[12px]"
             style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-dim)" }}
           >
-            No waivers yet — click "New waiver" to create one.
+            No waivers yet — use the New Waiver panel to create one.
           </div>
         )}
 
