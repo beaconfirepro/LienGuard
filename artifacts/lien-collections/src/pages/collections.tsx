@@ -218,17 +218,24 @@ export default function CollectionsPage() {
   return (
     <>
       {/* AR Aging */}
-      <div className="rounded-lg border p-[18px]" style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}>
-        <div className="mb-3.5 flex items-center justify-between">
-          <div className="text-[14.5px] font-semibold" style={{ color: "var(--text-base)" }}>
-            Accounts receivable aging
-          </div>
-          <span className="font-mono text-[14px] font-semibold text-[#eb143f]">
-            {money(agingTotal)}
-          </span>
+      <Section
+        open={!closed["__aging"]}
+        onToggle={() => toggleSection("__aging")}
+        header={
+          <>
+            <span className="flex-1 text-[14.5px] font-semibold" style={{ color: "var(--text-base)" }}>
+              Accounts Receivable Aging
+            </span>
+            <span className="font-mono text-[14px] font-semibold text-[#eb143f]">
+              {money(agingTotal)}
+            </span>
+          </>
+        }
+      >
+        <div className="p-[18px]">
+          <AgingBuckets values={agingValues} variant="columns" />
         </div>
-        <AgingBuckets values={agingValues} variant="columns" />
-      </div>
+      </Section>
 
       {/* Filter controls */}
       <ListPageLayout
