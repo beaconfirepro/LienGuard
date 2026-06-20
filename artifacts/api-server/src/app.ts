@@ -18,6 +18,7 @@ import notaryRouter from "./routes/notary";
 import filingRouter from "./routes/filing";
 import reportsRouter from "./routes/reports";
 import collectionsRouter from "./routes/collections";
+import usersRouter from "./routes/users";
 import authRouter from "./routes/auth";
 import devRouter from "./routes/dev";
 import profileRouter from "./routes/profile";
@@ -76,6 +77,7 @@ app.use("/api", notaryRouter);              // POST /api/notary/orders, /api/not
 app.use("/api", filingRouter);              // POST /api/filing/:streamId/*, GET /api/filing/stream/:sid
 app.use("/api", reportsRouter);             // GET /api/reports/exposure, /timeline/:id, /lapsed
 app.use("/api/collections", collectionsRouter); // GET/POST /api/collections/*     (session)
+app.use("/api", usersRouter);               // GET /api/users, PATCH /api/users/:id/role (admin)
 app.use("/api", apiRouter);                 // GET /api/org, etc.                  (session, catch-all)
 
 export default app;

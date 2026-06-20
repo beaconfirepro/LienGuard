@@ -15,6 +15,7 @@ import SendQueuePage from "@/pages/send-queue";
 import WaiversPage from "@/pages/waivers";
 import FilingWorkspacePage from "@/pages/filing-workspace";
 import ProfilePage from "@/pages/profile";
+import UsersPage from "@/pages/users";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +37,7 @@ function Router() {
         </Route>
         <Route path="/settings" component={ConfigPage} />
         <Route path="/profile" component={ProfilePage} />
+        <Route path="/team" component={UsersPage} />
         <Route component={NotFound} />
       </Switch>
     </AppShell>

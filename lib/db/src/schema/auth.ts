@@ -38,7 +38,8 @@ export const usersTable = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
-  // App-specific role (nullable). Assigned directly in the DB for now.
+  // App-specific role (nullable). Assigned by admins via the Team page, or
+  // directly in the DB.
   role: userRoleEnum("role"),
   // ── Per-user, editable profile & preferences ──────────────────────────────
   // `displayName` is a user-chosen name kept SEPARATE from the Replit-synced
@@ -50,6 +51,8 @@ export const usersTable = pgTable("users", {
   theme: userThemeEnum("theme").notNull().default("system"),
   language: varchar("language").notNull().default("en"),
   currency: varchar("currency").notNull().default("USD"),
+  // Updated on every successful login so admins can see who is active.
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

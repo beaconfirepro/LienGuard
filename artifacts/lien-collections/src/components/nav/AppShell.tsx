@@ -11,7 +11,7 @@ import {
   ChevronLeft, Bell, Menu, X,
   Sun, Moon, PanelRightClose, PanelRightOpen,
   PanelLeftClose, PanelLeftOpen, FileSignature, LogOut,
-  ChevronDown, User,
+  ChevronDown, User, Users2,
 } from "lucide-react";
 
 /* ─── Panel context (inner left + right) ─────────────────────────────────── */
@@ -106,6 +106,7 @@ const TITLES: [RegExp, string][] = [
   [/^\/holds$/, "Vendor Bill Holds"],
   [/^\/collections\/.+/, "Account Detail"],
   [/^\/collections$/, "Collections Pipeline"],
+  [/^\/team$/, "Team & Access"],
   [/^\/$/, "Dashboard"],
 ];
 
@@ -351,6 +352,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             {/* Footer */}
             <div className="flex flex-col gap-1 border-t p-3" style={{ borderColor: "var(--helm-border)" }}>
+              {user?.role === "admin" && (
+                <Link href="/team">
+                  <div
+                    className={cn("flex items-center gap-3 rounded-md py-2.5 text-[14px] font-medium cursor-pointer", collapsed ? "justify-center px-2.5" : "px-3")}
+                    style={location === "/team"
+                      ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
+                      : { color: "var(--text-dim)" }}
+                    onMouseEnter={(e) => { if (location !== "/team") e.currentTarget.style.background = "var(--surface-2)"; }}
+                    onMouseLeave={(e) => { if (location !== "/team") e.currentTarget.style.background = "transparent"; }}
+                  >
+                    <Users2 className="h-5 w-5 shrink-0" />
+                    {!collapsed && <span>Team &amp; Access</span>}
+                  </div>
+                </Link>
+              )}
               <Link href="/settings">
                 <div
                   className={cn("flex items-center gap-3 rounded-md py-2.5 text-[14px] font-medium cursor-pointer", collapsed ? "justify-center px-2.5" : "px-3")}
@@ -672,6 +688,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <User className="h-4 w-4 shrink-0" />My Profile
                   </div>
                 </Link>
+                {user?.role === "admin" && (
+                  <Link href="/team">
+                    <div
+                      className="flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm cursor-pointer"
+                      style={location === "/team"
+                        ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
+                        : { color: "var(--text-dim)", fontWeight: 500 }}
+                      onClick={() => setDrawer(false)}
+                    >
+                      <Users2 className="h-4 w-4 shrink-0" />Team &amp; Access
+                    </div>
+                  </Link>
+                )}
                 <Link href="/settings">
                   <div
                     className="flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm cursor-pointer"

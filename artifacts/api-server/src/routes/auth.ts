@@ -72,14 +72,17 @@ async function upsertUser(claims: Record<string, unknown>) {
       | null,
   };
 
+  const now = new Date();
+
   const [user] = await db
     .insert(usersTable)
-    .values(userData)
+    .values({ ...userData, lastLoginAt: now })
     .onConflictDoUpdate({
       target: usersTable.id,
       set: {
         ...userData,
-        updatedAt: new Date(),
+        lastLoginAt: now,
+        updatedAt: now,
       },
     })
     .returning();

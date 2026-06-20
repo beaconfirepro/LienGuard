@@ -21,3 +21,4 @@
 - [API test harness](api-test-harness.md) — api-server uses Vitest+Supertest in test/; NODE_ENV=test auto-flips AUTH_BYPASS; pool closed per-file in setup.
 - [Profile & theme architecture](profile-theme-architecture.md) — avatar separate from synced image; prefs read fresh from DB not session; theme = server source-of-truth + localStorage no-flash cache on <html>.
 - [UAT e2e suite](uat-e2e-suite.md) — api-server `test:uat` harness: delete AUTH_BYPASS before importing app, per-test precondition resets for idempotency, assert runtime-derived statuses not stored seed values.
+- [AuthUser role passthrough](authuser-role-passthrough.md) — frontend role is gated by the AuthUser OpenAPI schema; GetCurrentAuthUserResponse.parse strips any field not in the schema, so role must be declared there + codegen rerun.
