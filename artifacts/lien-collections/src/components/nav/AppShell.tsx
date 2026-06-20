@@ -385,7 +385,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Sub-header */}
           <div
-            className="sticky top-16 z-20 flex items-center gap-3 border-b px-4 py-2.5 md:px-6"
+            className="sticky top-16 z-20 flex h-12 items-center gap-3 border-b px-4 md:px-6"
             style={{ background: "var(--bg)", borderColor: "var(--helm-border)" }}
           >
             {!!left && isDesktop && (
