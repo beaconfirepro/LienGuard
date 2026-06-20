@@ -13,7 +13,7 @@ jobs:
     # Only run on issues that are not pull requests and don't already have an assignee
     if: >-
       github.event.issue.pull_request == null &&
-      github.event.issue.assignees[0] == null
+      github.event.issue.assignee == null
     runs-on: ubuntu-latest
 
     steps:
