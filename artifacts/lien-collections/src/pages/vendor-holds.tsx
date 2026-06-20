@@ -3,6 +3,7 @@ import { Lock, Unlock, Plus, X } from "lucide-react";
 import { Panel, useRightPanel, useLeftPanel } from "@/components/nav/AppShell";
 import { QueueList } from "@/components/ui/queue-list";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ListPageLayout } from "@/components/ui/list-page";
 import { money, alpha } from "@/lib/utils";
 
 const VENDOR_BILLS = [
@@ -103,22 +104,13 @@ export default function VendorHoldsPage() {
   );
 
   return (
-    <>
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: "Open A/P", value: money(openSum), sub: "unpaid vendor bills", color: "#6366f1" },
-          { label: "On Hold", value: money(holdSum), sub: "payment withheld", color: "#f59f0a" },
-          { label: "Recommended", value: recCount, sub: "client overdue — hold advised", color: "#eb143f" },
-        ].map((k) => (
-          <div key={k.label} className="relative overflow-hidden rounded-lg border px-4 pb-3.5 pt-4" style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}>
-            <div className="absolute inset-x-0 top-0 h-[3px]" style={{ background: k.color }} />
-            <div className="text-[10.5px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>{k.label}</div>
-            <div className="mt-1.5 font-mono text-[24px] font-bold leading-none" style={{ color: k.color }}>{k.value}</div>
-            <div className="mt-1 text-[11.5px]" style={{ color: "var(--text-dim)" }}>{k.sub}</div>
-          </div>
-        ))}
-      </div>
-
+    <ListPageLayout
+      kpis={[
+        { label: "Open A/P", value: money(openSum), sub: "unpaid vendor bills", color: "#6366f1" },
+        { label: "On Hold", value: money(holdSum), sub: "payment withheld", color: "#f59f0a" },
+        { label: "Recommended", value: recCount, sub: "client overdue — hold advised", color: "#eb143f" },
+      ]}
+    >
       <div className="overflow-hidden rounded-lg border" style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3" style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)" }}>
           <div className="text-[13.5px] font-semibold" style={{ color: "var(--text-base)" }}>Open vendor bills</div>
@@ -190,6 +182,6 @@ export default function VendorHoldsPage() {
           <div className="px-4 py-6 text-center text-xs" style={{ color: "var(--text-muted-color)" }}>No vendor bills match this filter.</div>
         )}
       </div>
-    </>
+    </ListPageLayout>
   );
 }

@@ -4,6 +4,7 @@ import { Panel, useRightPanel, useLeftPanel } from "@/components/nav/AppShell";
 import { QueueList } from "@/components/ui/queue-list";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ApprovalGateBanner } from "@/components/ui/approval-gate-banner";
+import { ListTableState } from "@/components/ui/list-page";
 import { money } from "@/lib/utils";
 import { Check, FileText, Landmark, ShieldAlert, Plus, X, RefreshCw } from "lucide-react";
 
@@ -496,22 +497,6 @@ export default function WaiversPage() {
     [pendingWaivers.length, selected?.id],
   );
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#14eba3] border-t-transparent" />
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="rounded-lg border px-4 py-6 text-center text-[12px]" style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-dim)" }}>
-        Failed to load waivers.
-      </div>
-    );
-  }
-
   return (
     <>
       {createType && (
@@ -527,16 +512,16 @@ export default function WaiversPage() {
 
       <div className="flex flex-col gap-4">
         {/* Waiver cards */}
-        {waivers.length === 0 && (
-          <div
-            className="rounded-lg border px-4 py-10 text-center text-[12px]"
-            style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-dim)" }}
-          >
-            No waivers yet — use the New Waiver panel to create one.
-          </div>
-        )}
-
-        {waivers.map((w) => {
+        <ListTableState
+          isLoading={isLoading}
+          isError={isError}
+          isEmpty={waivers.length === 0}
+          loadingText="Loading waivers…"
+          errorText="Failed to load waivers."
+          emptyText="No waivers yet — use the New Waiver panel to create one."
+        >
+          <div className="flex flex-col gap-4">
+            {waivers.map((w) => {
           const gate = gateText(w);
           const tone = gateTone(w);
           const isSelected = w.id === selected?.id;
@@ -688,7 +673,9 @@ export default function WaiversPage() {
               )}
             </div>
           );
-        })}
+            })}
+          </div>
+        </ListTableState>
 
         {/* Mailing tracking section — sent notices */}
         <MailingTracker />

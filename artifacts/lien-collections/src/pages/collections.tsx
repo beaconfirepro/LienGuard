@@ -1,10 +1,11 @@
 import * as React from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Phone, Plus, Check, X, RefreshCw, Filter } from "lucide-react";
+import { ChevronRight, Phone, Plus, Check, X, Filter } from "lucide-react";
 import { Panel, useRightPanel, useLeftPanel } from "@/components/nav/AppShell";
 import { QueueList } from "@/components/ui/queue-list";
 import { AgingBuckets } from "@/components/ui/aging-buckets";
+import { ListPageLayout, ListTableState } from "@/components/ui/list-page";
 import { money, alpha } from "@/lib/utils";
 
 function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
@@ -214,14 +215,6 @@ export default function CollectionsPage() {
     [allAccounts, filterStage],
   );
 
-  if (loadingAccounts) {
-    return (
-      <div className="flex items-center justify-center py-16 text-sm" style={{ color: "var(--text-muted-color)" }}>
-        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />Loading accounts…
-      </div>
-    );
-  }
-
   return (
     <>
       {/* AR Aging */}
@@ -238,37 +231,41 @@ export default function CollectionsPage() {
       </div>
 
       {/* Filter controls */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Filter className="h-4 w-4 shrink-0" style={{ color: "var(--text-dim)" }} />
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="rounded-md border px-3 py-1.5 text-[12.5px]"
-          style={{ background: "var(--surface)", borderColor: activeFilterCount > 0 && filterStatus ? "#6366f1" : "var(--helm-border)", color: "var(--text-base)" }}
-        >
-          {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        <select
-          value={filterStage}
-          onChange={(e) => setFilterStage(e.target.value)}
-          className="rounded-md border px-3 py-1.5 text-[12.5px]"
-          style={{ background: "var(--surface)", borderColor: activeFilterCount > 0 && filterStage ? "#6366f1" : "var(--helm-border)", color: "var(--text-base)" }}
-        >
-          {STAGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        {activeFilterCount > 0 && (
-          <button
-            onClick={() => { setFilterStatus(""); setFilterStage(""); }}
-            className="text-[12px]"
-            style={{ color: "var(--text-dim)" }}
-          >
-            Clear ({activeFilterCount})
-          </button>
-        )}
-        <span className="ml-auto text-[12px]" style={{ color: "var(--text-muted-color)" }}>
-          {accounts.length} account{accounts.length !== 1 ? "s" : ""}
-        </span>
-      </div>
+      <ListPageLayout
+        filters={
+          <>
+            <Filter className="h-4 w-4 shrink-0" style={{ color: "var(--text-dim)" }} />
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="rounded-md border px-3 py-1.5 text-[12.5px]"
+              style={{ background: "var(--surface)", borderColor: activeFilterCount > 0 && filterStatus ? "#6366f1" : "var(--helm-border)", color: "var(--text-base)" }}
+            >
+              {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <select
+              value={filterStage}
+              onChange={(e) => setFilterStage(e.target.value)}
+              className="rounded-md border px-3 py-1.5 text-[12.5px]"
+              style={{ background: "var(--surface)", borderColor: activeFilterCount > 0 && filterStage ? "#6366f1" : "var(--helm-border)", color: "var(--text-base)" }}
+            >
+              {STAGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            {activeFilterCount > 0 && (
+              <button
+                onClick={() => { setFilterStatus(""); setFilterStage(""); }}
+                className="text-[12px]"
+                style={{ color: "var(--text-dim)" }}
+              >
+                Clear ({activeFilterCount})
+              </button>
+            )}
+            <span className="ml-auto text-[12px]" style={{ color: "var(--text-muted-color)" }}>
+              {accounts.length} account{accounts.length !== 1 ? "s" : ""}
+            </span>
+          </>
+        }
+      >
 
       {/* Call list */}
       <Section
@@ -348,6 +345,18 @@ export default function CollectionsPage() {
       </Section>
 
       {/* Escalation stage buckets */}
+      <ListTableState
+        isLoading={loadingAccounts}
+        isError={false}
+        isEmpty={accounts.length === 0}
+        loadingText="Loading accounts…"
+        errorText="Failed to load accounts."
+        emptyText={
+          activeFilterCount > 0
+            ? "No accounts match the current filters."
+            : "No collection accounts found."
+        }
+      >
       {STAGE_ORDER.map((stage) => {
         const list = accounts
           .filter((a) => a.escalationStage === stage && a.oldestOverdueDays > 0)
@@ -460,14 +469,8 @@ export default function CollectionsPage() {
           </Section>
         );
       })}
-
-      {accounts.length === 0 && (
-        <div className="rounded-lg border px-6 py-10 text-center text-sm" style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-muted-color)" }}>
-          {activeFilterCount > 0
-            ? "No accounts match the current filters."
-            : "No collection accounts found."}
-        </div>
-      )}
+      </ListTableState>
+      </ListPageLayout>
     </>
   );
 }
