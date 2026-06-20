@@ -19,7 +19,7 @@ export interface AuthUser {
   /** @nullable */
   profileImageUrl: string | null;
   /**
-     * App-managed role, read-only. Assigned in the database.
+     * App-managed role, assigned by an admin. Null when the user has not been granted access yet.
      * @nullable
      */
   role: AuthUserRole;

@@ -400,7 +400,7 @@ components:
         role:
           type: [string, 'null']
           enum: [admin, pm, finance, coordinator, null]
-          description: App-managed role, read-only. Assigned in the database.
+          description: App-managed role, assigned by an admin. Null when the user has not been granted access yet.
         displayName:
           type: [string, 'null']
           description: User-chosen display name, separate from the synced first/last name.

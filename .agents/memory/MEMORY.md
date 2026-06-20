@@ -22,3 +22,5 @@
 - [Profile & theme architecture](profile-theme-architecture.md) — avatar separate from synced image; prefs read fresh from DB not session; theme = server source-of-truth + localStorage no-flash cache on <html>.
 - [UAT e2e suite](uat-e2e-suite.md) — api-server `test:uat` harness: delete AUTH_BYPASS before importing app, per-test precondition resets for idempotency, assert runtime-derived statuses not stored seed values.
 - [AuthUser role passthrough](authuser-role-passthrough.md) — frontend role is gated by the AuthUser OpenAPI schema; GetCurrentAuthUserResponse.parse strips any field not in the schema, so role must be declared there + codegen rerun.
+- [Role is DB-authoritative](authuser-role-field.md) — resolve users.role from DB per-request (session copy goes stale); role rides OpenAPI AuthUser for UI gating (rerun codegen); role===null = no-access-yet.
+- [Invite/add-user claim flow](invite-claim-flow.md) — admin pre-creates user by email (placeholder uuid id); login adopts real OIDC sub onto that row (email-unique blocks naive insert); emails lowercased both sides.

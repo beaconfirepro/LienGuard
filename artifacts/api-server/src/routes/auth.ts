@@ -7,6 +7,7 @@ import {
   LogoutMobileSessionResponse,
 } from "@workspace/api-zod";
 import { db, usersTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { ensureUserRow, buildAuthUserResponse } from "../lib/profile";
 import {
   clearSession,
@@ -62,9 +63,9 @@ async function upsertUser(claims: Record<string, unknown>) {
   // Note: `role` is deliberately omitted from the upsert payload — it is an
   // app-managed column set directly in the DB and must not be overwritten on
   // login. The returned row still carries the existing role.
-  const userData = {
-    id: claims.sub as string,
-    email: (claims.email as string) || null,
+  const id = claims.sub as string;
+  const email = ((claims.email as string) || "").toLowerCase() || null;
+  const profile = {
     firstName: (claims.first_name as string) || null,
     lastName: (claims.last_name as string) || null,
     profileImageUrl: (claims.profile_image_url || claims.picture) as
@@ -74,6 +75,25 @@ async function upsertUser(claims: Record<string, unknown>) {
 
   const now = new Date();
 
+  // Claim a pending invite: an admin may have pre-created a record by email
+  // (with a placeholder id) before this person ever logged in. Adopt the real
+  // OIDC id onto that record so the admin-assigned role carries over.
+  if (email) {
+    const [pending] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.email, email));
+    if (pending && pending.id !== id) {
+      const [claimed] = await db
+        .update(usersTable)
+        .set({ id, ...profile, lastLoginAt: now, updatedAt: now })
+        .where(eq(usersTable.email, email))
+        .returning();
+      return claimed;
+    }
+  }
+
+  const userData = { id, email, ...profile };
   const [user] = await db
     .insert(usersTable)
     .values({ ...userData, lastLoginAt: now })

@@ -10,7 +10,7 @@ export interface HealthStatus {
 }
 
 /**
- * App-managed role, read-only. Assigned in the database.
+ * App-managed role, assigned by an admin. Null when the user has not been granted access yet.
  * @nullable
  */
 export type AuthUserRole = typeof AuthUserRole[keyof typeof AuthUserRole] | null;
@@ -43,7 +43,7 @@ export interface AuthUser {
   /** @nullable */
   profileImageUrl: string | null;
   /**
-     * App-managed role, read-only. Assigned in the database.
+     * App-managed role, assigned by an admin. Null when the user has not been granted access yet.
      * @nullable
      */
   role: AuthUserRole;

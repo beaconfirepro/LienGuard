@@ -55,6 +55,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
+import { UsersRolesTab } from "@/components/settings/UsersRolesTab";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@workspace/replit-auth-web";
 import {
@@ -75,6 +76,7 @@ import {
   Eye,
   ChevronDown,
   Trash2,
+  Users as UsersIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -3084,6 +3086,7 @@ export default function ConfigPage() {
           },
           { value: "documents", label: "Document Templates", Icon: FileText },
           { value: "integrations", label: "Integrations", Icon: Banknote },
+          { value: "users", label: "Users & Roles", Icon: UsersIcon },
         ].map((t) => (
           <button
             key={t.value}
@@ -3114,18 +3117,7 @@ export default function ConfigPage() {
 
   return (
     <Screen>
-      <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
-        <div>
-          <p className="text-sm text-muted-foreground mt-1">
-            Reference tree, stage clock triggers, jurisdiction rule sets, and
-            integrations for{" "}
-            <span className="font-medium text-foreground">
-              HELM Fire Protection
-            </span>
-            .
-          </p>
-        </div>
-
+      <div className="max-w-5xl mx-auto">
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="hidden">
             <TabsTrigger value="reference" className="gap-1.5">
@@ -3150,24 +3142,28 @@ export default function ConfigPage() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="reference" className="mt-6">
+          <TabsContent value="reference">
             <ReferenceTreeTab />
           </TabsContent>
 
-          <TabsContent value="triggers" className="mt-6">
+          <TabsContent value="triggers">
             <StageTriggersTab />
           </TabsContent>
 
-          <TabsContent value="jurisdictions" className="mt-6">
+          <TabsContent value="jurisdictions">
             <JurisdictionRulesTab />
           </TabsContent>
 
-          <TabsContent value="documents" className="mt-6">
+          <TabsContent value="documents">
             <DocumentTemplatesTab />
           </TabsContent>
 
-          <TabsContent value="integrations" className="mt-6">
+          <TabsContent value="integrations">
             <IntegrationsTab />
+          </TabsContent>
+
+          <TabsContent value="users">
+            <UsersRolesTab />
           </TabsContent>
         </Tabs>
       </div>

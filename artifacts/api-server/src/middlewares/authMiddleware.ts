@@ -1,6 +1,8 @@
 import * as oidc from "openid-client";
 import { type Request, type Response, type NextFunction } from "express";
 import type { UserRole } from "@workspace/db";
+import { db, usersTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import {
   clearSession,
   getOidcConfig,
@@ -190,6 +192,25 @@ export async function authMiddleware(
     return;
   }
 
-  req.user = refreshed.user;
+  // Rehydrate the app-managed role from the DB on every request. The role
+  // stored in the session (`sessions.sess.user.role`) is a snapshot taken at
+  // login and would otherwise go stale — an admin changing a user's role must
+  // take effect on that user's NEXT request, not only after they re-login.
+  // This is especially important for revocation/demotion, where stale
+  // privileged access must not persist.
+  let role = refreshed.user.role;
+  try {
+    const [row] = await db
+      .select({ role: usersTable.role })
+      .from(usersTable)
+      .where(eq(usersTable.id, refreshed.user.id))
+      .limit(1);
+    role = row ? row.role : null;
+  } catch {
+    // On a lookup failure keep the session role rather than locking the user
+    // out over a transient DB error.
+  }
+
+  req.user = { ...refreshed.user, role };
   next();
 }
