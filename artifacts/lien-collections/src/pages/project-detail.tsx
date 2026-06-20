@@ -59,6 +59,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DeadlineCountdown } from "@/components/ui/deadline-countdown";
+import { useAuth } from "@workspace/replit-auth-web";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Panel, useLeftPanel, useRightPanel } from "@/components/nav/AppShell";
 import { WorkspaceHeader } from "@/components/nav/WorkspaceLayout";
@@ -124,12 +125,19 @@ interface Deadline {
   computedDate: string;
   adjustedDate: string;
   satisfiedAt: string | null;
+  isOverridden: boolean;
+  overrideDate: string | null;
   sourceData: Record<string, unknown>;
   rule?: {
     statuteCitation: string;
     description: string;
     ruleKind: string;
   } | null;
+}
+
+/** The effective deadline date — the manual override when present, else the computed/adjusted date. */
+function effectiveDeadlineDate(dl: Deadline): string {
+  return dl.isOverridden && dl.overrideDate ? dl.overrideDate : dl.adjustedDate;
 }
 
 interface WorkMonth {
@@ -478,7 +486,7 @@ function earliestNoticeDays(deadlines: Deadline[]): number | null {
     .map((dl) => {
       const today = new Date();
       today.setUTCHours(0, 0, 0, 0);
-      const d = new Date(dl.adjustedDate);
+      const d = new Date(effectiveDeadlineDate(dl));
       d.setUTCHours(0, 0, 0, 0);
       return Math.floor((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
     });
@@ -518,7 +526,8 @@ function StreamCard({
     .filter((dl) => !dl.satisfiedAt)
     .sort(
       (a, b) =>
-        new Date(a.adjustedDate).getTime() - new Date(b.adjustedDate).getTime(),
+        new Date(effectiveDeadlineDate(a)).getTime() -
+        new Date(effectiveDeadlineDate(b)).getTime(),
     )[0];
 
   return (
@@ -559,16 +568,16 @@ function StreamCard({
               <span
                 className={cn(
                   "inline-flex items-center gap-1 tabular-nums",
-                  deadlineUrgency(nextDeadline.adjustedDate) === "overdue" &&
+                  deadlineUrgency(effectiveDeadlineDate(nextDeadline)) === "overdue" &&
                     "text-red-600 font-medium",
-                  deadlineUrgency(nextDeadline.adjustedDate) === "urgent" &&
+                  deadlineUrgency(effectiveDeadlineDate(nextDeadline)) === "urgent" &&
                     "text-orange-600",
-                  deadlineUrgency(nextDeadline.adjustedDate) === "upcoming" &&
+                  deadlineUrgency(effectiveDeadlineDate(nextDeadline)) === "upcoming" &&
                     "text-amber-600",
                 )}
               >
                 <Clock className="h-3 w-3" />
-                Next {formatDate(nextDeadline.adjustedDate)}
+                Next {formatDate(effectiveDeadlineDate(nextDeadline))}
               </span>
             )}
           </div>
@@ -616,6 +625,121 @@ function StreamCard({
 }
 
 // ---------------------------------------------------------------------------
+// Deadline override control — set/clear a manual override on one deadline
+// ---------------------------------------------------------------------------
+
+function toDateInputValue(iso: string): string {
+  return new Date(iso).toISOString().slice(0, 10);
+}
+
+function DeadlineOverrideControl({
+  deadline,
+  streamId,
+  canEdit,
+}: {
+  deadline: Deadline;
+  streamId: string;
+  canEdit: boolean;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [open, setOpen] = React.useState(false);
+  const [dateValue, setDateValue] = React.useState(() =>
+    toDateInputValue(effectiveDeadlineDate(deadline)),
+  );
+
+  React.useEffect(() => {
+    if (open) setDateValue(toDateInputValue(effectiveDeadlineDate(deadline)));
+  }, [open, deadline]);
+
+  const mutation = useMutation({
+    mutationFn: (overrideDate: string | null) =>
+      apiFetch<{ deadline: Deadline }>(`/deadlines/${deadline.id}/override`, {
+        method: "PATCH",
+        body: JSON.stringify({ overrideDate }),
+      }),
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: ["stream-work-months", streamId] });
+      toast({
+        title: vars === null ? "Override cleared" : "Deadline overridden",
+        description:
+          vars === null
+            ? "This deadline now uses the computed date."
+            : "This deadline now uses your manual date and won't be changed by recompute.",
+      });
+      setOpen(false);
+    },
+    onError: (err: Error) =>
+      toast({ title: "Update failed", description: err.message, variant: "destructive" }),
+  });
+
+  if (!canEdit) return null;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+      >
+        {deadline.isOverridden ? "Edit override" : "Override"}
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Override deadline</DialogTitle>
+            <DialogDescription>
+              Set a manual date for this deadline. The override persists and is not changed when the
+              stream is recomputed. Jurisdiction rules are standards only — you are responsible for
+              the date you set.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-1">
+            <div className="text-xs text-muted-foreground">
+              Computed date:{" "}
+              <span className="font-medium text-foreground">{formatDate(deadline.adjustedDate)}</span>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={`override-${deadline.id}`}>Manual deadline date</Label>
+              <Input
+                id={`override-${deadline.id}`}
+                type="date"
+                value={dateValue}
+                onChange={(e) => setDateValue(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            {deadline.isOverridden && (
+              <Button
+                variant="ghost"
+                className="text-destructive hover:text-destructive mr-auto"
+                onClick={() => mutation.mutate(null)}
+                disabled={mutation.isPending}
+              >
+                Clear override
+              </Button>
+            )}
+            <Button variant="ghost" onClick={() => setOpen(false)} disabled={mutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => mutation.mutate(dateValue)}
+              disabled={mutation.isPending || !dateValue}
+            >
+              {mutation.isPending ? "Saving…" : "Save override"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Stream deadlines panel
 // ---------------------------------------------------------------------------
 
@@ -628,6 +752,8 @@ function StreamDeadlinesPanel({
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const canEditDeadlines = user?.role === "admin" || user?.role === "pm";
   const [, navigate] = useLocation();
 
   const { data, isLoading, isError } = useQuery({
@@ -788,7 +914,8 @@ function StreamDeadlinesPanel({
                 ) : (
                   <div className="space-y-1.5 pl-1">
                     {wm.deadlines.map((dl) => {
-                      const urgency = deadlineUrgency(dl.adjustedDate);
+                      const effectiveDate = effectiveDeadlineDate(dl);
+                      const urgency = deadlineUrgency(effectiveDate);
                       const isSatisfied = !!dl.satisfiedAt;
 
                       return (
@@ -834,6 +961,11 @@ function StreamDeadlinesPanel({
                                   Satisfied
                                 </Badge>
                               )}
+                              {dl.isOverridden && (
+                                <Badge variant="outline" className="text-xs h-4 px-1 text-indigo-700 border-indigo-300 bg-indigo-50">
+                                  Overridden
+                                </Badge>
+                              )}
                             </div>
                             {dl.rule?.description && (
                               <p className="text-xs opacity-70 mt-0.5 truncate">{dl.rule.description}</p>
@@ -849,12 +981,18 @@ function StreamDeadlinesPanel({
                                 (isSatisfied || urgency === "future") && "text-muted-foreground",
                               )}
                             >
-                              {formatDate(dl.adjustedDate)}
+                              {formatDate(effectiveDate)}
                             </div>
-                            {dl.computedDate !== dl.adjustedDate && (
+                            {dl.isOverridden ? (
                               <div className="text-xs text-muted-foreground line-through">
-                                {formatDate(dl.computedDate)}
+                                {formatDate(dl.adjustedDate)}
                               </div>
+                            ) : (
+                              dl.computedDate !== dl.adjustedDate && (
+                                <div className="text-xs text-muted-foreground line-through">
+                                  {formatDate(dl.computedDate)}
+                                </div>
+                              )
                             )}
                             {!isSatisfied && (
                               <div
@@ -870,6 +1008,15 @@ function StreamDeadlinesPanel({
                                 {urgency === "urgent" && "≤7 days"}
                                 {urgency === "upcoming" && "≤30 days"}
                                 {urgency === "future" && "Upcoming"}
+                              </div>
+                            )}
+                            {!isSatisfied && canEditDeadlines && (
+                              <div className="mt-1">
+                                <DeadlineOverrideControl
+                                  deadline={dl}
+                                  streamId={streamId}
+                                  canEdit={canEditDeadlines}
+                                />
                               </div>
                             )}
                           </div>
@@ -1854,7 +2001,11 @@ function StreamUpcomingRow({ stream }: { stream: LienStream }) {
     const all = (data?.workMonths ?? [])
       .flatMap((wm) => wm.deadlines)
       .filter((dl) => !dl.satisfiedAt)
-      .sort((a, b) => new Date(a.adjustedDate).getTime() - new Date(b.adjustedDate).getTime());
+      .sort(
+        (a, b) =>
+          new Date(effectiveDeadlineDate(a)).getTime() -
+          new Date(effectiveDeadlineDate(b)).getTime(),
+      );
     return all[0] ?? null;
   }, [data]);
 
@@ -1876,12 +2027,12 @@ function StreamUpcomingRow({ stream }: { stream: LienStream }) {
           <span
             className={cn(
               "text-[11.5px] font-semibold tabular-nums",
-              deadlineUrgency(next.adjustedDate) === "overdue" && "text-red-600",
-              deadlineUrgency(next.adjustedDate) === "urgent" && "text-orange-600",
-              deadlineUrgency(next.adjustedDate) === "upcoming" && "text-amber-600",
+              deadlineUrgency(effectiveDeadlineDate(next)) === "overdue" && "text-red-600",
+              deadlineUrgency(effectiveDeadlineDate(next)) === "urgent" && "text-orange-600",
+              deadlineUrgency(effectiveDeadlineDate(next)) === "upcoming" && "text-amber-600",
             )}
           >
-            {formatDate(next.adjustedDate)}
+            {formatDate(effectiveDeadlineDate(next))}
           </span>
         </div>
       ) : (

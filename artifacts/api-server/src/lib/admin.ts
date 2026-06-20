@@ -14,3 +14,23 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
   }
   res.status(403).json({ error: "Admin access required — this action is restricted to administrators" });
 }
+
+/**
+ * requireAdminOrPm — enforces that the authenticated user has either the
+ * `admin` or `pm` (project manager) role.
+ *
+ * Used for managing jurisdiction standards: editing global rule sets, toggling
+ * the informational "reviewed" badge, and setting/clearing per-deadline
+ * overrides. `finance` and `coordinator` can view these but cannot change them.
+ *
+ * Must run AFTER requireSession.
+ */
+export function requireAdminOrPm(req: Request, res: Response, next: NextFunction): void {
+  const role = getSession(req).role;
+  if (role === "admin" || role === "pm") {
+    return next();
+  }
+  res.status(403).json({
+    error: "Restricted — only administrators and project managers can change jurisdiction standards",
+  });
+}

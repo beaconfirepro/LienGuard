@@ -34,8 +34,29 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@workspace/replit-auth-web";
 import {
   ChevronRight,
   Plus,
@@ -53,6 +74,7 @@ import {
   Lock,
   Eye,
   ChevronDown,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -179,6 +201,7 @@ interface LienRule {
   offsetDayOfMonth?: number;
   offsetDays?: number;
   offsetIsBusinessDays: boolean;
+  businessDayHandling?: string;
   statuteCitation: string;
   description: string;
 }
@@ -1102,12 +1125,485 @@ function StageTriggersTab() {
 }
 
 // ---------------------------------------------------------------------------
+// Tab: Jurisdiction Rules — add/remove option constants + helper components
+// ---------------------------------------------------------------------------
+
+const WORKFLOW_TYPE_OPTIONS = [
+  "commercial_sub",
+  "residential_sub",
+  "public_bond",
+  "none",
+] as const;
+const WORK_STREAM_OPTIONS = ["construction", "design"] as const;
+const RULE_KIND_OPTIONS = [
+  "notice",
+  "filing",
+  "retainage",
+  "post_filing_notice",
+  "enforcement",
+  "release",
+] as const;
+const ANCHOR_OPTIONS = ["work_month", "completion", "filing_date"] as const;
+const ANCHOR_LABELS: Record<string, string> = {
+  work_month: "Work month end",
+  completion: "Completion date",
+  filing_date: "Filing date",
+};
+const BUSINESS_DAY_OPTIONS = ["next_business_day", "exact"] as const;
+const BUSINESS_DAY_LABELS: Record<string, string> = {
+  next_business_day: "Roll to next business day",
+  exact: "Exact date (no roll)",
+};
+
+function DeleteConfirmButton({
+  title,
+  description,
+  onConfirm,
+  pending,
+  label,
+}: {
+  title: string;
+  description: string;
+  onConfirm: () => void;
+  pending: boolean;
+  label: string;
+}) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+          disabled={pending}
+          aria-label={label}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={onConfirm}
+          >
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function AddRuleSetDialog({ jurisdictionId }: { jurisdictionId: string }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [open, setOpen] = React.useState(false);
+  const [version, setVersion] = React.useState("");
+  const [effectiveDate, setEffectiveDate] = React.useState("");
+  const [statuteRef, setStatuteRef] = React.useState("");
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      apiFetch("/config/rule-sets", {
+        method: "POST",
+        body: JSON.stringify({
+          jurisdictionId,
+          version: version.trim(),
+          effectiveDate,
+          statuteRef: statuteRef.trim(),
+        }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["config-jurisdictions"] });
+      toast({ title: "Rule set added" });
+      setOpen(false);
+      setVersion("");
+      setEffectiveDate("");
+      setStatuteRef("");
+    },
+    onError: (err: Error) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const valid = version.trim() && effectiveDate && statuteRef.trim();
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
+          <Plus className="h-3.5 w-3.5" />
+          Add rule set
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add rule set</DialogTitle>
+          <DialogDescription>
+            Create a new statutory rule set for this jurisdiction. You can add rules to it
+            afterward.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          <div className="space-y-1.5">
+            <Label htmlFor="rs-version">Version</Label>
+            <Input
+              id="rs-version"
+              placeholder="e.g. TX 2024"
+              value={version}
+              onChange={(e) => setVersion(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="rs-effective">Effective date</Label>
+            <Input
+              id="rs-effective"
+              type="date"
+              value={effectiveDate}
+              onChange={(e) => setEffectiveDate(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="rs-statute">Statute reference</Label>
+            <Input
+              id="rs-statute"
+              placeholder="e.g. Tex. Prop. Code ch. 53"
+              value={statuteRef}
+              onChange={(e) => setStatuteRef(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button variant="ghost" onClick={() => setOpen(false)} disabled={mutation.isPending}>
+            Cancel
+          </Button>
+          <Button onClick={() => mutation.mutate()} disabled={!valid || mutation.isPending}>
+            {mutation.isPending ? "Adding…" : "Add rule set"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RuleDialog({
+  ruleSetId,
+  rule,
+}: {
+  ruleSetId: string;
+  rule?: LienRule;
+}) {
+  const isEdit = !!rule;
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [open, setOpen] = React.useState(false);
+
+  const numToStr = (n: number | null | undefined) =>
+    n == null ? "" : String(n);
+
+  const initial = React.useMemo(
+    () => ({
+      ruleKind: rule?.ruleKind ?? "",
+      lienWorkflowType: rule?.lienWorkflowType ?? "",
+      workStream: rule?.workStream ?? "",
+      anchor: rule?.anchor ?? "",
+      offsetMonths: numToStr(rule?.offsetMonths),
+      offsetDayOfMonth: numToStr(rule?.offsetDayOfMonth),
+      offsetDays: numToStr(rule?.offsetDays),
+      offsetIsBusinessDays: rule?.offsetIsBusinessDays ?? false,
+      businessDayHandling: rule?.businessDayHandling ?? "next_business_day",
+      statuteCitation: rule?.statuteCitation ?? "",
+      description: rule?.description ?? "",
+    }),
+    [rule],
+  );
+
+  const [ruleKind, setRuleKind] = React.useState<string>(initial.ruleKind);
+  const [lienWorkflowType, setLienWorkflowType] = React.useState<string>(
+    initial.lienWorkflowType,
+  );
+  const [workStream, setWorkStream] = React.useState<string>(initial.workStream);
+  const [anchor, setAnchor] = React.useState<string>(initial.anchor);
+  const [offsetMonths, setOffsetMonths] = React.useState(initial.offsetMonths);
+  const [offsetDayOfMonth, setOffsetDayOfMonth] = React.useState(
+    initial.offsetDayOfMonth,
+  );
+  const [offsetDays, setOffsetDays] = React.useState(initial.offsetDays);
+  const [offsetIsBusinessDays, setOffsetIsBusinessDays] = React.useState(
+    initial.offsetIsBusinessDays,
+  );
+  const [businessDayHandling, setBusinessDayHandling] = React.useState<string>(
+    initial.businessDayHandling,
+  );
+  const [statuteCitation, setStatuteCitation] = React.useState(
+    initial.statuteCitation,
+  );
+  const [description, setDescription] = React.useState(initial.description);
+
+  const applyInitial = () => {
+    setRuleKind(initial.ruleKind);
+    setLienWorkflowType(initial.lienWorkflowType);
+    setWorkStream(initial.workStream);
+    setAnchor(initial.anchor);
+    setOffsetMonths(initial.offsetMonths);
+    setOffsetDayOfMonth(initial.offsetDayOfMonth);
+    setOffsetDays(initial.offsetDays);
+    setOffsetIsBusinessDays(initial.offsetIsBusinessDays);
+    setBusinessDayHandling(initial.businessDayHandling);
+    setStatuteCitation(initial.statuteCitation);
+    setDescription(initial.description);
+  };
+
+  const toNum = (s: string) => (s.trim() === "" ? null : Number(s));
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      apiFetch(isEdit ? `/config/rules/${rule!.id}` : "/config/rules", {
+        method: isEdit ? "PATCH" : "POST",
+        body: JSON.stringify({
+          ...(isEdit ? {} : { ruleSetId }),
+          lienWorkflowType,
+          workStream,
+          ruleKind,
+          anchor,
+          offsetMonths: toNum(offsetMonths),
+          offsetDayOfMonth: toNum(offsetDayOfMonth),
+          offsetDays: toNum(offsetDays),
+          offsetIsBusinessDays,
+          businessDayHandling,
+          statuteCitation: statuteCitation.trim(),
+          description: description.trim(),
+        }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["config-jurisdictions"] });
+      toast({ title: isEdit ? "Rule updated" : "Rule added" });
+      setOpen(false);
+      if (!isEdit) applyInitial();
+    },
+    onError: (err: Error) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const valid =
+    ruleKind &&
+    lienWorkflowType &&
+    workStream &&
+    anchor &&
+    statuteCitation.trim() &&
+    description.trim();
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (o) applyInitial();
+      }}
+    >
+      <DialogTrigger asChild>
+        {isEdit ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs"
+            aria-label="Edit rule"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
+            <Plus className="h-3.5 w-3.5" />
+            Add rule
+          </Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Edit rule" : "Add rule"}</DialogTitle>
+          <DialogDescription>
+            Define a deadline rule. The deadline is computed from the anchor date plus the offsets
+            you set.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Rule kind</Label>
+              <Select value={ruleKind} onValueChange={setRuleKind}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {RULE_KIND_OPTIONS.map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {RULE_KIND_LABELS[k] ?? k}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Workflow type</Label>
+              <Select value={lienWorkflowType} onValueChange={setLienWorkflowType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {WORKFLOW_TYPE_OPTIONS.map((w) => (
+                    <SelectItem key={w} value={w}>
+                      {WORKFLOW_TYPE_LABELS[w]?.label ?? w}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Work stream</Label>
+              <Select value={workStream} onValueChange={setWorkStream}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {WORK_STREAM_OPTIONS.map((w) => (
+                    <SelectItem key={w} value={w} className="capitalize">
+                      {w}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Anchor</Label>
+              <Select value={anchor} onValueChange={setAnchor}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ANCHOR_OPTIONS.map((a) => (
+                    <SelectItem key={a} value={a}>
+                      {ANCHOR_LABELS[a] ?? a}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="r-months">Offset months</Label>
+              <Input
+                id="r-months"
+                type="number"
+                placeholder="—"
+                value={offsetMonths}
+                onChange={(e) => setOffsetMonths(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="r-dom">Day of month</Label>
+              <Input
+                id="r-dom"
+                type="number"
+                placeholder="—"
+                value={offsetDayOfMonth}
+                onChange={(e) => setOffsetDayOfMonth(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="r-days">Offset days</Label>
+              <Input
+                id="r-days"
+                type="number"
+                placeholder="—"
+                value={offsetDays}
+                onChange={(e) => setOffsetDays(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              id="r-bizdays"
+              type="checkbox"
+              className="h-4 w-4"
+              checked={offsetIsBusinessDays}
+              onChange={(e) => setOffsetIsBusinessDays(e.target.checked)}
+            />
+            <Label htmlFor="r-bizdays" className="font-normal">
+              Offset days are business days
+            </Label>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Business-day handling</Label>
+            <Select value={businessDayHandling} onValueChange={setBusinessDayHandling}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {BUSINESS_DAY_OPTIONS.map((b) => (
+                  <SelectItem key={b} value={b}>
+                    {BUSINESS_DAY_LABELS[b] ?? b}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="r-citation">Statute citation</Label>
+            <Input
+              id="r-citation"
+              placeholder="e.g. § 53.056"
+              value={statuteCitation}
+              onChange={(e) => setStatuteCitation(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="r-desc">Description</Label>
+            <Input
+              id="r-desc"
+              placeholder="Short description of the deadline"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button variant="ghost" onClick={() => setOpen(false)} disabled={mutation.isPending}>
+            Cancel
+          </Button>
+          <Button onClick={() => mutation.mutate()} disabled={!valid || mutation.isPending}>
+            {mutation.isPending
+              ? isEdit
+                ? "Saving…"
+                : "Adding…"
+              : isEdit
+                ? "Save changes"
+                : "Add rule"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Tab: Jurisdiction Rules
 // ---------------------------------------------------------------------------
 
 function JurisdictionRulesTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const canEdit = user?.role === "admin" || user?.role === "pm";
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["config-jurisdictions"],
@@ -1134,14 +1630,24 @@ function JurisdictionRulesTab() {
   });
 
   const reviewMutation = useMutation({
-    mutationFn: (ruleSetId: string) =>
+    mutationFn: ({
+      ruleSetId,
+      legalReviewed,
+    }: {
+      ruleSetId: string;
+      legalReviewed: boolean;
+    }) =>
       apiFetch(`/config/rule-sets/${ruleSetId}/review`, {
         method: "PATCH",
-        body: JSON.stringify({ legalReviewed: true }),
+        body: JSON.stringify({ legalReviewed }),
       }),
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["config-jurisdictions"] });
-      toast({ title: "Rule set marked as legally reviewed" });
+      toast({
+        title: vars.legalReviewed
+          ? "Rule set marked as reviewed"
+          : "Reviewed badge removed",
+      });
     },
     onError: (err: Error) =>
       toast({
@@ -1149,6 +1655,28 @@ function JurisdictionRulesTab() {
         description: err.message,
         variant: "destructive",
       }),
+  });
+
+  const deleteRuleSetMutation = useMutation({
+    mutationFn: (ruleSetId: string) =>
+      apiFetch(`/config/rule-sets/${ruleSetId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["config-jurisdictions"] });
+      toast({ title: "Rule set deleted" });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteRuleMutation = useMutation({
+    mutationFn: (ruleId: string) =>
+      apiFetch(`/config/rules/${ruleId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["config-jurisdictions"] });
+      toast({ title: "Rule deleted" });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   const jurisdictions = data?.jurisdictions ?? [];
@@ -1173,9 +1701,23 @@ function JurisdictionRulesTab() {
     <div className="space-y-6">
       <SectionHeader
         icon={ShieldAlert}
-        title="Jurisdiction Rule Sets"
-        subtitle="Statutory rules derived from Texas Property Code Ch. 53 (and future states). Read-only. Requires legal review before production use."
+        title="Jurisdictions & Statutory Rules"
+        subtitle="Jurisdictional rules are provided as standards and starting points for deadline calculation."
       />
+
+      <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 flex items-start gap-3">
+        <ShieldAlert className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+        <div className="space-y-1 text-sm text-amber-900">
+          <p className="font-semibold">These rules are standards, not legal advice.</p>
+          <p className="text-amber-800">
+            The jurisdictional rules below are provided as starting points only. We make{" "}
+            <span className="font-medium">no guarantees</span> about their accuracy, completeness,
+            or legal sufficiency for your situation. You are responsible for reviewing, adjusting,
+            and confirming the values you use. Authorized users may freely edit these standards and
+            override individual deadlines on any project.
+          </p>
+        </div>
+      </div>
 
       {jurisdictions.length === 0 ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
@@ -1198,7 +1740,18 @@ function JurisdictionRulesTab() {
                   Inactive
                 </Badge>
               )}
+              {canEdit && (
+                <div className="ml-auto">
+                  <AddRuleSetDialog jurisdictionId={jur.id} />
+                </div>
+              )}
             </div>
+
+            {canEdit && jur.ruleSets.length === 0 && (
+              <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
+                No rule sets yet. Use “Add rule set” to create one.
+              </div>
+            )}
 
             {jur.ruleSets.map((rs) => (
               <Card key={rs.id} className="border">
@@ -1224,31 +1777,45 @@ function JurisdictionRulesTab() {
                       {rs.legalReviewed ? (
                         <div className="flex items-center gap-1.5 text-green-700 text-xs font-medium">
                           <CheckCircle2 className="h-4 w-4" />
-                          Legally Reviewed
+                          Reviewed
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center gap-1.5 text-amber-600 text-xs font-medium">
-                            <Clock className="h-4 w-4" />
-                            Pending Review
-                          </div>
+                        <div className="flex items-center gap-1.5 text-muted-foreground text-xs font-medium">
+                          <Clock className="h-4 w-4" />
+                          Not reviewed
+                        </div>
+                      )}
+                      {canEdit && (
+                        <>
                           <Button
                             size="sm"
                             variant="outline"
                             className="h-7 text-xs"
-                            onClick={() => reviewMutation.mutate(rs.id)}
+                            onClick={() =>
+                              reviewMutation.mutate({
+                                ruleSetId: rs.id,
+                                legalReviewed: !rs.legalReviewed,
+                              })
+                            }
                             disabled={reviewMutation.isPending}
                           >
-                            Mark Reviewed
+                            {rs.legalReviewed ? "Mark not reviewed" : "Mark reviewed"}
                           </Button>
-                        </div>
+                          <DeleteConfirmButton
+                            label="Delete rule set"
+                            title="Delete this rule set?"
+                            description={`This permanently removes the "${rs.version}" rule set and all ${rs.rules?.length ?? 0} of its rules. This cannot be undone.`}
+                            pending={deleteRuleSetMutation.isPending}
+                            onConfirm={() => deleteRuleSetMutation.mutate(rs.id)}
+                          />
+                        </>
                       )}
                     </div>
                   </div>
                 </CardHeader>
 
-                {rs.rules && rs.rules.length > 0 && (
-                  <CardContent className="pt-0">
+                <CardContent className="pt-0">
+                  {rs.rules && rs.rules.length > 0 ? (
                     <div className="overflow-x-auto rounded-md border">
                       <table className="w-full text-xs">
                         <thead>
@@ -1268,6 +1835,9 @@ function JurisdictionRulesTab() {
                             <th className="text-left px-3 py-2 font-medium text-muted-foreground">
                               Citation
                             </th>
+                            {canEdit && (
+                              <th className="w-10 px-3 py-2" aria-label="Actions" />
+                            )}
                           </tr>
                         </thead>
                         <tbody>
@@ -1314,21 +1884,47 @@ function JurisdictionRulesTab() {
                                 <td className="px-3 py-2 font-mono">
                                   {rule.statuteCitation}
                                 </td>
+                                {canEdit && (
+                                  <td className="px-1 py-2 text-right whitespace-nowrap">
+                                    <div className="flex items-center justify-end gap-0.5">
+                                      <RuleDialog
+                                        ruleSetId={rs.id}
+                                        rule={rule}
+                                      />
+                                      <DeleteConfirmButton
+                                        label="Delete rule"
+                                        title="Delete this rule?"
+                                        description={`This permanently removes the "${RULE_KIND_LABELS[rule.ruleKind] ?? rule.ruleKind}" rule (${rule.statuteCitation}). This cannot be undone.`}
+                                        pending={deleteRuleMutation.isPending}
+                                        onConfirm={() => deleteRuleMutation.mutate(rule.id)}
+                                      />
+                                    </div>
+                                  </td>
+                                )}
                               </tr>
                             );
                           })}
                         </tbody>
                       </table>
                     </div>
-                    {!rs.legalReviewed && (
-                      <p className="mt-2 text-xs text-amber-600 flex items-center gap-1">
-                        <Clock className="h-3.5 w-3.5" />
-                        This rule set has not been legally reviewed. Do not use
-                        in production until reviewed.
-                      </p>
-                    )}
-                  </CardContent>
-                )}
+                  ) : (
+                    <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+                      No rules in this set yet.
+                    </div>
+                  )}
+                  {!rs.legalReviewed && (
+                    <p className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5" />
+                      This rule set has not been marked as reviewed. It is still
+                      usable — the badge is informational only.
+                    </p>
+                  )}
+                  {canEdit && (
+                    <div className="mt-3">
+                      <RuleDialog ruleSetId={rs.id} />
+                    </div>
+                  )}
+                </CardContent>
               </Card>
             ))}
           </div>

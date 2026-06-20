@@ -391,6 +391,12 @@ export const lienDeadlinesTable = pgTable(
     adjustedDate: timestamp("adjusted_date", { withTimezone: true }).notNull(),
     sourceData: jsonb("source_data").notNull(),
     satisfiedAt: timestamp("satisfied_at", { withTimezone: true }),
+    // Manual override: when isOverridden is true, overrideDate is the authoritative
+    // deadline and recompute must NOT overwrite this row's dates.
+    isOverridden: boolean("is_overridden").notNull().default(false),
+    overrideDate: timestamp("override_date", { withTimezone: true }),
+    overrideByUserId: text("override_by_user_id"),
+    overrideAt: timestamp("override_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

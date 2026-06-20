@@ -13,7 +13,7 @@ import {
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
-import { requireAdmin } from "../lib/admin";
+import { requireAdmin, requireAdminOrPm } from "../lib/admin";
 import {
   DOCUMENT_SCHEMAS,
   DOCUMENT_TYPES,
@@ -488,7 +488,7 @@ router.get("/jurisdictions", async (req, res) => {
  * POST /config/jurisdictions
  * Body: { code, name }
  */
-router.post("/jurisdictions", requireAdmin, async (req, res) => {
+router.post("/jurisdictions", requireAdminOrPm, async (req, res) => {
   const { orgId } = getSession(req);
   const { code, name } = req.body as { code?: string; name?: string };
 
@@ -517,7 +517,7 @@ router.post("/jurisdictions", requireAdmin, async (req, res) => {
  * POST /config/rule-sets
  * Body: { jurisdictionId, version, effectiveDate, statuteRef }
  */
-router.post("/rule-sets", requireAdmin, async (req, res) => {
+router.post("/rule-sets", requireAdminOrPm, async (req, res) => {
   const { orgId } = getSession(req);
   const { jurisdictionId, version, effectiveDate, statuteRef } = req.body as {
     jurisdictionId?: string;
@@ -618,7 +618,7 @@ router.get("/rule-sets/:id/rules", async (req, res) => {
  * POST /config/rules
  * Full LienRule body.
  */
-router.post("/rules", requireAdmin, async (req, res) => {
+router.post("/rules", requireAdminOrPm, async (req, res) => {
   const { orgId } = getSession(req);
   const {
     ruleSetId,
@@ -727,22 +727,200 @@ router.post("/rules", requireAdmin, async (req, res) => {
   res.status(201).json({ rule });
 });
 
+/**
+ * DELETE /config/rules/:id
+ *
+ * Removes a single rule from a rule set. Restricted to admin/pm. Rules are
+ * standards the team manages, so deletion is allowed freely; previously
+ * computed deadlines that referenced this rule are left untouched and simply
+ * won't be regenerated on the next recompute.
+ */
+router.delete("/rules/:id", requireAdminOrPm, async (req, res) => {
+  const { orgId } = getSession(req);
+  const id = req.params.id as string;
+
+  const [existing] = await db
+    .select()
+    .from(lienRulesTable)
+    .where(and(eq(lienRulesTable.id, id), eq(lienRulesTable.orgId, orgId)))
+    .limit(1);
+
+  if (!existing) {
+    res.status(404).json({ error: "Rule not found" });
+    return;
+  }
+
+  await db
+    .delete(lienRulesTable)
+    .where(and(eq(lienRulesTable.id, id), eq(lienRulesTable.orgId, orgId)));
+
+  res.json({ ok: true });
+});
+
+/**
+ * PATCH /config/rules/:id
+ *
+ * Updates an existing rule's values in place. Restricted to admin/pm and
+ * org-scoped. The parent rule set (ruleSetId) is immutable here — to move a
+ * rule, delete and re-create it. All other fields are required, mirroring the
+ * POST /rules contract so a rule can never be left in a half-defined state.
+ */
+router.patch("/rules/:id", requireAdminOrPm, async (req, res) => {
+  const { orgId } = getSession(req);
+  const id = req.params.id as string;
+  const {
+    lienWorkflowType,
+    workStream,
+    ruleKind,
+    anchor,
+    offsetMonths,
+    offsetDayOfMonth,
+    offsetDays,
+    offsetIsBusinessDays,
+    businessDayHandling,
+    statuteCitation,
+    description,
+  } = req.body as {
+    lienWorkflowType?: string;
+    workStream?: string;
+    ruleKind?: string;
+    anchor?: string;
+    offsetMonths?: number | null;
+    offsetDayOfMonth?: number | null;
+    offsetDays?: number | null;
+    offsetIsBusinessDays?: boolean;
+    businessDayHandling?: string;
+    statuteCitation?: string;
+    description?: string;
+  };
+
+  if (!lienWorkflowType) {
+    res.status(400).json({ error: "lienWorkflowType is required" });
+    return;
+  }
+  if (!workStream) {
+    res.status(400).json({ error: "workStream is required" });
+    return;
+  }
+  if (!ruleKind) {
+    res.status(400).json({ error: "ruleKind is required" });
+    return;
+  }
+  if (!anchor) {
+    res.status(400).json({ error: "anchor is required" });
+    return;
+  }
+  if (!statuteCitation) {
+    res.status(400).json({ error: "statuteCitation is required" });
+    return;
+  }
+  if (!description) {
+    res.status(400).json({ error: "description is required" });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(lienRulesTable)
+    .where(and(eq(lienRulesTable.id, id), eq(lienRulesTable.orgId, orgId)))
+    .limit(1);
+
+  if (!existing) {
+    res.status(404).json({ error: "Rule not found" });
+    return;
+  }
+
+  const [rule] = await db
+    .update(lienRulesTable)
+    .set({
+      lienWorkflowType: lienWorkflowType as
+        | "residential_sub"
+        | "commercial_sub"
+        | "public_bond"
+        | "none",
+      workStream: workStream as "construction" | "design",
+      ruleKind: ruleKind as
+        | "notice"
+        | "filing"
+        | "retainage"
+        | "post_filing_notice"
+        | "enforcement"
+        | "release",
+      anchor,
+      offsetMonths: offsetMonths ?? null,
+      offsetDayOfMonth: offsetDayOfMonth ?? null,
+      offsetDays: offsetDays ?? null,
+      offsetIsBusinessDays: offsetIsBusinessDays ?? false,
+      businessDayHandling:
+        (businessDayHandling as "next_business_day" | "exact" | undefined) ??
+        "next_business_day",
+      statuteCitation: statuteCitation.trim(),
+      description: description.trim(),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(lienRulesTable.id, id), eq(lienRulesTable.orgId, orgId)))
+    .returning();
+
+  res.json({ rule });
+});
+
+/**
+ * DELETE /config/rule-sets/:id
+ *
+ * Removes a rule set and all of its child rules. Restricted to admin/pm.
+ * FK columns are plain text (no DB-level cascade), so child rules are deleted
+ * explicitly first.
+ */
+router.delete("/rule-sets/:id", requireAdminOrPm, async (req, res) => {
+  const { orgId } = getSession(req);
+  const id = req.params.id as string;
+
+  const [existing] = await db
+    .select()
+    .from(lienRuleSetsTable)
+    .where(and(eq(lienRuleSetsTable.id, id), eq(lienRuleSetsTable.orgId, orgId)))
+    .limit(1);
+
+  if (!existing) {
+    res.status(404).json({ error: "RuleSet not found" });
+    return;
+  }
+
+  await db
+    .delete(lienRulesTable)
+    .where(
+      and(eq(lienRulesTable.ruleSetId, id), eq(lienRulesTable.orgId, orgId)),
+    );
+
+  await db
+    .delete(lienRuleSetsTable)
+    .where(
+      and(eq(lienRuleSetsTable.id, id), eq(lienRuleSetsTable.orgId, orgId)),
+    );
+
+  res.json({ ok: true });
+});
+
 // ---------------------------------------------------------------------------
-// Rule Set Review Gate
+// Rule Set "Reviewed" badge (informational, non-blocking)
 // ---------------------------------------------------------------------------
 
 /**
  * PATCH /config/rule-sets/:id/review
- * Production gate: sets legalReviewed = true. Body: { legalReviewed: true }
+ *
+ * Toggles the informational "Reviewed" badge on a rule set. This is NOT a
+ * production gate — rule sets are usable regardless of review state (recompute
+ * never filtered on it). Authorized users (admin/pm) can set it both true and
+ * false. Body: { legalReviewed: boolean }
  */
-router.patch("/rule-sets/:id/review", requireAdmin, async (req, res) => {
+router.patch("/rule-sets/:id/review", requireAdminOrPm, async (req, res) => {
   const { orgId } = getSession(req);
   const id = req.params.id as string;
   const { legalReviewed } = req.body as { legalReviewed?: unknown };
 
-  if (legalReviewed !== true) {
+  if (typeof legalReviewed !== "boolean") {
     res.status(400).json({
-      error: "legalReviewed must be true — this is a one-way production gate",
+      error: "legalReviewed must be a boolean",
     });
     return;
   }
@@ -762,7 +940,7 @@ router.patch("/rule-sets/:id/review", requireAdmin, async (req, res) => {
 
   const [updated] = await db
     .update(lienRuleSetsTable)
-    .set({ legalReviewed: true })
+    .set({ legalReviewed })
     .where(
       and(eq(lienRuleSetsTable.id, id), eq(lienRuleSetsTable.orgId, orgId)),
     )

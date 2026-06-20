@@ -619,6 +619,23 @@ router.post("/streams/:id/recompute", async (req, res) => {
         let dl: typeof lienDeadlinesTable.$inferSelect;
 
         if (existingDl.length > 0) {
+          // Preserve manual overrides — a user has pinned this deadline to a
+          // specific date, so recompute must not overwrite it. Still refresh
+          // the provenance snapshot so the source data stays current.
+          if (existingDl[0].isOverridden) {
+            const [updated] = await db
+              .update(lienDeadlinesTable)
+              .set({
+                sourceData: computed.sourceData,
+                updatedAt: now,
+              })
+              .where(eq(lienDeadlinesTable.id, existingDl[0].id))
+              .returning();
+            dl = updated;
+            allDeadlines.push(dl);
+            continue;
+          }
+
           const [updated] = await db
             .update(lienDeadlinesTable)
             .set({
