@@ -159,6 +159,59 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
   );
 }
 
+/* ─── Pending-access gate (authenticated, no role yet) ───────────────────── */
+function PendingAccessScreen({
+  user,
+  onLogout,
+}: {
+  user: { firstName: string | null; lastName: string | null; email: string | null };
+  onLogout: () => void;
+}) {
+  const name = userDisplayName(user);
+  return (
+    <div className="flex min-h-screen items-center justify-center px-4 dark" style={{ background: "var(--bg)" }}>
+      <div
+        className="w-full max-w-md rounded-xl border p-8 text-center shadow-xl"
+        style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
+      >
+        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-xl" style={{ background: "var(--surface-3)" }}>
+          <Lock className="h-7 w-7 text-amber-500" />
+        </div>
+        <div className="text-[18px] font-bold tracking-tight" style={{ color: "var(--text-base)" }}>
+          You're almost in
+        </div>
+        <div className="mt-1 text-[11px] font-semibold uppercase tracking-[1.5px]" style={{ color: "var(--text-muted-color)" }}>
+          Access pending
+        </div>
+        <p className="mt-5 text-[13.5px] leading-relaxed" style={{ color: "var(--text-dim)" }}>
+          You're signed in as <span className="font-semibold" style={{ color: "var(--text-base)" }}>{name}</span>, but your account
+          doesn't have a role assigned yet. An administrator needs to grant you access before you can use the workspace.
+        </p>
+        <p className="mt-3 text-[12.5px] leading-relaxed" style={{ color: "var(--text-muted-color)" }}>
+          Please reach out to your LienGuard admin. Once they've assigned your role, reload this page to get started.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-6 w-full rounded-md py-2.5 text-[14px] font-semibold text-[#1a1205] transition-opacity hover:opacity-90"
+          style={{ background: "linear-gradient(135deg,#f59e0b,#f97316)" }}
+        >
+          Check again
+        </button>
+        <button
+          onClick={onLogout}
+          className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-md border py-2.5 text-[13.5px] font-medium transition-colors"
+          style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)", color: "var(--text-dim)" }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-3)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
+        >
+          <LogOut className="h-4 w-4" />
+          Log out
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { isDesktop, isTablet, isMobile, width } = useResponsive();
   const { user, isLoading, isAuthenticated, login, logout } = useAuth();
@@ -203,6 +256,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (!isAuthenticated) {
     return <LoginScreen onLogin={login} />;
+  }
+
+  if (user && !user.role) {
+    return <PendingAccessScreen user={user} onLogout={logout} />;
   }
 
   const title = getTitle(location);
