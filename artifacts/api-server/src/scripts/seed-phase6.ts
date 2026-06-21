@@ -11,7 +11,7 @@ import { db } from "@workspace/db";
 import {
   lienFilingsTable,
   lienReleasesTable,
-  lienStreamsTable,
+  lienScheduleOfValuesTable,
   workMonthsTable,
   lienDeadlinesTable,
 } from "@workspace/db";
@@ -33,7 +33,7 @@ async function main() {
   await upsert(lienFilingsTable, {
     id: "fil_1",
     orgId: ORG,
-    lienStreamId: "str_2nd_con",
+    lienScheduleOfValuesId: "str_2nd_con",
     status: "filed" as const,
     county: "Dallas",
     filingDate: new Date("2026-05-20"),
@@ -46,9 +46,9 @@ async function main() {
 
   // Ensure str_2nd_con stream status is "filed"
   await db
-    .update(lienStreamsTable)
+    .update(lienScheduleOfValuesTable)
     .set({ status: "filed", updatedAt: new Date() })
-    .where(and(eq(lienStreamsTable.id, "str_2nd_con"), eq(lienStreamsTable.orgId, ORG)));
+    .where(and(eq(lienScheduleOfValuesTable.id, "str_2nd_con"), eq(lienScheduleOfValuesTable.orgId, ORG)));
 
   console.log("  ✓ fil_1 (filed, Dallas, 2026-05-20)");
 
@@ -68,7 +68,7 @@ async function main() {
   // ── Lapsed stream: str_lapsed_con on proj_res (Cedar Custom Home, Harris) ──
   // This stream has a filing deadline that passed with no filed lien.
   await db
-    .insert(lienStreamsTable)
+    .insert(lienScheduleOfValuesTable)
     .values({
       id: "str_lapsed_con",
       orgId: ORG,
@@ -87,7 +87,7 @@ async function main() {
     .values({
       id: "wm_lapsed_jan",
       orgId: ORG,
-      lienStreamId: "str_lapsed_con",
+      lienScheduleOfValuesId: "str_lapsed_con",
       month: new Date("2026-01-01"),
       derivedOverdue: true,
       clearedFlag: false,

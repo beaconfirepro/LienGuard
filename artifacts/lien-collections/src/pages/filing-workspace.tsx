@@ -16,7 +16,7 @@ import { WorkspaceHeader } from "@/components/nav/WorkspaceLayout";
 import FilingWorkspace from "@/components/filing/FilingWorkspace";
 
 interface StreamResponse {
-  stream: {
+  sov: {
     id: string;
     workStream: string;
     lienProjectId: string;
@@ -41,9 +41,9 @@ export default function FilingWorkspacePage() {
     enabled: !!streamId,
   });
 
-  const projectId = data?.stream?.lienProjectId ?? data?.project?.id ?? null;
+  const projectId = data?.sov?.lienProjectId ?? data?.project?.id ?? null;
   const projectName = data?.project?.cachedProjectName ?? null;
-  const workStream = data?.stream?.workStream ?? null;
+  const workStream = data?.sov?.workStream ?? null;
 
   return (
     <Screen className="pt-0 md:pt-0">

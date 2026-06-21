@@ -8,10 +8,11 @@ import { GlobalSearch } from "./GlobalSearch";
 import { RoleSwitcher } from "./RoleSwitcher";
 import {
   LayoutGrid, Landmark, DollarSign, Lock, Settings,
-  ChevronLeft, Bell, Menu, X,
+  Bell, Menu, X,
   Sun, Moon, PanelRightClose, PanelRightOpen,
   PanelLeftClose, PanelLeftOpen, FileSignature, LogOut,
   ChevronDown, User, Users2,
+  Send, Shield,
 } from "lucide-react";
 
 /* ─── Panel context (inner left + right) ─────────────────────────────────── */
@@ -90,7 +91,8 @@ function CollapsibleCard({
 /* ─── Navigation config ──────────────────────────────────────────────────── */
 const MODULE_NAV = [
   { key: "dashboard", label: "Dashboard", to: "/", Icon: LayoutGrid },
-  { key: "liens", label: "Liens", to: "/liens", Icon: Landmark },
+  { key: "liens", label: "Projects", to: "/liens", Icon: Landmark },
+  { key: "notices", label: "Notices", to: "/notices", Icon: Send },
   { key: "waivers", label: "Waivers", to: "/waivers", Icon: FileSignature },
   { key: "collections", label: "Collections", to: "/collections", Icon: DollarSign },
   { key: "holds", label: "Vendor Holds", to: "/holds", Icon: Lock },
@@ -98,7 +100,8 @@ const MODULE_NAV = [
 
 const TITLES: [RegExp, string][] = [
   [/^\/settings$/, "Company Settings"],
-  [/^\/liens$/, "Liens"],
+  [/^\/liens$/, "Projects"],
+  [/^\/notices$/, "Notices"],
   [/^\/send-queue$/, "Ready-to-Send Queue"],
   [/^\/projects\//, "Project Workspace"],
   [/^\/waivers$/, "Waiver Workspace"],
@@ -218,7 +221,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, isLoading, isAuthenticated, login, logout } = useAuth();
   const { resolved: resolvedTheme, setTheme, syncFromServer } = useTheme();
   const [location] = useLocation();
-  const [collapsed, setCollapsed] = React.useState(false);
   const [drawer, setDrawer] = React.useState(false);
   const [right, setRight] = React.useState<React.ReactNode>(null);
   const [left, setLeft] = React.useState<React.ReactNode>(null);
@@ -268,8 +270,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isLiensSection =
     location === "/liens" ||
     location.startsWith("/projects") ||
-    location.startsWith("/filing") ||
+    location.startsWith("/filing");
+  const isNoticesSection =
+    location === "/notices" ||
     location.startsWith("/send-queue");
+  const isModuleActive = (m: { key: string; to: string }) =>
+    m.to === "/" ? location === "/" :
+    m.key === "liens" ? isLiensSection :
+    m.key === "notices" ? isNoticesSection :
+    location.startsWith(m.to);
 
   /* Inner left panel (DD-UI: LP · content · RP) is now page-registered via
      useLeftPanel — pages decide its content. */
@@ -277,7 +286,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const hasRightPanel = !!right;
 
   /* Desktop: side columns (left fixed column, right column or stacked). */
-  const sidebarW = isDesktop ? (collapsed ? 70 : 236) : 0;
+  const sidebarW = isDesktop ? 236 : 0;
   const leftCol = hasLeftPanel && leftOpen && isDesktop;
   const leftW = leftCol ? 208 : 0;
   const avail = width - sidebarW - leftW;
@@ -295,103 +304,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <PanelCtx.Provider value={ctx}>
       <div className="flex min-h-screen" style={{ background: "var(--bg)" }}>
 
-        {/* ─── Desktop Sidebar ─────────────────────────────────────────── */}
+        {/* ─── Left rail (Helm slot) ───────────────────────────────────────
+            In the standalone module app this rail is intentionally empty — it
+            is the slot the Helm platform fills when LienGuard runs inside Helm.
+            LienGuard's own nav lives in the top bar; its brand in the header. */}
         {isDesktop && (
           <aside
-            className="sticky top-0 flex h-screen shrink-0 flex-col border-r transition-[width] duration-200"
-            style={{
-              width: collapsed ? 70 : 236,
-              background: "var(--surface)",
-              borderColor: "var(--helm-border)",
-            }}
-          >
-            {/* Logo */}
-            <div
-              className={cn(
-                "flex h-16 shrink-0 items-center gap-2.5 border-b",
-                collapsed ? "justify-center" : "px-[18px]",
-              )}
-              style={{ borderColor: "var(--helm-border)" }}
-            >
-              <Landmark className="h-6 w-6 text-amber-500 shrink-0" />
-              {!collapsed && (
-                <div className="leading-none">
-                  <div className="text-[15px] font-bold tracking-tight" style={{ color: "var(--text-base)" }}>LienGuard</div>
-                  <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[1.5px]" style={{ color: "var(--text-muted-color)" }}>by HELM</div>
-                </div>
-              )}
-            </div>
-
-            {/* Nav */}
-            <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-3">
-              {MODULE_NAV.map((m) => {
-                const active =
-                  m.to === "/" ? location === "/" :
-                  m.key === "liens" ? (location.startsWith(m.to) || isLiensSection) :
-                  location.startsWith(m.to);
-                return (
-                  <div key={m.key}>
-                    <Link href={m.to}>
-                      <div
-                        className={cn(
-                          "flex items-center gap-3 rounded-md py-2.5 text-[13.5px] cursor-pointer",
-                          collapsed ? "justify-center px-2.5" : "px-3",
-                        )}
-                        style={active
-                          ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
-                          : { color: "var(--text-dim)", fontWeight: 500 }}
-                      >
-                        <m.Icon className="h-[18px] w-[18px] shrink-0" />
-                        {!collapsed && <span className="whitespace-nowrap">{m.label}</span>}
-                      </div>
-                    </Link>
-                  </div>
-                );
-              })}
-            </nav>
-
-            {/* Footer */}
-            <div className="flex flex-col gap-1 border-t p-3" style={{ borderColor: "var(--helm-border)" }}>
-              {user?.role === "admin" && (
-                <Link href="/team">
-                  <div
-                    className={cn("flex items-center gap-3 rounded-md py-2.5 text-[14px] font-medium cursor-pointer", collapsed ? "justify-center px-2.5" : "px-3")}
-                    style={location === "/team"
-                      ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
-                      : { color: "var(--text-dim)" }}
-                    onMouseEnter={(e) => { if (location !== "/team") e.currentTarget.style.background = "var(--surface-2)"; }}
-                    onMouseLeave={(e) => { if (location !== "/team") e.currentTarget.style.background = "transparent"; }}
-                  >
-                    <Users2 className="h-5 w-5 shrink-0" />
-                    {!collapsed && <span>Team &amp; Access</span>}
-                  </div>
-                </Link>
-              )}
-              <Link href="/settings">
-                <div
-                  className={cn("flex items-center gap-3 rounded-md py-2.5 text-[14px] font-medium cursor-pointer", collapsed ? "justify-center px-2.5" : "px-3")}
-                  style={location === "/settings"
-                    ? { background: "var(--surface-3)", color: "var(--text-base)", fontWeight: 600 }
-                    : { color: "var(--text-dim)" }}
-                  onMouseEnter={(e) => { if (location !== "/settings") e.currentTarget.style.background = "var(--surface-2)"; }}
-                  onMouseLeave={(e) => { if (location !== "/settings") e.currentTarget.style.background = "transparent"; }}
-                >
-                  <Settings className="h-5 w-5 shrink-0" />
-                  {!collapsed && <span>Company Settings</span>}
-                </div>
-              </Link>
-              <button
-                onClick={() => setCollapsed((c) => !c)}
-                className={cn("flex items-center gap-3 rounded-md py-2.5 text-[14px] font-medium", collapsed ? "justify-center px-2.5" : "px-3")}
-                style={{ color: "var(--text-dim)" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-              >
-                <ChevronLeft className={cn("h-5 w-5 shrink-0 transition-transform", collapsed && "rotate-180")} />
-                {!collapsed && <span>Collapse</span>}
-              </button>
-            </div>
-          </aside>
+            className="sticky top-0 h-screen shrink-0 border-r"
+            style={{ width: 236, background: "var(--surface)", borderColor: "var(--helm-border)" }}
+            aria-hidden="true"
+          />
         )}
 
         {/* ─── Main column ─────────────────────────────────────────────── */}
@@ -406,9 +328,43 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Menu className="h-6 w-6" />
               </button>
             )}
-            <div className="min-w-0 flex-1" />
+            {/* LienGuard brand — the app's identity lives in the header */}
+            <div className="flex min-w-0 flex-1 items-center gap-2.5">
+              <Landmark className="h-[22px] w-[22px] shrink-0 text-amber-500" />
+              <div className="min-w-0">
+                <div className="text-[16px] font-bold leading-[1.1] tracking-tight md:text-[18px]" style={{ color: "var(--text-base)" }}>
+                  LienGuard <span className="font-medium" style={{ color: "var(--text-dim)" }}>by Helm</span>
+                </div>
+                <div className="mt-0.5 flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold tracking-wide" style={{ color: "#14eba3", background: "rgba(20,235,163,.12)" }}>
+                    <Shield className="h-3 w-3" />Texas
+                  </span>
+                  <span className="hidden truncate text-[12px] sm:block" style={{ color: "var(--text-dim)" }}>protecting Beacon&apos;s right to payment</span>
+                </div>
+              </div>
+            </div>
             <GlobalSearch className="relative hidden w-56 lg:block" />
             <RoleSwitcher />
+            {user?.role === "admin" && (
+              <Link href="/team">
+                <div
+                  className="hidden h-[38px] w-[38px] shrink-0 cursor-pointer items-center justify-center rounded-md border sm:flex"
+                  style={{ background: location === "/team" ? "var(--surface-3)" : "var(--surface-2)", borderColor: "var(--helm-border)", color: location === "/team" ? "var(--text-base)" : "var(--text-dim)" }}
+                  title="Team & Access"
+                >
+                  <Users2 className="h-[18px] w-[18px]" />
+                </div>
+              </Link>
+            )}
+            <Link href="/settings">
+              <div
+                className="hidden h-[38px] w-[38px] shrink-0 cursor-pointer items-center justify-center rounded-md border sm:flex"
+                style={{ background: location === "/settings" ? "var(--surface-3)" : "var(--surface-2)", borderColor: "var(--helm-border)", color: location === "/settings" ? "var(--text-base)" : "var(--text-dim)" }}
+                title="Company Settings"
+              >
+                <Settings className="h-[18px] w-[18px]" />
+              </div>
+            </Link>
             <span className="hidden shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10.5px] font-semibold tracking-wide sm:flex" style={{ background: "rgba(20,235,163,.12)", color: "#14eba3" }}>
               <span className="h-1.5 w-1.5 rounded-full bg-[#14eba3]" />PROD
             </span>
@@ -477,9 +433,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {leftOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
               </button>
             )}
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[15.5px] font-semibold" style={{ color: "var(--text-base)" }}>{title}</div>
-            </div>
+            {isDesktop ? (
+              <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+                {MODULE_NAV.map((m) => {
+                  const active = isModuleActive(m);
+                  return (
+                    <Link key={m.key} href={m.to}>
+                      <div
+                        className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-[13.5px] transition-colors"
+                        style={active
+                          ? { background: "rgba(245,159,10,.14)", color: "#f59e0b", fontWeight: 600 }
+                          : { background: "transparent", color: "var(--text-dim)", fontWeight: 500 }}
+                        onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "var(--surface-2)"; }}
+                        onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
+                      >
+                        <m.Icon className="h-4 w-4 shrink-0" />
+                        {m.label}
+                      </div>
+                    </Link>
+                  );
+                })}
+              </nav>
+            ) : (
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[15.5px] font-semibold" style={{ color: "var(--text-base)" }}>{title}</div>
+              </div>
+            )}
             {!!right && isDesktop && (
               <button
                 onClick={() => setRightOpen((o) => !o)}
@@ -612,13 +591,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {[
               { label: "Dashboard", to: "/", Icon: LayoutGrid },
               { label: "Projects", to: "/liens", Icon: Landmark },
-              { label: "Waivers", to: "/waivers", Icon: FileSignature },
+              { label: "Notices", to: "/notices", Icon: Send },
               { label: "Collections", to: "/collections", Icon: DollarSign },
-              { label: "Settings", to: "/settings", Icon: Settings },
+              { label: "Waivers", to: "/waivers", Icon: FileSignature },
             ].map(({ label, to, Icon }) => {
               const active =
                 to === "/" ? location === to :
                 to === "/liens" ? isLiensSection :
+                to === "/notices" ? isNoticesSection :
                 location.startsWith(to);
               return (
                 <Link key={label} href={to}>

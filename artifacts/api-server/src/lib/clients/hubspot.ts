@@ -288,6 +288,7 @@ export class HubSpotClient {
         return { hubspotActivityId: created.id };
       }
     }
+    // PRETEST_REQUIRED: Configure HUBSPOT_API_KEY to verify live CRM activity write-back.
     // No-key (or failed live call) fallback — deterministic stub
     return { hubspotActivityId: `hs_act_stub_${Date.now()}` };
   }

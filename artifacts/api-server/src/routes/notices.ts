@@ -1,7 +1,7 @@
 /**
  * notices.ts — Notice generation & sending routes (Phase 4 + 5).
  *
- * POST  /notices              create notice (draft) from lienStreamId + workMonthId + noticeType
+ * POST  /notices              create notice (draft) from lienScheduleOfValuesId + workMonthId + noticeType
  * PATCH /notices/:id          edit claimAmount, workDescription, monthListed, recipients
  * POST  /notices/:id/approve  approve a draft notice
  * GET   /notices/:id/pdf      generate print-ready statutory PDF (§ 53.056 / § 53.057)
@@ -18,7 +18,7 @@ import {
   noticesTable,
   noticeRecipientsTable,
   workMonthsTable,
-  lienStreamsTable,
+  lienScheduleOfValuesTable,
   lienProjectsTable,
   projectPartyLinksTable,
   invoiceLinksTable,
@@ -67,26 +67,26 @@ router.get("/notices", async (req, res) => {
 
   if (streamId) {
     const [stream] = await db
-      .select({ id: lienStreamsTable.id })
-      .from(lienStreamsTable)
-      .where(and(eq(lienStreamsTable.orgId, orgId), eq(lienStreamsTable.id, streamId as string)))
+      .select({ id: lienScheduleOfValuesTable.id })
+      .from(lienScheduleOfValuesTable)
+      .where(and(eq(lienScheduleOfValuesTable.orgId, orgId), eq(lienScheduleOfValuesTable.id, streamId as string)))
       .limit(1);
     if (!stream) {
       res.json({ notices: [] });
       return;
     }
-    conditions.push(eq(noticesTable.lienStreamId, streamId as string));
+    conditions.push(eq(noticesTable.lienScheduleOfValuesId, streamId as string));
   } else if (projectId) {
     const streams = await db
-      .select({ id: lienStreamsTable.id })
-      .from(lienStreamsTable)
-      .where(and(eq(lienStreamsTable.orgId, orgId), eq(lienStreamsTable.lienProjectId, projectId)));
+      .select({ id: lienScheduleOfValuesTable.id })
+      .from(lienScheduleOfValuesTable)
+      .where(and(eq(lienScheduleOfValuesTable.orgId, orgId), eq(lienScheduleOfValuesTable.lienProjectId, projectId)));
     const streamIds = streams.map((s) => s.id);
     if (!streamIds.length) {
       res.json({ notices: [] });
       return;
     }
-    conditions.push(inArray(noticesTable.lienStreamId, streamIds));
+    conditions.push(inArray(noticesTable.lienScheduleOfValuesId, streamIds));
   }
 
   const notices = await db
@@ -109,12 +109,12 @@ router.get("/notices", async (req, res) => {
   const mailingByNotice = new Map(mailings.map((m) => [m.noticeId, m]));
 
   // Load projects via streams.
-  const streamIds = [...new Set(notices.map((n) => n.lienStreamId).filter(Boolean))] as string[];
+  const streamIds = [...new Set(notices.map((n) => n.lienScheduleOfValuesId).filter(Boolean))] as string[];
   const streams = streamIds.length
     ? await db
-        .select({ id: lienStreamsTable.id, lienProjectId: lienStreamsTable.lienProjectId })
-        .from(lienStreamsTable)
-        .where(and(eq(lienStreamsTable.orgId, orgId), inArray(lienStreamsTable.id, streamIds)))
+        .select({ id: lienScheduleOfValuesTable.id, lienProjectId: lienScheduleOfValuesTable.lienProjectId })
+        .from(lienScheduleOfValuesTable)
+        .where(and(eq(lienScheduleOfValuesTable.orgId, orgId), inArray(lienScheduleOfValuesTable.id, streamIds)))
     : [];
 
   const projectIds = [...new Set(streams.map((s) => s.lienProjectId))];
@@ -129,7 +129,7 @@ router.get("/notices", async (req, res) => {
   const projectMap = new Map(projects.map((p) => [p.id, p]));
 
   const enriched = notices.map((n) => {
-    const projectId = n.lienStreamId ? streamProjectMap.get(n.lienStreamId) : undefined;
+    const projectId = n.lienScheduleOfValuesId ? streamProjectMap.get(n.lienScheduleOfValuesId) : undefined;
     const project = projectId ? projectMap.get(projectId) : undefined;
     const mailing = n.id ? mailingByNotice.get(n.id) : undefined;
     return {
@@ -158,14 +158,14 @@ function buildWorkDescription(workStream: string, noticeType: string): string {
 
 router.post("/notices", async (req, res) => {
   const { orgId } = getSession(req);
-  const { lienStreamId, workMonthId, noticeType } = req.body as {
-    lienStreamId?: string;
+  const { lienScheduleOfValuesId, workMonthId, noticeType } = req.body as {
+    lienScheduleOfValuesId?: string;
     workMonthId?: string;
     noticeType?: string;
   };
 
-  if (!lienStreamId || !noticeType) {
-    res.status(400).json({ error: "lienStreamId and noticeType are required" });
+  if (!lienScheduleOfValuesId || !noticeType) {
+    res.status(400).json({ error: "lienScheduleOfValuesId and noticeType are required" });
     return;
   }
 
@@ -177,8 +177,8 @@ router.post("/notices", async (req, res) => {
   // Verify stream belongs to org.
   const [stream] = await db
     .select()
-    .from(lienStreamsTable)
-    .where(and(eq(lienStreamsTable.id, lienStreamId), eq(lienStreamsTable.orgId, orgId)))
+    .from(lienScheduleOfValuesTable)
+    .where(and(eq(lienScheduleOfValuesTable.id, lienScheduleOfValuesId), eq(lienScheduleOfValuesTable.orgId, orgId)))
     .limit(1);
 
   if (!stream) {
@@ -234,7 +234,7 @@ router.post("/notices", async (req, res) => {
     .values({
       id: noticeId,
       orgId,
-      lienStreamId,
+      lienScheduleOfValuesId,
       workMonthId: workMonthId ?? null,
       noticeType: noticeType as "early_warning" | "statutory_claim" | "retainage_claim",
       status: "draft",
@@ -396,8 +396,8 @@ router.get("/notices/:id/pdf", async (req, res) => {
   // Load stream + project.
   const [stream] = await db
     .select()
-    .from(lienStreamsTable)
-    .where(and(eq(lienStreamsTable.id, notice.lienStreamId), eq(lienStreamsTable.orgId, orgId)))
+    .from(lienScheduleOfValuesTable)
+    .where(and(eq(lienScheduleOfValuesTable.id, notice.lienScheduleOfValuesId), eq(lienScheduleOfValuesTable.orgId, orgId)))
     .limit(1);
 
   const project = stream

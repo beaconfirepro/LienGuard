@@ -102,6 +102,7 @@ export class ConnecteamSyncClient {
     to?: Date;
   }): Promise<SyncResult> {
     if (!this.apiKey) {
+      // PRETEST_REQUIRED: Configure CONNECTEAM_API_KEY to test live timesheet sync.
       console.warn(
         `[ConnecteamSyncClient] CONNECTEAM_API_KEY not configured — ` +
           `skipping sync for project ${params.lienProjectId}. ` +

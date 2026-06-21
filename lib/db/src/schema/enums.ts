@@ -23,7 +23,7 @@ export const workStreamEnum = pgEnum("work_stream", [
   "design",
 ]);
 
-export const lienStreamStatusEnum = pgEnum("lien_stream_status", [
+export const lienScheduleOfValuesStatusEnum = pgEnum("lien_schedule_of_values_status", [
   "open",
   "at_risk",
   "notice_active",

@@ -7,7 +7,7 @@ import {
   stageTriggerConfigsTable,
   holdsTable,
   lienProjectsTable,
-  lienStreamsTable,
+  lienScheduleOfValuesTable,
   lienFilingsTable,
   workMonthsTable,
   noticesTable,
@@ -111,8 +111,8 @@ router.get("/external/exposure", requireServiceKey, async (_req, res) => {
 
     const streams = await db
       .select()
-      .from(lienStreamsTable)
-      .where(inArray(lienStreamsTable.status, [...openStatuses]));
+      .from(lienScheduleOfValuesTable)
+      .where(inArray(lienScheduleOfValuesTable.status, [...openStatuses]));
 
     if (streams.length === 0) {
       res.json({
@@ -128,17 +128,17 @@ router.get("/external/exposure", requireServiceKey, async (_req, res) => {
 
     const [projects, workMonths, notices, filings, collectionAccounts] = await Promise.all([
       db.select().from(lienProjectsTable).where(inArray(lienProjectsTable.id, projectIds)),
-      db.select().from(workMonthsTable).where(inArray(workMonthsTable.lienStreamId, streamIds)),
-      db.select().from(noticesTable).where(inArray(noticesTable.lienStreamId, streamIds)),
-      db.select().from(lienFilingsTable).where(inArray(lienFilingsTable.lienStreamId, streamIds)),
+      db.select().from(workMonthsTable).where(inArray(workMonthsTable.lienScheduleOfValuesId, streamIds)),
+      db.select().from(noticesTable).where(inArray(noticesTable.lienScheduleOfValuesId, streamIds)),
+      db.select().from(lienFilingsTable).where(inArray(lienFilingsTable.lienScheduleOfValuesId, streamIds)),
       db.select().from(collectionAccountsTable),
     ]);
 
     const totalGrossExposure = streams.reduce((sum, stream) => {
       const overdueMonths = workMonths.filter(
-        (wm) => wm.lienStreamId === stream.id && wm.derivedOverdue && !wm.clearedFlag,
+        (wm) => wm.lienScheduleOfValuesId === stream.id && wm.derivedOverdue && !wm.clearedFlag,
       );
-      const streamNotices = notices.filter((n) => n.lienStreamId === stream.id);
+      const streamNotices = notices.filter((n) => n.lienScheduleOfValuesId === stream.id);
       return sum + overdueMonths.reduce((s2, wm) => {
         const n = streamNotices.find((x) => x.workMonthId === wm.id);
         return s2 + (n ? Number(n.claimAmount) : 0);
@@ -158,7 +158,7 @@ router.get("/external/exposure", requireServiceKey, async (_req, res) => {
       collectionsOverdueTotal: totalOverdue,
       streams: streams.map((s) => {
         const project = projects.find((p) => p.id === s.lienProjectId);
-        const filing = filings.find((f) => f.lienStreamId === s.id);
+        const filing = filings.find((f) => f.lienScheduleOfValuesId === s.id);
         return {
           streamId: s.id,
           projectId: s.lienProjectId,

@@ -22,7 +22,7 @@ import {
   waiversTable,
   invoiceLinksTable,
   lienProjectsTable,
-  lienStreamsTable,
+  lienScheduleOfValuesTable,
   workMonthsTable,
   noticesTable,
   mailingRecordsTable,
@@ -194,11 +194,11 @@ router.get("/waivers/exposure", requireSession, async (req, res) => {
   // Streams with at-risk or notice-active status.
   const streams = await db
     .select()
-    .from(lienStreamsTable)
+    .from(lienScheduleOfValuesTable)
     .where(
       and(
-        eq(lienStreamsTable.orgId, orgId),
-        inArray(lienStreamsTable.status, ["at_risk", "notice_active", "filing", "filed"]),
+        eq(lienScheduleOfValuesTable.orgId, orgId),
+        inArray(lienScheduleOfValuesTable.status, ["at_risk", "notice_active", "filing", "filed"]),
       ),
     );
 
@@ -215,7 +215,7 @@ router.get("/waivers/exposure", requireSession, async (req, res) => {
     .where(
       and(
         eq(workMonthsTable.orgId, orgId),
-        inArray(workMonthsTable.lienStreamId, streamIds),
+        inArray(workMonthsTable.lienScheduleOfValuesId, streamIds),
         eq(workMonthsTable.derivedOverdue, true),
         eq(workMonthsTable.clearedFlag, false),
       ),
@@ -263,9 +263,9 @@ router.get("/waivers/exposure", requireSession, async (req, res) => {
   // Build per-stream exposure rows.
   const wmByStream = new Map<string, typeof workMonths>();
   for (const wm of workMonths) {
-    const list = wmByStream.get(wm.lienStreamId) ?? [];
+    const list = wmByStream.get(wm.lienScheduleOfValuesId) ?? [];
     list.push(wm);
-    wmByStream.set(wm.lienStreamId, list);
+    wmByStream.set(wm.lienScheduleOfValuesId, list);
   }
 
   const exposure = streams.map((s) => {

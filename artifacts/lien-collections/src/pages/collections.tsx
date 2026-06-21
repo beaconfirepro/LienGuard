@@ -35,6 +35,16 @@ interface AgingData {
   overdueCount: number;
 }
 
+interface VendorHold {
+  id: string;
+  holdType: "schedule_hold" | "material_hold";
+  linkedClientId: string | null;
+  clientName: string | null;
+  supplierBillRef: string | null;
+  supplierBillAmount: string | null;
+  reason: string | null;
+}
+
 const STAGE_LABELS: Record<string, string> = {
   none: "Current / Monitoring",
   soft_collections: "Soft Collections",
@@ -95,6 +105,7 @@ export default function CollectionsPage() {
   const [closed, setClosed] = React.useState<Record<string, boolean>>({});
   const [filterStatus, setFilterStatus] = React.useState("");
   const [filterStage, setFilterStage] = React.useState("");
+  const [selectedHoldClientId, setSelectedHoldClientId] = React.useState<string>("");
 
   const { data: accountsData, isLoading: loadingAccounts } = useQuery({
     queryKey: ["collections/accounts"],
@@ -105,6 +116,12 @@ export default function CollectionsPage() {
   const { data: agingData } = useQuery({
     queryKey: ["collections/aging"],
     queryFn: () => apiFetch<AgingData>("/collections/aging"),
+    retry: false,
+  });
+
+  const { data: holdsData } = useQuery({
+    queryKey: ["holds"],
+    queryFn: () => apiFetch<{ holds: VendorHold[] }>("/holds"),
     retry: false,
   });
 
@@ -146,6 +163,7 @@ export default function CollectionsPage() {
   });
 
   const allAccounts = accountsData?.accounts ?? [];
+  const activeHolds = holdsData?.holds ?? [];
   const aging = agingData?.buckets;
 
   // Apply filters
@@ -168,6 +186,22 @@ export default function CollectionsPage() {
     .filter((a) => callIds.includes(a.id))
     .sort((a, b) => (b.riskScore ?? 0) - (a.riskScore ?? 0));
 
+  const lienNoticeClients = allAccounts
+    .filter((a) => (a.escalationStage === "pre_lien_notice" || a.escalationStage === "lien_filing") && a.oldestOverdueDays > 0)
+    .sort((a, b) => (b.riskScore ?? 0) - (a.riskScore ?? 0));
+
+  const recommendedHolds = activeHolds
+    .filter((h) => {
+      const reason = (h.reason ?? "").toLowerCase();
+      const nonPaymentDriven = reason.includes("past-due") || reason.includes("overdue") || reason.includes("withheld");
+      const tiedToNoticeClient = h.linkedClientId
+        ? lienNoticeClients.some((c) => c.linkedClientId === h.linkedClientId)
+        : false;
+      return nonPaymentDriven || tiedToNoticeClient;
+    })
+    .filter((h) => (selectedHoldClientId ? h.linkedClientId === selectedHoldClientId : true))
+    .sort((a, b) => Number(b.supplierBillAmount ?? 0) - Number(a.supplierBillAmount ?? 0));
+
   const activeFilterCount = (filterStatus ? 1 : 0) + (filterStage ? 1 : 0);
 
   useRightPanel(
@@ -186,33 +220,100 @@ export default function CollectionsPage() {
   );
 
   useLeftPanel(
-    <Panel title="Pipeline Stages">
-      <div className="flex flex-col gap-1 p-3">
-        <StageFilterRow
-          label="All stages"
-          color="#6366f1"
-          count={allAccounts.length}
-          active={filterStage === ""}
-          onClick={() => setFilterStage("")}
-        />
-        {STAGE_ORDER.map((stage) => {
-          const list = allAccounts.filter((a) => a.escalationStage === stage);
-          if (!list.length) return null;
-          return (
-            <StageFilterRow
-              key={stage}
-              label={STAGE_LABELS[stage] ?? stage}
-              color={STAGE_COLOR[stage] ?? "#6b7280"}
-              count={list.length}
-              total={list.reduce((s, a) => s + Number(a.totalOverdue), 0)}
-              active={filterStage === stage}
-              onClick={() => setFilterStage((cur) => (cur === stage ? "" : stage))}
-            />
-          );
-        })}
+    <Panel title="Lien Notices & Holds">
+      <div className="flex flex-col gap-3 p-3">
+        <div className="rounded-md border p-2.5" style={{ borderColor: "var(--helm-border)", background: "var(--surface-2)" }}>
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>
+            Clients Receiving Lien Notices
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {lienNoticeClients.length === 0 ? (
+              <div className="rounded-md border px-2.5 py-2 text-[11px]" style={{ borderColor: "var(--helm-border)", color: "var(--text-muted-color)" }}>
+                No clients currently in pre-lien or filing stage.
+              </div>
+            ) : (
+              lienNoticeClients.slice(0, 8).map((client) => {
+                const clientId = client.linkedClientId ?? "";
+                const active = selectedHoldClientId === clientId;
+                return (
+                  <button
+                    key={client.id}
+                    onClick={() => setSelectedHoldClientId((cur) => (cur === clientId ? "" : clientId))}
+                    className="flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left"
+                    style={
+                      active
+                        ? { background: alpha("#f59f0a", 0.12), borderColor: alpha("#f59f0a", 0.45) }
+                        : { background: "var(--surface)", borderColor: "var(--helm-border)" }
+                    }
+                    title="Filter recommended hold bills for this client"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-[12px] font-medium" style={{ color: "var(--text-base)" }}>
+                      {client.cachedName ?? client.id}
+                    </span>
+                    <span className="font-mono text-[11px]" style={{ color: "#eb143f" }}>
+                      {money(Number(client.totalOverdue))}
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-md border p-2.5" style={{ borderColor: "var(--helm-border)", background: "var(--surface-2)" }}>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted-color)" }}>
+              Recommended Vendor Bills To Hold
+            </div>
+            <button
+              onClick={() => navigate("/holds")}
+              className="text-[11px] font-semibold"
+              style={{ color: "#f59f0a" }}
+            >
+              Open Holds
+            </button>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {recommendedHolds.length === 0 ? (
+              <div className="rounded-md border px-2.5 py-2 text-[11px]" style={{ borderColor: "var(--helm-border)", color: "var(--text-muted-color)" }}>
+                No hold recommendations based on current non-payment signals.
+              </div>
+            ) : (
+              recommendedHolds.slice(0, 8).map((hold) => (
+                <div
+                  key={hold.id}
+                  className="rounded-md border px-2.5 py-2"
+                  style={{ background: "var(--surface)", borderColor: alpha("#f59f0a", 0.35) }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[12px] font-semibold" style={{ color: "var(--text-base)" }}>
+                      {hold.clientName ?? "Unknown client"}
+                    </span>
+                    <span className="font-mono text-[11.5px] font-semibold" style={{ color: "#eb143f" }}>
+                      {money(Number(hold.supplierBillAmount ?? 0))}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 truncate text-[11px]" style={{ color: "var(--text-dim)" }}>
+                    Bill {hold.supplierBillRef ?? "N/A"} · {hold.holdType === "material_hold" ? "Material hold" : "Schedule hold"}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {selectedHoldClientId && (
+          <button
+            onClick={() => setSelectedHoldClientId("")}
+            className="text-[11px]"
+            style={{ color: "var(--text-muted-color)" }}
+          >
+            Clear client hold filter
+          </button>
+        )}
       </div>
     </Panel>,
-    [allAccounts, filterStage],
+    [lienNoticeClients, recommendedHolds, selectedHoldClientId],
   );
 
   return (

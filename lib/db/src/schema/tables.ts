@@ -15,7 +15,7 @@ import {
   contractorTierEnum,
   lienClockTriggerEnum,
   workStreamEnum,
-  lienStreamStatusEnum,
+  lienScheduleOfValuesStatusEnum,
   ruleKindEnum,
   businessDayHandlingEnum,
   noticeTypeEnum,
@@ -341,21 +341,21 @@ export const projectPartyLinksTable = pgTable(
   ],
 );
 
-export const lienStreamsTable = pgTable(
-  "lien_streams",
+export const lienScheduleOfValuesTable = pgTable(
+  "lien_schedule_of_values",
   {
     id: id(),
     orgId: orgId(),
     lienProjectId: text("lien_project_id").notNull(),
     workStream: workStreamEnum("work_stream").notNull(),
-    status: lienStreamStatusEnum("status").notNull().default("open"),
+    status: lienScheduleOfValuesStatusEnum("status").notNull().default("open"),
     openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
-    index("lien_streams_org_id_idx").on(t.orgId),
-    index("lien_streams_lien_project_id_idx").on(t.lienProjectId),
+    index("lien_schedule_of_values_org_id_idx").on(t.orgId),
+    index("lien_schedule_of_values_lien_project_id_idx").on(t.lienProjectId),
   ],
 );
 
@@ -364,7 +364,7 @@ export const workMonthsTable = pgTable(
   {
     id: id(),
     orgId: orgId(),
-    lienStreamId: text("lien_stream_id").notNull(),
+    lienScheduleOfValuesId: text("lien_schedule_of_values_id").notNull(),
     month: timestamp("month", { withTimezone: true }).notNull(),
     derivedOverdue: boolean("derived_overdue").notNull().default(false),
     clearedFlag: boolean("cleared_flag").notNull().default(false),
@@ -373,9 +373,8 @@ export const workMonthsTable = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    uniqueIndex("work_months_org_stream_month_idx").on(t.orgId, t.lienStreamId, t.month),
-    index("work_months_org_id_idx").on(t.orgId),
-    index("work_months_lien_stream_id_idx").on(t.lienStreamId),
+    uniqueIndex("work_months_org_schedule_of_values_month_idx").on(t.orgId, t.lienScheduleOfValuesId, t.month),
+    index("work_months_lien_schedule_of_values_id_idx").on(t.lienScheduleOfValuesId),
   ],
 );
 
@@ -411,7 +410,7 @@ export const noticesTable = pgTable(
   {
     id: id(),
     orgId: orgId(),
-    lienStreamId: text("lien_stream_id").notNull(),
+    lienScheduleOfValuesId: text("lien_schedule_of_values_id").notNull(),
     workMonthId: text("work_month_id"),
     noticeType: noticeTypeEnum("notice_type").notNull(),
     status: noticeStatusEnum("status").notNull().default("draft"),
@@ -428,7 +427,7 @@ export const noticesTable = pgTable(
   },
   (t) => [
     index("notices_org_id_idx").on(t.orgId),
-    index("notices_lien_stream_id_idx").on(t.lienStreamId),
+    index("notices_lien_schedule_of_values_id_idx").on(t.lienScheduleOfValuesId),
   ],
 );
 
@@ -455,7 +454,7 @@ export const lienFilingsTable = pgTable(
   {
     id: id(),
     orgId: orgId(),
-    lienStreamId: text("lien_stream_id").notNull().unique(),
+    lienScheduleOfValuesId: text("lien_schedule_of_values_id").notNull().unique(),
     status: filingStatusEnum("status").notNull().default("not_filed"),
     affidavitDocUrl: text("affidavit_doc_url"),
     county: text("county"),

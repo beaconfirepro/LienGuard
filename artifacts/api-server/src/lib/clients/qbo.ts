@@ -101,6 +101,7 @@ export class QboSyncClient {
   }): Promise<SyncResult> {
     const creds = loadCredentials();
     if (!creds) {
+      // PRETEST_REQUIRED: Configure QBO_* credentials to test live invoice sync.
       console.warn(
         `[QboSyncClient] QBO credentials not configured — ` +
           `skipping sync for project ${params.lienProjectId}. ` +

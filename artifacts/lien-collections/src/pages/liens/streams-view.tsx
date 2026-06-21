@@ -18,7 +18,7 @@ import { ListPageLayout, ListTableState } from "@/components/ui/list-page";
 import { Search, Plus, FileText } from "lucide-react";
 import { money } from "@/lib/utils";
 
-interface LienStream {
+interface ScheduleOfValues {
   id: string;
   workStream: "construction" | "design" | string;
   status: string;
@@ -31,7 +31,7 @@ interface Project {
   cachedProjectName: string | null;
   county: string | null;
   lienWorkflowType: string;
-  streams: LienStream[];
+  sovs: ScheduleOfValues[];
 }
 
 interface FilingRow {
@@ -101,7 +101,7 @@ export default function StreamsView() {
   const projects = data?.projects ?? [];
 
   const allFilings: FilingRow[] = projects.flatMap((p) =>
-    p.streams.map((s) => ({
+    p.sovs.map((s) => ({
       streamId: s.id,
       projectId: p.id,
       projectName: p.cachedProjectName ?? p.hubspotProjectId,

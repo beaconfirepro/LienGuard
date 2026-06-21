@@ -253,7 +253,7 @@ test("PROJ-A5 coordinator recompute persists without error", async () => {
 test("PROJ-A6 coordinator creates a draft notice with a claim amount", async () => {
   const create = await req("POST", "/api/notices", {
     role: "coordinator",
-    body: { lienStreamId: "str_approaching_con", noticeType: "statutory_claim" },
+    body: { lienScheduleOfValuesId: "str_approaching_con", noticeType: "statutory_claim" },
   });
   eqv(create.status, 201, `create status (body: ${JSON.stringify(create.json)})`);
   const noticeId = create.json.notice.id;

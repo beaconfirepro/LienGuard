@@ -18,7 +18,7 @@ import { and, eq } from "drizzle-orm";
 import {
   usersTable,
   lienProjectsTable,
-  lienStreamsTable,
+  lienScheduleOfValuesTable,
   workMonthsTable,
   lienDeadlinesTable,
   noticesTable,
@@ -148,7 +148,7 @@ async function main() {
   // ── Streams — open(healthy), open(approaching), released, filing, closed ──
   await step("streams (healthy / approaching / released / filing / closed)", async () => {
     await db
-      .insert(lienStreamsTable)
+      .insert(lienScheduleOfValuesTable)
       .values([
         { id: "str_healthy_con", orgId: ORG, lienProjectId: "proj_healthy", workStream: "construction", status: "open", openedAt: d("2026-05-01") },
         { id: "str_approaching_con", orgId: ORG, lienProjectId: "proj_approaching", workStream: "construction", status: "open", openedAt: d("2026-04-01") },
@@ -166,9 +166,9 @@ async function main() {
   // UAT always has an at-risk stream.
   await step("restore str_comm_con → at_risk (canonical at-risk example)", async () => {
     await db
-      .update(lienStreamsTable)
+      .update(lienScheduleOfValuesTable)
       .set({ status: "at_risk", updatedAt: new Date() })
-      .where(and(eq(lienStreamsTable.id, "str_comm_con"), eq(lienStreamsTable.orgId, ORG)));
+      .where(and(eq(lienScheduleOfValuesTable.id, "str_comm_con"), eq(lienScheduleOfValuesTable.orgId, ORG)));
   });
 
   // Same drift guard for the base collection accounts: the recompute action
@@ -193,8 +193,8 @@ async function main() {
     await db
       .insert(workMonthsTable)
       .values([
-        { id: "wm_healthy", orgId: ORG, lienStreamId: "str_healthy_con", month: d("2026-05-01"), derivedOverdue: false, clearedFlag: true },
-        { id: "wm_approaching", orgId: ORG, lienStreamId: "str_approaching_con", month: d("2026-04-01"), derivedOverdue: true, clearedFlag: false },
+        { id: "wm_healthy", orgId: ORG, lienScheduleOfValuesId: "str_healthy_con", month: d("2026-05-01"), derivedOverdue: false, clearedFlag: true },
+        { id: "wm_approaching", orgId: ORG, lienScheduleOfValuesId: "str_approaching_con", month: d("2026-04-01"), derivedOverdue: true, clearedFlag: false },
       ])
       .onConflictDoNothing();
   });
@@ -235,7 +235,7 @@ async function main() {
         {
           id: "fil_released",
           orgId: ORG,
-          lienStreamId: "str_released_con",
+          lienScheduleOfValuesId: "str_released_con",
           status: "filed",
           county: "Bexar",
           filingDate: d("2026-04-10"),
@@ -248,7 +248,7 @@ async function main() {
         {
           id: "fil_inprogress",
           orgId: ORG,
-          lienStreamId: "str_filing_con",
+          lienScheduleOfValuesId: "str_filing_con",
           status: "affidavit_draft",
           county: "Travis",
           affidavitDocUrl: "s3://affidavits/fil_inprogress_draft.pdf",
@@ -280,7 +280,7 @@ async function main() {
       .values({
         id: "not_delivered",
         orgId: ORG,
-        lienStreamId: "str_res_con",
+        lienScheduleOfValuesId: "str_res_con",
         noticeType: "statutory_claim",
         status: "delivered",
         claimAmount: "12000.00",

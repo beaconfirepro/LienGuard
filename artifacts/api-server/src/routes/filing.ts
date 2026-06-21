@@ -17,7 +17,7 @@ import { db } from "@workspace/db";
 import {
   lienFilingsTable,
   lienReleasesTable,
-  lienStreamsTable,
+  lienScheduleOfValuesTable,
   lienProjectsTable,
   workMonthsTable,
   noticesTable,
@@ -45,21 +45,21 @@ const router = Router();
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function getStreamWithProject(streamId: string, orgId: string) {
-  const [stream] = await db
+async function getStreamWithProject(sovId: string, orgId: string) {
+  const [sov] = await db
     .select()
-    .from(lienStreamsTable)
-    .where(and(eq(lienStreamsTable.id, streamId), eq(lienStreamsTable.orgId, orgId)))
+    .from(lienScheduleOfValuesTable)
+    .where(and(eq(lienScheduleOfValuesTable.id, sovId), eq(lienScheduleOfValuesTable.orgId, orgId)))
     .limit(1);
-  if (!stream) return null;
+  if (!sov) return null;
 
   const [project] = await db
     .select()
     .from(lienProjectsTable)
-    .where(eq(lienProjectsTable.id, stream.lienProjectId))
+    .where(eq(lienProjectsTable.id, sov.lienProjectId))
     .limit(1);
 
-  return { stream, project: project ?? null };
+  return { sov, project: project ?? null };
 }
 
 async function getFilingById(filingId: string, orgId: string) {
@@ -93,7 +93,7 @@ router.get("/filing/stream/:streamId", requireSession, async (req, res) => {
   const [filing] = await db
     .select()
     .from(lienFilingsTable)
-    .where(and(eq(lienFilingsTable.lienStreamId, streamId), eq(lienFilingsTable.orgId, orgId)))
+    .where(and(eq(lienFilingsTable.lienScheduleOfValuesId, streamId), eq(lienFilingsTable.orgId, orgId)))
     .limit(1);
 
   let release = null;
@@ -109,15 +109,15 @@ router.get("/filing/stream/:streamId", requireSession, async (req, res) => {
   const workMonths = await db
     .select()
     .from(workMonthsTable)
-    .where(and(eq(workMonthsTable.lienStreamId, streamId), eq(workMonthsTable.orgId, orgId)));
+    .where(and(eq(workMonthsTable.lienScheduleOfValuesId, streamId), eq(workMonthsTable.orgId, orgId)));
 
   const notices = await db
     .select()
     .from(noticesTable)
-    .where(and(eq(noticesTable.lienStreamId, streamId), eq(noticesTable.orgId, orgId)));
+    .where(and(eq(noticesTable.lienScheduleOfValuesId, streamId), eq(noticesTable.orgId, orgId)));
 
   res.json({
-    stream: ctx.stream,
+    sov: ctx.sov,
     project: ctx.project,
     filing: filing ?? null,
     release,
@@ -140,7 +140,7 @@ router.post("/filing/:streamId/escalate", requireSession, async (req, res) => {
   const workMonths = await db
     .select()
     .from(workMonthsTable)
-    .where(and(eq(workMonthsTable.lienStreamId, streamId), eq(workMonthsTable.orgId, orgId)));
+    .where(and(eq(workMonthsTable.lienScheduleOfValuesId, streamId), eq(workMonthsTable.orgId, orgId)));
 
   if (workMonths.length === 0) {
     res.json({ ok: true, gaps: [], message: "No work months to check." });
@@ -164,7 +164,7 @@ router.post("/filing/:streamId/escalate", requireSession, async (req, res) => {
     .from(noticesTable)
     .where(
       and(
-        eq(noticesTable.lienStreamId, streamId),
+        eq(noticesTable.lienScheduleOfValuesId, streamId),
         eq(noticesTable.orgId, orgId),
       ),
     );
@@ -215,13 +215,13 @@ router.post("/filing/:streamId/escalate", requireSession, async (req, res) => {
   const [existing] = await db
     .select()
     .from(lienFilingsTable)
-    .where(and(eq(lienFilingsTable.lienStreamId, streamId), eq(lienFilingsTable.orgId, orgId)))
+    .where(and(eq(lienFilingsTable.lienScheduleOfValuesId, streamId), eq(lienFilingsTable.orgId, orgId)))
     .limit(1);
 
   if (!existing) {
     await db.insert(lienFilingsTable).values({
       orgId,
-      lienStreamId: streamId,
+      lienScheduleOfValuesId: streamId,
       status: "compliance_check",
     });
   } else if (existing.status === "not_filed") {
@@ -235,9 +235,9 @@ router.post("/filing/:streamId/escalate", requireSession, async (req, res) => {
   const { stream } = ctx;
   if (stream.status === "open" || stream.status === "at_risk" || stream.status === "notice_active") {
     await db
-      .update(lienStreamsTable)
+      .update(lienScheduleOfValuesTable)
       .set({ status: "filing", updatedAt: new Date() })
-      .where(eq(lienStreamsTable.id, streamId));
+      .where(eq(lienScheduleOfValuesTable.id, streamId));
   }
 
   res.json({ ok: gaps.length === 0, gaps });
@@ -260,7 +260,7 @@ router.post("/filing/:streamId/affidavit", requireSession, async (req, res) => {
     .from(workMonthsTable)
     .where(
       and(
-        eq(workMonthsTable.lienStreamId, streamId),
+        eq(workMonthsTable.lienScheduleOfValuesId, streamId),
         eq(workMonthsTable.orgId, orgId),
       ),
     );
@@ -271,9 +271,10 @@ router.post("/filing/:streamId/affidavit", requireSession, async (req, res) => {
   let [filing] = await db
     .select()
     .from(lienFilingsTable)
-    .where(and(eq(lienFilingsTable.lienStreamId, streamId), eq(lienFilingsTable.orgId, orgId)))
+    .where(and(eq(lienFilingsTable.lienScheduleOfValuesId, streamId), eq(lienFilingsTable.orgId, orgId)))
     .limit(1);
 
+  // PRETEST_REQUIRED: Replace generated:// stub with real affidavit document generation/storage before filing testing.
   const stubDocUrl = `generated://filing/${streamId}/affidavit.pdf`;
 
   if (!filing) {
@@ -281,7 +282,7 @@ router.post("/filing/:streamId/affidavit", requireSession, async (req, res) => {
       .insert(lienFilingsTable)
       .values({
         orgId,
-        lienStreamId: streamId,
+        lienScheduleOfValuesId: streamId,
         status: "affidavit_draft",
         affidavitDocUrl: stubDocUrl,
       })
@@ -323,8 +324,8 @@ router.get("/filing/:id/affidavit", requireSession, async (req, res) => {
 
   const [stream] = await db
     .select()
-    .from(lienStreamsTable)
-    .where(eq(lienStreamsTable.id, filing.lienStreamId))
+    .from(lienScheduleOfValuesTable)
+    .where(eq(lienScheduleOfValuesTable.id, filing.lienScheduleOfValuesId))
     .limit(1);
 
   const [project] = stream
@@ -340,7 +341,7 @@ router.get("/filing/:id/affidavit", requireSession, async (req, res) => {
     .from(workMonthsTable)
     .where(
       and(
-        eq(workMonthsTable.lienStreamId, filing.lienStreamId),
+        eq(workMonthsTable.lienScheduleOfValuesId, filing.lienScheduleOfValuesId),
         eq(workMonthsTable.orgId, orgId),
       ),
     );
@@ -350,7 +351,7 @@ router.get("/filing/:id/affidavit", requireSession, async (req, res) => {
   const notices = await db
     .select()
     .from(noticesTable)
-    .where(and(eq(noticesTable.lienStreamId, filing.lienStreamId), eq(noticesTable.orgId, orgId)));
+    .where(and(eq(noticesTable.lienScheduleOfValuesId, filing.lienScheduleOfValuesId), eq(noticesTable.orgId, orgId)));
 
   // Load any saved document template (region overrides) for the affidavit.
   const [tmplRow] = await db
@@ -394,7 +395,7 @@ router.get("/filing/:id/affidavit", requireSession, async (req, res) => {
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="affidavit-${filing.lienStreamId.slice(0, 8)}.pdf"`,
+    `attachment; filename="affidavit-${filing.lienScheduleOfValuesId.slice(0, 8)}.pdf"`,
   );
 
   const doc = new PDFDocument({ margin: 72 });
@@ -585,9 +586,9 @@ router.post("/filing/:id/record", requireSession, async (req, res) => {
 
   // Advance stream to "filed"
   await db
-    .update(lienStreamsTable)
+    .update(lienScheduleOfValuesTable)
     .set({ status: "filed", updatedAt: new Date() })
-    .where(eq(lienStreamsTable.id, filing.lienStreamId));
+    .where(eq(lienScheduleOfValuesTable.id, filing.lienScheduleOfValuesId));
 
   res.json({
     filing: updated,
@@ -616,8 +617,8 @@ router.post("/filing/:id/post-notice", requireSession, async (req, res) => {
 
   const [stream] = await db
     .select()
-    .from(lienStreamsTable)
-    .where(eq(lienStreamsTable.id, filing.lienStreamId))
+    .from(lienScheduleOfValuesTable)
+    .where(eq(lienScheduleOfValuesTable.id, filing.lienScheduleOfValuesId))
     .limit(1);
 
   const parties = stream
@@ -794,9 +795,9 @@ router.post("/filing/:id/release", requireSession, async (req, res) => {
   // If the release is "filed", advance the stream to "released"
   if (releaseStatus === "filed") {
     await db
-      .update(lienStreamsTable)
+      .update(lienScheduleOfValuesTable)
       .set({ status: "released", updatedAt: new Date() })
-      .where(eq(lienStreamsTable.id, filing.lienStreamId));
+      .where(eq(lienScheduleOfValuesTable.id, filing.lienScheduleOfValuesId));
   }
 
   res.json({ release, filing });

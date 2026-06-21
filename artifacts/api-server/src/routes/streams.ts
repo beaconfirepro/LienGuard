@@ -11,7 +11,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import {
-  lienStreamsTable,
+  lienScheduleOfValuesTable,
   lienProjectsTable,
   workMonthsTable,
   lienDeadlinesTable,
@@ -77,12 +77,12 @@ router.post("/streams/open", async (req, res) => {
 
   const existing = await db
     .select()
-    .from(lienStreamsTable)
+    .from(lienScheduleOfValuesTable)
     .where(
       and(
-        eq(lienStreamsTable.lienProjectId, lienProjectId),
-        eq(lienStreamsTable.workStream, workStream as "construction" | "design"),
-        eq(lienStreamsTable.orgId, orgId),
+        eq(lienScheduleOfValuesTable.lienProjectId, lienProjectId),
+        eq(lienScheduleOfValuesTable.workStream, workStream as "construction" | "design"),
+        eq(lienScheduleOfValuesTable.orgId, orgId),
       ),
     );
 
@@ -92,8 +92,8 @@ router.post("/streams/open", async (req, res) => {
     });
   }
 
-  const [stream] = await db
-    .insert(lienStreamsTable)
+  const [sov] = await db
+    .insert(lienScheduleOfValuesTable)
     .values({
       id: randomUUID(),
       orgId,
@@ -104,7 +104,7 @@ router.post("/streams/open", async (req, res) => {
     })
     .returning();
 
-  return res.status(201).json({ stream });
+  return res.status(201).json({ sov });
 });
 
 // ---------------------------------------------------------------------------
@@ -118,28 +118,28 @@ router.patch("/streams/:id/status", async (req, res) => {
 
   if (!status) return res.status(400).json({ error: "status is required" });
 
-  const [stream] = await db
+  const [sov] = await db
     .select()
-    .from(lienStreamsTable)
-    .where(and(eq(lienStreamsTable.id, id), eq(lienStreamsTable.orgId, orgId)));
+    .from(lienScheduleOfValuesTable)
+    .where(and(eq(lienScheduleOfValuesTable.id, id), eq(lienScheduleOfValuesTable.orgId, orgId)));
 
-  if (!stream) return res.status(404).json({ error: "Stream not found" });
+  if (!sov) return res.status(404).json({ error: "Stream not found" });
 
-  const allowed = VALID_TRANSITIONS[stream.status] ?? [];
+  const allowed = VALID_TRANSITIONS[sov.status] ?? [];
   if (!allowed.includes(status)) {
     return res.status(409).json({
-      error: `Cannot transition stream from ${stream.status} to ${status}`,
+      error: `Cannot transition stream from ${sov.status} to ${status}`,
       allowedTransitions: allowed,
     });
   }
 
   const [updated] = await db
-    .update(lienStreamsTable)
-    .set({ status: status as typeof stream.status, updatedAt: new Date() })
-    .where(eq(lienStreamsTable.id, id))
+    .update(lienScheduleOfValuesTable)
+    .set({ status: status as typeof sov.status, updatedAt: new Date() })
+    .where(eq(lienScheduleOfValuesTable.id, id))
     .returning();
 
-  return res.json({ stream: updated });
+  return res.json({ sov: updated });
 });
 
 // ---------------------------------------------------------------------------
@@ -152,12 +152,12 @@ router.get("/streams/:id", async (req, res) => {
   const { orgId } = getSession(req);
   const { id } = req.params;
 
-  const [stream] = await db
+  const [sov] = await db
     .select()
-    .from(lienStreamsTable)
-    .where(and(eq(lienStreamsTable.id, id), eq(lienStreamsTable.orgId, orgId)));
+    .from(lienScheduleOfValuesTable)
+    .where(and(eq(lienScheduleOfValuesTable.id, id), eq(lienScheduleOfValuesTable.orgId, orgId)));
 
-  if (!stream) return res.status(404).json({ error: "Stream not found" });
+  if (!sov) return res.status(404).json({ error: "Stream not found" });
 
   // Load project, work months, notices, waivers, and filing in parallel
   const [projectRows, workMonths, notices, waivers, filingRows] = await Promise.all([
@@ -171,30 +171,30 @@ router.get("/streams/:id", async (req, res) => {
         county: lienProjectsTable.county,
       })
       .from(lienProjectsTable)
-      .where(and(eq(lienProjectsTable.id, stream.lienProjectId), eq(lienProjectsTable.orgId, orgId)))
+      .where(and(eq(lienProjectsTable.id, sov.lienProjectId), eq(lienProjectsTable.orgId, orgId)))
       .limit(1),
     db
       .select()
       .from(workMonthsTable)
-      .where(and(eq(workMonthsTable.lienStreamId, id), eq(workMonthsTable.orgId, orgId))),
+      .where(and(eq(workMonthsTable.lienScheduleOfValuesId, id), eq(workMonthsTable.orgId, orgId))),
     db
       .select()
       .from(noticesTable)
-      .where(and(eq(noticesTable.lienStreamId, id), eq(noticesTable.orgId, orgId))),
+      .where(and(eq(noticesTable.lienScheduleOfValuesId, id), eq(noticesTable.orgId, orgId))),
     db
       .select()
       .from(waiversTable)
       .where(
         and(
-          eq(waiversTable.lienProjectId, stream.lienProjectId),
-          eq(waiversTable.workStream, stream.workStream),
+          eq(waiversTable.lienProjectId, sov.lienProjectId),
+          eq(waiversTable.workStream, sov.workStream),
           eq(waiversTable.orgId, orgId),
         ),
       ),
     db
       .select()
       .from(lienFilingsTable)
-      .where(and(eq(lienFilingsTable.lienStreamId, id), eq(lienFilingsTable.orgId, orgId)))
+      .where(and(eq(lienFilingsTable.lienScheduleOfValuesId, id), eq(lienFilingsTable.orgId, orgId)))
       .limit(1),
   ]);
 
@@ -286,7 +286,7 @@ router.get("/streams/:id", async (req, res) => {
     .sort((a, b) => new Date(a.adjustedDate).getTime() - new Date(b.adjustedDate).getTime())[0] ?? null;
 
   return res.json({
-    stream,
+    sov,
     project,
     workMonths: workMonthsEnriched,
     notices: noticesEnriched,
@@ -314,15 +314,15 @@ router.get("/streams/:id/work-months", async (req, res) => {
 
   const [stream] = await db
     .select()
-    .from(lienStreamsTable)
-    .where(and(eq(lienStreamsTable.id, id), eq(lienStreamsTable.orgId, orgId)));
+    .from(lienScheduleOfValuesTable)
+    .where(and(eq(lienScheduleOfValuesTable.id, id), eq(lienScheduleOfValuesTable.orgId, orgId)));
 
   if (!stream) return res.status(404).json({ error: "Stream not found" });
 
   const workMonths = await db
     .select()
     .from(workMonthsTable)
-    .where(and(eq(workMonthsTable.lienStreamId, id), eq(workMonthsTable.orgId, orgId)));
+    .where(and(eq(workMonthsTable.lienScheduleOfValuesId, id), eq(workMonthsTable.orgId, orgId)));
 
   // Batch-load all rule metadata so each deadline carries statute citation + description
   const allDeadlineRows = (
@@ -376,8 +376,8 @@ router.post("/streams/:id/recompute", async (req, res) => {
 
   const [stream] = await db
     .select()
-    .from(lienStreamsTable)
-    .where(and(eq(lienStreamsTable.id, id), eq(lienStreamsTable.orgId, orgId)));
+    .from(lienScheduleOfValuesTable)
+    .where(and(eq(lienScheduleOfValuesTable.id, id), eq(lienScheduleOfValuesTable.orgId, orgId)));
 
   if (!stream) return res.status(404).json({ error: "Stream not found" });
 
@@ -497,7 +497,7 @@ router.post("/streams/:id/recompute", async (req, res) => {
       .from(workMonthsTable)
       .where(
         and(
-          eq(workMonthsTable.lienStreamId, id),
+          eq(workMonthsTable.lienScheduleOfValuesId, id),
           eq(workMonthsTable.month, monthDate),
           eq(workMonthsTable.orgId, orgId),
         ),
@@ -524,7 +524,7 @@ router.post("/streams/:id/recompute", async (req, res) => {
         .values({
           id: randomUUID(),
           orgId,
-          lienStreamId: id,
+          lienScheduleOfValuesId: id,
           month: monthDate,
           derivedOverdue,
           clearedFlag,
@@ -554,7 +554,7 @@ router.post("/streams/:id/recompute", async (req, res) => {
   const filingRows = await db
     .select()
     .from(lienFilingsTable)
-    .where(and(eq(lienFilingsTable.lienStreamId, id), eq(lienFilingsTable.orgId, orgId)))
+    .where(and(eq(lienFilingsTable.lienScheduleOfValuesId, id), eq(lienFilingsTable.orgId, orgId)))
     .limit(1);
 
   const filingDate = filingRows[0]?.filingDate ? new Date(filingRows[0].filingDate) : null;

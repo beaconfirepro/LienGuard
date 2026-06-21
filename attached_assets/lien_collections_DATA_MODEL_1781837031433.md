@@ -492,8 +492,8 @@ model WorkMonth {
   id            String   @id @default(cuid())
   orgId         String
   org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  lienStreamId  String
-  lienStream    LienStream @relation(fields: [lienStreamId], references: [id], onDelete: Cascade)
+  lienScheduleOfValuesId  String
+  lienStream    LienStream @relation(fields: [lienScheduleOfValuesId], references: [id], onDelete: Cascade)
   month         DateTime                       // first day of the work month
   derivedOverdue Boolean @default(false)
   clearedFlag   Boolean  @default(false)
@@ -503,9 +503,9 @@ model WorkMonth {
   notices       Notice[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-  @@unique([orgId, lienStreamId, month])
+  @@unique([orgId, lienScheduleOfValuesId, month])
   @@index([orgId])
-  @@index([lienStreamId])
+  @@index([lienScheduleOfValuesId])
 }
 
 model LienDeadline {
@@ -531,8 +531,8 @@ model Notice {
   id            String   @id @default(cuid())
   orgId         String
   org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  lienStreamId  String
-  lienStream    LienStream @relation(fields: [lienStreamId], references: [id], onDelete: Cascade)
+  lienScheduleOfValuesId  String
+  lienStream    LienStream @relation(fields: [lienScheduleOfValuesId], references: [id], onDelete: Cascade)
   workMonthId   String?
   workMonth     WorkMonth? @relation(fields: [workMonthId], references: [id])
   noticeType    NoticeType
@@ -550,7 +550,7 @@ model Notice {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   @@index([orgId])
-  @@index([lienStreamId])
+  @@index([lienScheduleOfValuesId])
 }
 
 model NoticeRecipient {
@@ -617,8 +617,8 @@ model LienFiling {
   id               String   @id @default(cuid())
   orgId            String
   org              Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  lienStreamId     String   @unique
-  lienStream       LienStream @relation(fields: [lienStreamId], references: [id], onDelete: Cascade)
+  lienScheduleOfValuesId     String   @unique
+  lienStream       LienStream @relation(fields: [lienScheduleOfValuesId], references: [id], onDelete: Cascade)
   status           FilingStatus @default(not_filed)
   affidavitDocUrl  String?
   county           String?
@@ -868,7 +868,7 @@ All routes are mounted under the app root. All tenant-scoped routes use `require
 
 | Method | Path | Auth | Body / Notes | Returns |
 |--------|------|------|--------------|---------|
-| POST | `/notices` | session | `{ lienStreamId, workMonthId, noticeType }` — auto-populate from project/party/QBO | Notice (draft) |
+| POST | `/notices` | session | `{ lienScheduleOfValuesId, workMonthId, noticeType }` — auto-populate from project/party/QBO | Notice (draft) |
 | PATCH | `/notices/:id` | session | edit claimAmount, workDescription, monthListed, recipients | Notice |
 | POST | `/notices/:id/approve` | session | — | Notice (approved) |
 | GET | `/notices/:id/pdf` | session | print-ready statutory PDF | PDF |

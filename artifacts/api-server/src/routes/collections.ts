@@ -28,7 +28,7 @@ import {
   linkedClientsTable,
   invoiceLinksTable,
   lienProjectsTable,
-  lienStreamsTable,
+  lienScheduleOfValuesTable,
   workMonthsTable,
   lienDeadlinesTable,
   holdsTable,
@@ -456,27 +456,27 @@ router.get("/accounts/:id", requireSession, async (req, res) => {
   const projectIds = [...new Set(
     clientInvoices.map((i) => i.lienProjectId).filter((id): id is string => id != null),
   )];
-  let lienBackstop: { deadlineDate: string; deadlineType: string; streamId: string } | null = null;
+  let lienBackstop: { deadlineDate: string; deadlineType: string; sovId: string } | null = null;
 
   if (projectIds.length > 0) {
-    const streams = await db
+    const sovs = await db
       .select()
-      .from(lienStreamsTable)
+      .from(lienScheduleOfValuesTable)
       .where(
         and(
-          eq(lienStreamsTable.orgId, orgId),
-          inArray(lienStreamsTable.lienProjectId, projectIds),
+          eq(lienScheduleOfValuesTable.orgId, orgId),
+          inArray(lienScheduleOfValuesTable.lienProjectId, projectIds),
         ),
       );
-    const streamIds = streams.map((s) => s.id);
-    if (streamIds.length > 0) {
+    const sovIds = sovs.map((s) => s.id);
+    if (sovIds.length > 0) {
       const workMonths = await db
         .select()
         .from(workMonthsTable)
         .where(
           and(
             eq(workMonthsTable.orgId, orgId),
-            inArray(workMonthsTable.lienStreamId, streamIds),
+            inArray(workMonthsTable.lienScheduleOfValuesId, sovIds),
           ),
         );
       const wmIds = workMonths.map((w) => w.id);
@@ -493,13 +493,13 @@ router.get("/accounts/:id", requireSession, async (req, res) => {
         );
         if (upcoming) {
           const wm = workMonths.find((w) => w.id === upcoming.workMonthId);
-          const stream = wm
-            ? streams.find((s) => s.id === wm.lienStreamId)
+          const sov = wm
+            ? sovs.find((s) => s.id === wm.lienScheduleOfValuesId)
             : undefined;
           lienBackstop = {
             deadlineDate: new Date(upcoming.adjustedDate).toISOString().slice(0, 10),
             deadlineType: upcoming.ruleKind,
-            streamId: stream?.id ?? "",
+            sovId: sov?.id ?? "",
           };
         }
       }
@@ -576,6 +576,7 @@ router.post(
       .where(eq(linkedClientsTable.id, account.linkedClientId))
       .limit(1);
 
+    // PRETEST_REQUIRED: Validate with HUBSPOT_API_KEY to confirm real activity write-back.
     // Write activity to HubSpot (stub-safe — falls back gracefully when key absent)
     let hubspotActivityId: string | null = null;
     if (linkedClient?.hubspotCompanyId) {

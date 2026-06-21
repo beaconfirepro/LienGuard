@@ -20,7 +20,7 @@ import {
   invoiceLinksTable,
   timesheetLinksTable,
   projectPartyLinksTable,
-  lienStreamsTable,
+  lienScheduleOfValuesTable,
   workMonthsTable,
   lienDeadlinesTable,
   noticesTable,
@@ -351,7 +351,7 @@ async function main() {
 
   // ── Streams ──────────────────────────────────────────────────────────────
   await db
-    .insert(lienStreamsTable)
+    .insert(lienScheduleOfValuesTable)
     .values([
       { id: "str_comm_con", orgId: ORG, lienProjectId: "proj_comm", workStream: "construction", status: "at_risk", openedAt: d("2026-02-01") },
       { id: "str_comm_des", orgId: ORG, lienProjectId: "proj_comm", workStream: "design", status: "open", openedAt: d("2026-01-20") },
@@ -422,7 +422,7 @@ async function main() {
     .values({
       id: "wm_mar",
       orgId: ORG,
-      lienStreamId: "str_comm_con",
+      lienScheduleOfValuesId: "str_comm_con",
       month: d("2026-03-01"),
       derivedOverdue: true,
       clearedFlag: false,
@@ -463,7 +463,7 @@ async function main() {
       {
         id: "not_statutory",
         orgId: ORG,
-        lienStreamId: "str_comm_con",
+        lienScheduleOfValuesId: "str_comm_con",
         workMonthId: "wm_mar",
         noticeType: "statutory_claim",
         status: "sent",
@@ -475,7 +475,7 @@ async function main() {
       {
         id: "not_early",
         orgId: ORG,
-        lienStreamId: "str_comm_con",
+        lienScheduleOfValuesId: "str_comm_con",
         workMonthId: "wm_mar",
         noticeType: "early_warning",
         status: "draft",
@@ -485,7 +485,7 @@ async function main() {
       {
         id: "not_retainage",
         orgId: ORG,
-        lienStreamId: "str_comm_con",
+        lienScheduleOfValuesId: "str_comm_con",
         noticeType: "retainage_claim",
         status: "approved",
         claimAmount: "5000.00",
@@ -534,7 +534,7 @@ async function main() {
     .values({
       id: "fil_1",
       orgId: ORG,
-      lienStreamId: "str_2nd_con",
+      lienScheduleOfValuesId: "str_2nd_con",
       status: "filed",
       county: "Dallas",
       filingDate: d("2026-05-20"),

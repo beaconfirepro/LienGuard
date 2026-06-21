@@ -2154,6 +2154,7 @@ function IntegrationsTab() {
             </table>
           </div>
 
+          {/* PRETEST_REQUIRED: HubSpot integration falls back to fixture/stub behavior when secrets are missing. */}
           <p className="mt-3 text-xs text-muted-foreground">
             Add this in the{" "}
             <span className="font-medium text-foreground">Secrets</span> tab of

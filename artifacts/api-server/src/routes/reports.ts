@@ -11,7 +11,7 @@ import { db } from "@workspace/db";
 import {
   lienFilingsTable,
   lienReleasesTable,
-  lienStreamsTable,
+  lienScheduleOfValuesTable,
   lienProjectsTable,
   workMonthsTable,
   noticesTable,
@@ -33,36 +33,36 @@ router.get("/reports/exposure", requireSession, async (req, res) => {
 
   const openStatuses = ["open", "at_risk", "notice_active", "filing", "filed"] as const;
 
-  const streams = await db
+  const sovs = await db
     .select()
-    .from(lienStreamsTable)
+    .from(lienScheduleOfValuesTable)
     .where(
       and(
-        eq(lienStreamsTable.orgId, orgId),
-        inArray(lienStreamsTable.status, [...openStatuses]),
+        eq(lienScheduleOfValuesTable.orgId, orgId),
+        inArray(lienScheduleOfValuesTable.status, [...openStatuses]),
       ),
     );
 
-  if (streams.length === 0) { res.json({ rows: [] }); return; }
+  if (sovs.length === 0) { res.json({ rows: [] }); return; }
 
-  const projectIds = [...new Set(streams.map((s) => s.lienProjectId))];
+  const projectIds = [...new Set(sovs.map((s) => s.lienProjectId))];
 
   const projects = await db
     .select()
     .from(lienProjectsTable)
     .where(inArray(lienProjectsTable.id, projectIds));
 
-  const streamIds = streams.map((s) => s.id);
+  const sovIds = sovs.map((s) => s.id);
 
   const workMonths = await db
     .select()
     .from(workMonthsTable)
-    .where(and(inArray(workMonthsTable.lienStreamId, streamIds), eq(workMonthsTable.orgId, orgId)));
+    .where(and(inArray(workMonthsTable.lienScheduleOfValuesId, sovIds), eq(workMonthsTable.orgId, orgId)));
 
   const notices = await db
     .select()
     .from(noticesTable)
-    .where(and(inArray(noticesTable.lienStreamId, streamIds), eq(noticesTable.orgId, orgId)));
+    .where(and(inArray(noticesTable.lienScheduleOfValuesId, sovIds), eq(noticesTable.orgId, orgId)));
 
   const waivers = await db
     .select()
@@ -72,36 +72,36 @@ router.get("/reports/exposure", requireSession, async (req, res) => {
   const filings = await db
     .select()
     .from(lienFilingsTable)
-    .where(and(inArray(lienFilingsTable.lienStreamId, streamIds), eq(lienFilingsTable.orgId, orgId)));
+    .where(and(inArray(lienFilingsTable.lienScheduleOfValuesId, sovIds), eq(lienFilingsTable.orgId, orgId)));
 
-  const rows = streams.map((stream) => {
-    const project = projects.find((p) => p.id === stream.lienProjectId);
+  const rows = sovs.map((sov) => {
+    const project = projects.find((p) => p.id === sov.lienProjectId);
     const overdueMonths = workMonths.filter(
-      (wm) => wm.lienStreamId === stream.id && wm.derivedOverdue && !wm.clearedFlag,
+      (wm) => wm.lienScheduleOfValuesId === sov.id && wm.derivedOverdue && !wm.clearedFlag,
     );
-    const streamNotices = notices.filter((n) => n.lienStreamId === stream.id);
-    const streamWaivers = waivers.filter(
-      (w) => w.lienProjectId === stream.lienProjectId && w.workStream === stream.workStream,
+    const sovNotices = notices.filter((n) => n.lienScheduleOfValuesId === sov.id);
+    const sovWaivers = waivers.filter(
+      (w) => w.lienProjectId === sov.lienProjectId && w.workStream === sov.workStream,
     );
-    const filing = filings.find((f) => f.lienStreamId === stream.id);
+    const filing = filings.find((f) => f.lienScheduleOfValuesId === sov.id);
 
     const grossExposure = overdueMonths.reduce((sum, wm) => {
-      const wn = streamNotices.find((n) => n.workMonthId === wm.id);
+      const wn = sovNotices.find((n) => n.workMonthId === wm.id);
       return sum + (wn ? Number(wn.claimAmount) : 0);
     }, 0);
 
-    const waivedAmount = streamWaivers
+    const waivedAmount = sovWaivers
       .filter((w) => w.approvalStatus === "approved")
       .reduce((sum, w) => sum + Number(w.paymentAmount), 0);
 
     return {
-      streamId: stream.id,
-      lienProjectId: stream.lienProjectId,
+      sovId: sov.id,
+      lienProjectId: sov.lienProjectId,
       projectName: project?.cachedProjectName ?? null,
       county: project?.county ?? null,
-      workStream: stream.workStream,
-      streamStatus: stream.status,
-      openedAt: stream.openedAt,
+      workStream: sov.workStream,
+      streamStatus: sov.status,
+      openedAt: sov.openedAt,
       overdueMonths: overdueMonths.length,
       grossExposure,
       waivedAmount,
@@ -137,29 +137,29 @@ router.get("/reports/timeline/:projectId", requireSession, async (req, res) => {
 
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
 
-  const streams = await db
+  const sovs = await db
     .select()
-    .from(lienStreamsTable)
-    .where(and(eq(lienStreamsTable.lienProjectId, projectId), eq(lienStreamsTable.orgId, orgId)));
+    .from(lienScheduleOfValuesTable)
+    .where(and(eq(lienScheduleOfValuesTable.lienProjectId, projectId), eq(lienScheduleOfValuesTable.orgId, orgId)));
 
-  const streamIds = streams.map((s) => s.id);
+  const sovIds = sovs.map((s) => s.id);
 
-  // If no streams, skip work-month/notice/filing queries (inArray([]) would error).
-  const [workMonths, notices, filings, waivers] = streams.length === 0
+  // If no sovs, skip work-month/notice/filing queries (inArray([]) would error).
+  const [workMonths, notices, filings, waivers] = sovs.length === 0
     ? [[], [], [], await db.select().from(waiversTable).where(and(eq(waiversTable.lienProjectId, projectId), eq(waiversTable.orgId, orgId)))]
     : await Promise.all([
         db
           .select()
           .from(workMonthsTable)
-          .where(and(inArray(workMonthsTable.lienStreamId, streamIds), eq(workMonthsTable.orgId, orgId))),
+          .where(and(inArray(workMonthsTable.lienScheduleOfValuesId, sovIds), eq(workMonthsTable.orgId, orgId))),
         db
           .select()
           .from(noticesTable)
-          .where(and(inArray(noticesTable.lienStreamId, streamIds), eq(noticesTable.orgId, orgId))),
+          .where(and(inArray(noticesTable.lienScheduleOfValuesId, sovIds), eq(noticesTable.orgId, orgId))),
         db
           .select()
           .from(lienFilingsTable)
-          .where(and(inArray(lienFilingsTable.lienStreamId, streamIds), eq(lienFilingsTable.orgId, orgId))),
+          .where(and(inArray(lienFilingsTable.lienScheduleOfValuesId, sovIds), eq(lienFilingsTable.orgId, orgId))),
         db
           .select()
           .from(waiversTable)
@@ -196,7 +196,7 @@ router.get("/reports/timeline/:projectId", requireSession, async (req, res) => {
   const events: TimelineEvent[] = [];
 
   // Streams opened
-  for (const s of streams) {
+  for (const s of sovs) {
     events.push({
       eventType: "stream_opened",
       date: new Date(s.openedAt).toISOString(),
@@ -209,13 +209,13 @@ router.get("/reports/timeline/:projectId", requireSession, async (req, res) => {
 
   // Work months
   for (const wm of workMonths) {
-    const stream = streams.find((s) => s.id === wm.lienStreamId);
+    const sov = sovs.find((s) => s.id === wm.lienScheduleOfValuesId);
     events.push({
       eventType: "work_month",
       date: new Date(wm.month).toISOString(),
       label: `Work month ${new Date(wm.month).toISOString().slice(0, 7)} — ${wm.derivedOverdue ? (wm.clearedFlag ? "cleared" : "overdue") : "active"}`,
-      streamId: wm.lienStreamId,
-      workStream: stream?.workStream,
+      streamId: wm.lienScheduleOfValuesId,
+      workStream: sov?.workStream,
       entityId: wm.id,
       meta: { derivedOverdue: wm.derivedOverdue, clearedFlag: wm.clearedFlag },
     });
@@ -224,16 +224,13 @@ router.get("/reports/timeline/:projectId", requireSession, async (req, res) => {
   // Deadlines
   for (const dl of deadlines) {
     const wm = workMonths.find((w) => w.id === dl.workMonthId);
-    const stream = wm ? streams.find((s) => s.id === wm.lienStreamId) : undefined;
+    const sov = wm ? sovs.find((s) => s.id === wm.lienScheduleOfValuesId) : undefined;
     events.push({
       eventType: `deadline_${dl.ruleKind}`,
       date: new Date(dl.adjustedDate).toISOString(),
       label: `${dl.ruleKind.replace(/_/g, " ")} deadline`,
-      streamId: wm?.lienStreamId,
-      workStream: stream?.workStream,
-      entityId: dl.id,
-      meta: {
-        ruleKind: dl.ruleKind,
+      streamId: wm?.lienScheduleOfValuesId,
+      workStream: sov?.workStream,
         adjustedDate: new Date(dl.adjustedDate).toISOString().slice(0, 10),
         satisfiedAt: dl.satisfiedAt ? new Date(dl.satisfiedAt).toISOString().slice(0, 10) : null,
       },
@@ -243,16 +240,13 @@ router.get("/reports/timeline/:projectId", requireSession, async (req, res) => {
   // Notices
   for (const n of notices) {
     const eventDate = n.sentAt ?? n.createdAt;
-    const stream = streams.find((s) => s.id === n.lienStreamId);
+    const sov = sovs.find((s) => s.id === n.lienScheduleOfValuesId);
     events.push({
       eventType: `notice_${n.status}`,
       date: new Date(eventDate).toISOString(),
       label: `${n.noticeType.replace(/_/g, " ")} notice — ${n.status}`,
-      streamId: n.lienStreamId,
-      workStream: stream?.workStream,
-      entityId: n.id,
-      meta: {
-        noticeType: n.noticeType,
+      streamId: n.lienScheduleOfValuesId,
+      workStream: sov?.workStream,
         status: n.status,
         claimAmount: n.claimAmount,
         sentAt: n.sentAt ? new Date(n.sentAt).toISOString().slice(0, 10) : null,
@@ -281,15 +275,13 @@ router.get("/reports/timeline/:projectId", requireSession, async (req, res) => {
   // Filings
   for (const f of filings) {
     const eventDate = f.filingDate ?? f.createdAt;
-    const stream = streams.find((s) => s.id === f.lienStreamId);
+    const sov = sovs.find((s) => s.id === f.lienScheduleOfValuesId);
     events.push({
       eventType: `filing_${f.status}`,
       date: new Date(eventDate).toISOString(),
       label: `Lien filed — ${f.county ?? "county TBD"} (${f.status})`,
-      streamId: f.lienStreamId,
-      workStream: stream?.workStream,
-      entityId: f.id,
-      meta: {
+      streamId: f.lienScheduleOfValuesId,
+      workStream: sov?.workStream,
         status: f.status,
         county: f.county,
         recordingRef: f.recordingRef,
@@ -307,7 +299,7 @@ router.get("/reports/timeline/:projectId", requireSession, async (req, res) => {
   for (const r of releases) {
     const eventDate = r.signedDate ?? r.requestedAt ?? r.createdAt;
     const filing = filings.find((f) => f.id === r.filingId);
-    const stream = filing ? streams.find((s) => s.id === filing.lienStreamId) : undefined;
+    const stream = filing ? streams.find((s) => s.id === filing.lienScheduleOfValuesId) : undefined;
     events.push({
       eventType: `release_${r.status}`,
       date: new Date(eventDate).toISOString(),
@@ -367,7 +359,7 @@ router.get("/reports/lapsed", requireSession, async (req, res) => {
     .from(workMonthsTable)
     .where(inArray(workMonthsTable.id, overdueWorkMonthIds));
 
-  const overdueStreamIds = [...new Set(overdueWorkMonths.map((wm) => wm.lienStreamId))];
+  const overdueStreamIds = [...new Set(overdueWorkMonths.map((wm) => wm.lienScheduleOfValuesId))];
 
   // Get all filings for these streams
   const filings = await db
@@ -375,13 +367,13 @@ router.get("/reports/lapsed", requireSession, async (req, res) => {
     .from(lienFilingsTable)
     .where(
       and(
-        inArray(lienFilingsTable.lienStreamId, overdueStreamIds),
+        inArray(lienFilingsTable.lienScheduleOfValuesId, overdueStreamIds),
         eq(lienFilingsTable.orgId, orgId),
       ),
     );
 
   const filedStreamIds = new Set(
-    filings.filter((f) => f.status === "filed" || f.status === "post_filing_notice_sent").map((f) => f.lienStreamId),
+    filings.filter((f) => f.status === "filed" || f.status === "post_filing_notice_sent").map((f) => f.lienScheduleOfValuesId),
   );
 
   // Lapsed = overdue filing deadline AND no filed filing
@@ -391,11 +383,11 @@ router.get("/reports/lapsed", requireSession, async (req, res) => {
 
   const streams = await db
     .select()
-    .from(lienStreamsTable)
+    .from(lienScheduleOfValuesTable)
     .where(
       and(
-        inArray(lienStreamsTable.id, lapsedStreamIds),
-        eq(lienStreamsTable.orgId, orgId),
+        inArray(lienScheduleOfValuesTable.id, lapsedStreamIds),
+        eq(lienScheduleOfValuesTable.orgId, orgId),
       ),
     );
 
@@ -410,9 +402,9 @@ router.get("/reports/lapsed", requireSession, async (req, res) => {
     const stream = streams.find((s) => s.id === sid);
     if (stream && stream.status !== "lapsed") {
       await db
-        .update(lienStreamsTable)
+        .update(lienScheduleOfValuesTable)
         .set({ status: "lapsed", updatedAt: new Date() })
-        .where(eq(lienStreamsTable.id, sid));
+        .where(eq(lienScheduleOfValuesTable.id, sid));
     }
   }
 
@@ -421,7 +413,7 @@ router.get("/reports/lapsed", requireSession, async (req, res) => {
     const project = stream ? projects.find((p) => p.id === stream.lienProjectId) : undefined;
     const streamDeadlines = overdueDeadlines.filter((d) => {
       const wm = overdueWorkMonths.find((w) => w.id === d.workMonthId);
-      return wm?.lienStreamId === sid;
+      return wm?.lienScheduleOfValuesId === sid;
     });
     const earliestMissed = streamDeadlines.reduce<Date | null>((min, d) => {
       const dt = new Date(d.adjustedDate);

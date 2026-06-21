@@ -13,7 +13,7 @@ import { db } from "@workspace/db";
 import {
   lienDeadlinesTable,
   workMonthsTable,
-  lienStreamsTable,
+  lienScheduleOfValuesTable,
   lienProjectsTable,
   projectPartyLinksTable,
   noticesTable,
@@ -104,18 +104,18 @@ router.post("/run", async (req, res) => {
   const atRiskWorkMonthIds = new Set(workMonths.map((w) => w.id));
 
   // 3. Load streams for the at-risk work months.
-  const streamIds = [...new Set(workMonths.map((w) => w.lienStreamId))];
-  const streams = streamIds.length
+  const sovIds = [...new Set(workMonths.map((w) => w.lienScheduleOfValuesId))];
+  const sovs = sovIds.length
     ? await db
         .select()
-        .from(lienStreamsTable)
-        .where(and(eq(lienStreamsTable.orgId, orgId), inArray(lienStreamsTable.id, streamIds)))
+        .from(lienScheduleOfValuesTable)
+        .where(and(eq(lienScheduleOfValuesTable.orgId, orgId), inArray(lienScheduleOfValuesTable.id, sovIds)))
     : [];
 
-  const streamMap = new Map(streams.map((s) => [s.id, s]));
+  const sovMap = new Map(sovs.map((s) => [s.id, s]));
 
   // 4. Load projects for streams.
-  const projectIds = [...new Set(streams.map((s) => s.lienProjectId))];
+  const projectIds = [...new Set(sovs.map((s) => s.lienProjectId))];
   const projects = projectIds.length
     ? await db
         .select()
@@ -152,15 +152,15 @@ router.post("/run", async (req, res) => {
   // 6. Check which stream+workMonth combos already have a notice.
   const existingNotices = streamIds.length
     ? await db
-        .select({ lienStreamId: noticesTable.lienStreamId, workMonthId: noticesTable.workMonthId, noticeType: noticesTable.noticeType })
+        .select({ lienScheduleOfValuesId: noticesTable.lienScheduleOfValuesId, workMonthId: noticesTable.workMonthId, noticeType: noticesTable.noticeType })
         .from(noticesTable)
-        .where(and(eq(noticesTable.orgId, orgId), inArray(noticesTable.lienStreamId, streamIds)))
+        .where(and(eq(noticesTable.orgId, orgId), inArray(noticesTable.lienScheduleOfValuesId, streamIds)))
     : [];
 
   // Key includes noticeType so that an existing early_warning doesn't block
   // the required statutory_claim from being generated for the same stream+month.
   const existingKeys = new Set(
-    existingNotices.map((n) => `${n.lienStreamId}:${n.workMonthId ?? ""}:${n.noticeType}`),
+    existingNotices.map((n) => `${n.lienScheduleOfValuesId}:${n.workMonthId ?? ""}:${n.noticeType}`),
   );
 
   // 7. Create draft notices for at-risk work months that don't have one yet.
@@ -169,9 +169,9 @@ router.post("/run", async (req, res) => {
 
   for (const wm of workMonths) {
     if (!atRiskWorkMonthIds.has(wm.id)) continue;
-    const stream = streamMap.get(wm.lienStreamId);
-    if (!stream) continue;
-    const project = projectMap.get(stream.lienProjectId);
+    const sov = sovMap.get(wm.lienScheduleOfValuesId);
+    if (!sov) continue;
+    const project = projectMap.get(sov.lienProjectId);
     if (!project) continue;
 
     // Determine the target notice type for this workflow.
@@ -180,7 +180,7 @@ router.post("/run", async (req, res) => {
         ? "statutory_claim"
         : "statutory_claim";
 
-    const key = `${stream.id}:${wm.id}:${noticeType}`;
+    const key = `${sov.id}:${wm.id}:${noticeType}`;
     if (existingKeys.has(key)) {
       skipped++;
       continue;
@@ -201,12 +201,12 @@ router.post("/run", async (req, res) => {
     await db.insert(noticesTable).values({
       id: noticeId,
       orgId,
-      lienStreamId: stream.id,
+      lienScheduleOfValuesId: stream.id,
       workMonthId: wm.id,
       noticeType,
       status: "draft",
       claimAmount,
-      workDescription: buildWorkDescription(stream.workStream, noticeType),
+      workDescription: buildWorkDescription(sov.workStream, noticeType),
       monthListed: wm.month,
     });
 
@@ -232,7 +232,7 @@ router.post("/run", async (req, res) => {
   let supplierRisksFlagged = 0;
   for (const wm of workMonths) {
     if (!atRiskWorkMonthIds.has(wm.id)) continue;
-    const stream = streamMap.get(wm.lienStreamId);
+    const stream = streamMap.get(wm.lienScheduleOfValuesId);
     if (!stream) continue;
 
     // Notice deadline for this specific work month.
@@ -250,7 +250,7 @@ router.post("/run", async (req, res) => {
         and(
           eq(invoiceLinksTable.orgId, orgId),
           eq(invoiceLinksTable.isSupplierInvoice, true),
-          eq(invoiceLinksTable.lienProjectId, stream.lienProjectId),
+          eq(invoiceLinksTable.lienProjectId, sov.lienProjectId),
           gte(invoiceLinksTable.invoiceDate, wmStart),
           lt(invoiceLinksTable.invoiceDate, wmEnd),
         ),
@@ -269,7 +269,7 @@ router.post("/run", async (req, res) => {
           await db.insert(supplierNoticeRisksTable).values({
             id: randomUUID(),
             orgId,
-            lienProjectId: stream.lienProjectId,
+            lienProjectId: sov.lienProjectId,
             invoiceLinkId: inv.id,
             status: "flagged",
             supplierDeadline: supplierDue,
@@ -327,7 +327,7 @@ router.get("/report", async (req, res) => {
 
   const wmMap = new Map(workMonths.map((w) => [w.id, w]));
 
-  const streamIds = [...new Set(workMonths.map((w) => w.lienStreamId))];
+  const streamIds = [...new Set(workMonths.map((w) => w.lienScheduleOfValuesId))];
   if (!streamIds.length) {
     res.json({ month: fmtMonth(start), rows: [] });
     return;
@@ -335,8 +335,8 @@ router.get("/report", async (req, res) => {
 
   const streams = await db
     .select()
-    .from(lienStreamsTable)
-    .where(and(eq(lienStreamsTable.orgId, orgId), inArray(lienStreamsTable.id, streamIds)));
+    .from(lienScheduleOfValuesTable)
+    .where(and(eq(lienScheduleOfValuesTable.orgId, orgId), inArray(lienScheduleOfValuesTable.id, streamIds)));
 
   const streamMap = new Map(streams.map((s) => [s.id, s]));
 
@@ -352,12 +352,12 @@ router.get("/report", async (req, res) => {
   const notices = await db
     .select()
     .from(noticesTable)
-    .where(and(eq(noticesTable.orgId, orgId), inArray(noticesTable.lienStreamId, streamIds)));
+    .where(and(eq(noticesTable.orgId, orgId), inArray(noticesTable.lienScheduleOfValuesId, streamIds)));
 
   // Group notices by stream+workMonth.
   const noticeMap = new Map<string, typeof notices[0]>();
   for (const n of notices) {
-    const key = `${n.lienStreamId}:${n.workMonthId ?? ""}`;
+    const key = `${n.lienScheduleOfValuesId}:${n.workMonthId ?? ""}`;
     // Prefer highest-status notice (sent > approved > draft).
     const STATUS_ORDER: Record<string, number> = { sent: 3, delivered: 4, approved: 2, draft: 1 };
     const existing = noticeMap.get(key);
@@ -387,7 +387,7 @@ router.get("/report", async (req, res) => {
   const rows = deadlines.map((dl) => {
     const wm = wmMap.get(dl.workMonthId!);
     if (!wm) return null;
-    const stream = streamMap.get(wm.lienStreamId);
+    const stream = streamMap.get(wm.lienScheduleOfValuesId);
     if (!stream) return null;
     const project = projectMap.get(stream.lienProjectId);
     if (!project) return null;
@@ -493,11 +493,11 @@ router.get("/send-queue", async (req, res) => {
   }
 
   // Load streams + projects.
-  const streamIds = [...new Set(notices.map((n) => n.lienStreamId))];
+  const streamIds = [...new Set(notices.map((n) => n.lienScheduleOfValuesId))];
   const streams = await db
     .select()
-    .from(lienStreamsTable)
-    .where(and(eq(lienStreamsTable.orgId, orgId), inArray(lienStreamsTable.id, streamIds)));
+    .from(lienScheduleOfValuesTable)
+    .where(and(eq(lienScheduleOfValuesTable.orgId, orgId), inArray(lienScheduleOfValuesTable.id, streamIds)));
 
   const streamMap = new Map(streams.map((s) => [s.id, s]));
 
@@ -529,8 +529,8 @@ router.get("/send-queue", async (req, res) => {
   const deadlineByWorkMonth = new Map(deadlines.map((d) => [d.workMonthId!, d]));
 
   const enriched = notices.map((n) => {
-    const stream = streamMap.get(n.lienStreamId);
-    const project = stream ? projectMap.get(stream.lienProjectId) : undefined;
+    const sov = sovMap.get(n.lienScheduleOfValuesId);
+    const project = sov ? projectMap.get(sov.lienProjectId) : undefined;
     const deadline = n.workMonthId ? deadlineByWorkMonth.get(n.workMonthId) : undefined;
 
     return {
@@ -543,8 +543,8 @@ router.get("/send-queue", async (req, res) => {
       createdAt: n.createdAt,
       noticeDeadline: deadline?.adjustedDate ?? null,
       recipients: recipientsByNotice.get(n.id) ?? [],
-      stream: stream
-        ? { id: stream.id, workStream: stream.workStream, status: stream.status }
+      sov: sov
+        ? { id: sov.id, workStream: sov.workStream, status: sov.status }
         : null,
       project: project
         ? {

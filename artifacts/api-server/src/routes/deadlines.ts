@@ -9,7 +9,7 @@ import { db } from "@workspace/db";
 import {
   lienDeadlinesTable,
   workMonthsTable,
-  lienStreamsTable,
+  lienScheduleOfValuesTable,
   lienRulesTable,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";

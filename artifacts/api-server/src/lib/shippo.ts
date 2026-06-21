@@ -75,6 +75,7 @@ export async function createCertifiedMailLabel(
     return { trackingNumber: data.tracking_number, labelUrl: data.label_url };
   }
 
+  // PRETEST_REQUIRED: Configure SHIPPO_API_KEY to validate real certified-mail behavior.
   // Stub — deterministic fake tracking number derived from referenceId.
   const stub = `9400100000000${Buffer.from(referenceId).toString("hex").slice(0, 9).toUpperCase()}`;
   return {

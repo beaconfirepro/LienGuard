@@ -17,9 +17,9 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { ResponsiveTable } from "@/components/ui/responsive-table";
 import { DeadlineCountdown } from "@/components/ui/deadline-countdown";
 import { ListPageLayout, ListTableState } from "@/components/ui/list-page";
-import { Search } from "lucide-react";
+import { Search, ChevronDown } from "lucide-react";
 
-interface LienStream {
+interface ScheduleOfValues {
   id: string;
   workStream: string;
   status: string;
@@ -51,7 +51,7 @@ interface Project {
   legalPropertyAddress: string | null;
   contractStartDate: string | null;
   completionChecklistComplete: boolean;
-  streams: LienStream[];
+  sovs: ScheduleOfValues[];
 }
 
 function apiFetch<T>(path: string): Promise<T> {
@@ -73,12 +73,12 @@ const WORKFLOW_LABELS: Record<string, string> = {
 
 const RISK_ORDER = ["at_risk", "filing", "lapsed", "notice_active", "filed", "open", "released", "closed"];
 
-function highestRisk(streams: LienStream[]): string {
-  if (!streams.length) return "none";
+function highestRisk(sovs: ScheduleOfValues[] | undefined): string {
+  if (!sovs || !sovs.length) return "none";
   for (const r of RISK_ORDER) {
-    if (streams.some((s) => s.status === r)) return r;
+    if (sovs.some((s) => s.status === r)) return r;
   }
-  return streams[0].status;
+  return sovs[0]?.status ?? "none";
 }
 
 const DAYS_BY_STATUS: Record<string, number> = {
@@ -89,6 +89,11 @@ export default function ProjectsView() {
   const [, setLocation] = useLocation();
   const [search, setSearch] = React.useState("");
   const [filterWorkflow, setFilterWorkflow] = React.useState("all");
+  const [sortBy, setSortBy] = React.useState<{ key: string; direction: "asc" | "desc" } | null>(null);
+  const [filterStatus, setFilterStatus] = React.useState<string | null>(null);
+  const [filterTier, setFilterTier] = React.useState<string | null>(null);
+  const [statusFilterOpen, setStatusFilterOpen] = React.useState(false);
+  const [tierFilterOpen, setTierFilterOpen] = React.useState(false);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["projects"],
@@ -119,8 +124,66 @@ export default function ProjectsView() {
     return true;
   });
 
+  type ProjectRow = Project & { risk: string; days: number };
+
+  const rows: ProjectRow[] = filtered.map((p) => ({
+    ...p,
+    risk: highestRisk(p.sovs),
+    days: DAYS_BY_STATUS[highestRisk(p.sovs)] ?? 60,
+  }));
+
+  // Get unique statuses and tiers for filters
+  const statusOptions = React.useMemo(() => {
+    if (!rows || rows.length === 0) return [];
+    const statuses = new Set(rows.map((r) => r.risk).filter(Boolean));
+    return Array.from(statuses).sort((a, b) => {
+      const aIdx = RISK_ORDER.indexOf(a);
+      const bIdx = RISK_ORDER.indexOf(b);
+      return aIdx - bIdx;
+    });
+  }, [rows]);
+
+  const tierOptions = ["first_tier", "second_tier"];
+
+  // Apply column filters
+  let filteredRows = rows.filter((r) => {
+    if (filterStatus && r.risk !== filterStatus) return false;
+    if (filterTier && r.contractorTier !== filterTier) return false;
+    return true;
+  });
+
+  // Apply sorting
+  if (sortBy) {
+    const sortKey = sortBy.key;
+    filteredRows = [...filteredRows].sort((a, b) => {
+      let aVal: any;
+      let bVal: any;
+
+      if (sortKey === "name") {
+        aVal = (a.cachedProjectName ?? a.hubspotProjectId).toLowerCase();
+        bVal = (b.cachedProjectName ?? b.hubspotProjectId).toLowerCase();
+      } else if (sortKey === "tier") {
+        aVal = a.contractorTier === "second_tier" ? 1 : 0;
+        bVal = b.contractorTier === "second_tier" ? 1 : 0;
+      } else if (sortKey === "sovs") {
+        aVal = a.sovs.length;
+        bVal = b.sovs.length;
+      } else if (sortKey === "deadline") {
+        aVal = a.days;
+        bVal = b.days;
+      } else if (sortKey === "status") {
+        aVal = RISK_ORDER.indexOf(a.risk);
+        bVal = RISK_ORDER.indexOf(b.risk);
+      }
+
+      if (aVal < bVal) return sortBy.direction === "asc" ? -1 : 1;
+      if (aVal > bVal) return sortBy.direction === "asc" ? 1 : -1;
+      return 0;
+    });
+  }
+
   const atRiskCount = projects.filter((p) => {
-    const r = highestRisk(p.streams);
+    const r = highestRisk(p.sovs);
     return r === "at_risk" || r === "filing" || r === "lapsed";
   }).length;
   const incompleteCount = projects.filter((p) => !p.completionChecklistComplete).length;
@@ -163,18 +226,11 @@ export default function ProjectsView() {
     [readySig],
   );
 
-  type ProjectRow = Project & { risk: string; days: number };
-
-  const rows: ProjectRow[] = filtered.map((p) => ({
-    ...p,
-    risk: highestRisk(p.streams),
-    days: DAYS_BY_STATUS[highestRisk(p.streams)] ?? 60,
-  }));
-
   const columns = [
     {
       key: "name",
       header: "Project / Client",
+      sortable: true,
       render: (r: ProjectRow) => (
         <div className="min-w-0">
           <div className="truncate text-[13px] font-semibold" style={{ color: "var(--text-base)" }}>
@@ -191,6 +247,7 @@ export default function ProjectsView() {
     {
       key: "tier",
       header: "Tier",
+      sortable: true,
       render: (r: ProjectRow) => (
         <span className="font-mono text-[11px]" style={{ color: "var(--text-dim)" }}>
           {r.contractorTier === "second_tier" ? "T2" : "T1"}
@@ -198,30 +255,41 @@ export default function ProjectsView() {
       ),
     },
     {
-      key: "streams",
-      header: "Streams",
+      key: "sovs",
+      header: "Schedules of Values",
+      sortable: true,
       render: (r: ProjectRow) => (
         <span className="font-mono text-[11px]" style={{ color: "var(--text-dim)" }}>
-          {r.streams.length}
+          {r.sovs?.length ?? 0}
         </span>
       ),
     },
     {
       key: "deadline",
       header: "Next deadline",
-      render: (r: ProjectRow) => r.streams.length > 0
+      sortable: true,
+      render: (r: ProjectRow) => (r.sovs?.length ?? 0) > 0
         ? <DeadlineCountdown days={r.days} />
-        : <span className="text-[11px]" style={{ color: "var(--text-muted-color)" }}>No streams</span>,
+        : <span className="text-[11px]" style={{ color: "var(--text-muted-color)" }}>No schedules of values</span>,
     },
     {
       key: "status",
       header: "Status",
       align: "right" as const,
+      sortable: true,
       render: (r: ProjectRow) => r.risk === "none"
-        ? <span className="text-[11px]" style={{ color: "var(--text-muted-color)" }}>No streams</span>
+        ? <span className="text-[11px]" style={{ color: "var(--text-muted-color)" }}>Healthy</span>
         : <StatusBadge status={r.risk} />,
     },
   ];
+
+  const handleSort = (key: string) => {
+    if (sortBy?.key === key) {
+      setSortBy(sortBy.direction === "asc" ? { key, direction: "desc" } : null);
+    } else {
+      setSortBy({ key, direction: "asc" });
+    }
+  };
 
   return (
     <ListPageLayout
@@ -260,13 +328,119 @@ export default function ProjectsView() {
               </button>
             ))}
           </div>
+
+          {/* Status Filter Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setStatusFilterOpen(!statusFilterOpen)}
+              className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-[12px] font-semibold"
+              style={{
+                borderColor: "var(--helm-border)",
+                background: filterStatus ? "var(--surface-2)" : "transparent",
+                color: filterStatus ? "#6366f1" : "var(--text-dim)",
+              }}
+            >
+              Status {filterStatus && `(${filterStatus.replace(/_/g, " ")})`}
+              <ChevronDown className="h-4 w-4" />
+            </button>
+            {statusFilterOpen && (
+              <div
+                className="absolute right-0 top-full mt-1 w-40 rounded-md border shadow-lg z-10"
+                style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => {
+                    setFilterStatus(null);
+                    setStatusFilterOpen(false);
+                  }}
+                  className="block w-full px-3 py-2 text-[12px] text-left hover:opacity-80"
+                  style={{
+                    color: filterStatus === null ? "#6366f1" : "var(--text-base)",
+                    background: filterStatus === null ? "var(--surface-2)" : "",
+                  }}
+                >
+                  All Status
+                </button>
+                {statusOptions.map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => {
+                      setFilterStatus(status);
+                      setStatusFilterOpen(false);
+                    }}
+                    className="block w-full px-3 py-2 text-[12px] text-left hover:opacity-80"
+                    style={{
+                      color: filterStatus === status ? "#6366f1" : "var(--text-base)",
+                      background: filterStatus === status ? "var(--surface-2)" : "",
+                    }}
+                  >
+                    {status === "none" ? "Healthy" : status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Tier Filter Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setTierFilterOpen(!tierFilterOpen)}
+              className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-[12px] font-semibold"
+              style={{
+                borderColor: "var(--helm-border)",
+                background: filterTier ? "var(--surface-2)" : "transparent",
+                color: filterTier ? "#6366f1" : "var(--text-dim)",
+              }}
+            >
+              Tier {filterTier && `(${filterTier === "second_tier" ? "T2" : "T1"})`}
+              <ChevronDown className="h-4 w-4" />
+            </button>
+            {tierFilterOpen && (
+              <div
+                className="absolute right-0 top-full mt-1 w-32 rounded-md border shadow-lg z-10"
+                style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => {
+                    setFilterTier(null);
+                    setTierFilterOpen(false);
+                  }}
+                  className="block w-full px-3 py-2 text-[12px] text-left hover:opacity-80"
+                  style={{
+                    color: filterTier === null ? "#6366f1" : "var(--text-base)",
+                    background: filterTier === null ? "var(--surface-2)" : "",
+                  }}
+                >
+                  All Tiers
+                </button>
+                {tierOptions.map((tier) => (
+                  <button
+                    key={tier}
+                    onClick={() => {
+                      setFilterTier(tier);
+                      setTierFilterOpen(false);
+                    }}
+                    className="block w-full px-3 py-2 text-[12px] text-left hover:opacity-80"
+                    style={{
+                      color: filterTier === tier ? "#6366f1" : "var(--text-base)",
+                      background: filterTier === tier ? "var(--surface-2)" : "",
+                    }}
+                  >
+                    {tier === "second_tier" ? "T2" : "T1"}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </>
       }
     >
       <ListTableState
         isLoading={isLoading}
         isError={isError}
-        isEmpty={filtered.length === 0}
+        isEmpty={filteredRows.length === 0}
         loadingText="Loading projects…"
         errorText={
           String((error as Error)?.message ?? "").includes("401")
@@ -279,11 +453,13 @@ export default function ProjectsView() {
       >
         <ResponsiveTable
           columns={columns}
-          rows={rows}
+          rows={filteredRows}
           gridTemplate="1.5fr .4fr .4fr .8fr .9fr"
           onRowClick={(r: ProjectRow) => {
             window.location.href = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/projects/${r.id}`;
           }}
+          sortBy={sortBy}
+          onSort={handleSort}
         />
       </ListTableState>
     </ListPageLayout>

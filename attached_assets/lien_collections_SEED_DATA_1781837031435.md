@@ -203,7 +203,7 @@ async function main() {
 
   // ---- Work months (overdue / cleared / at-risk) + deadlines ----
   const wmOverdue = await prisma.workMonth.create({ data: {
-    id: "wm_mar", orgId: ORG, lienStreamId: streamComm.id, month: d("2026-03-01"),
+    id: "wm_mar", orgId: ORG, lienScheduleOfValuesId: streamComm.id, month: d("2026-03-01"),
     derivedOverdue: true, clearedFlag: false, invoiceLinkId: invOverdue.id } });
   await prisma.lienDeadline.createMany({ data: [
     { id: "dl_notice", orgId: ORG, workMonthId: wmOverdue.id, ruleId: "rule_cs_notice", ruleKind: "notice",
@@ -216,14 +216,14 @@ async function main() {
 
   // ---- Notices (one per NoticeType + NoticeStatus) ----
   const noticeSent = await prisma.notice.create({ data: {
-    id: "not_statutory", orgId: ORG, lienStreamId: streamComm.id, workMonthId: wmOverdue.id,
+    id: "not_statutory", orgId: ORG, lienScheduleOfValuesId: streamComm.id, workMonthId: wmOverdue.id,
     noticeType: "statutory_claim", status: "sent", claimAmount: 48250.00, monthListed: d("2026-03-01"),
     sentAt: d("2026-05-10"), generatedDocUrl: "s3://notices/not_statutory.pdf" } });
   await prisma.notice.create({ data: {
-    id: "not_early", orgId: ORG, lienStreamId: streamComm.id, workMonthId: wmOverdue.id,
+    id: "not_early", orgId: ORG, lienScheduleOfValuesId: streamComm.id, workMonthId: wmOverdue.id,
     noticeType: "early_warning", status: "draft", claimAmount: 48250.00, monthListed: d("2026-03-01") } });
   await prisma.notice.create({ data: {
-    id: "not_retainage", orgId: ORG, lienStreamId: streamComm.id, noticeType: "retainage_claim",
+    id: "not_retainage", orgId: ORG, lienScheduleOfValuesId: streamComm.id, noticeType: "retainage_claim",
     status: "approved", claimAmount: 5000.00, monthListed: d("2026-03-01"), approvedByUserId: "user_coord", approvedAt: NOW } });
   await prisma.noticeRecipient.createMany({ data: [
     { id: "nr_owner", orgId: ORG, noticeId: noticeSent.id, recipientType: "owner",
@@ -252,7 +252,7 @@ async function main() {
 
   // ---- Filing + Release (on the 2nd-tier filed stream) ----
   const filing = await prisma.lienFiling.create({ data: {
-    id: "fil_1", orgId: ORG, lienStreamId: stream2nd.id, status: "filed", county: "Dallas",
+    id: "fil_1", orgId: ORG, lienScheduleOfValuesId: stream2nd.id, status: "filed", county: "Dallas",
     filingDate: d("2026-05-20"), recordingRef: "2026-DAL-00123", filingFee: 95.00,
     postFilingNoticeDeadline: d("2026-05-27"), enforcementDeadline: d("2027-05-20"),
     affidavitDocUrl: "s3://affidavits/fil_1.pdf" } });

@@ -5,7 +5,7 @@ import {
   projectPartyLinksTable,
   linkedClientsTable,
   subSystemTypesTable,
-  lienStreamsTable,
+  lienScheduleOfValuesTable,
   jurisdictionsTable,
   workMonthsTable,
   lienDeadlinesTable,
@@ -153,12 +153,12 @@ router.get("/", async (req, res) => {
     limit: limitRaw,
   } = req.query as Record<string, string | undefined>;
 
-  const [projects, allStreams, allParties] = await Promise.all([
+  const [projects, allSovs, allParties] = await Promise.all([
     db
       .select()
       .from(lienProjectsTable)
       .where(eq(lienProjectsTable.orgId, orgId)),
-    db.select().from(lienStreamsTable).where(eq(lienStreamsTable.orgId, orgId)),
+    db.select().from(lienScheduleOfValuesTable).where(eq(lienScheduleOfValuesTable.orgId, orgId)),
     db
       .select({
         lienProjectId: projectPartyLinksTable.lienProjectId,
@@ -170,18 +170,18 @@ router.get("/", async (req, res) => {
 
   // Fetch all work months + deadlines for the org so we can summarize each
   // project's next upcoming statutory deadline without N+1 queries.
-  const allStreamIds = allStreams.map((s) => s.id);
+  const allSovIds = allSovs.map((s) => s.id);
   const allWorkMonths =
-    allStreamIds.length > 0
+    allSovIds.length > 0
       ? await db
-          .select({ id: workMonthsTable.id, lienStreamId: workMonthsTable.lienStreamId })
+          .select({ id: workMonthsTable.id, lienScheduleOfValuesId: workMonthsTable.lienScheduleOfValuesId })
           .from(workMonthsTable)
           .where(
-            and(inArray(workMonthsTable.lienStreamId, allStreamIds), eq(workMonthsTable.orgId, orgId)),
+            and(inArray(workMonthsTable.lienScheduleOfValuesId, allSovIds), eq(workMonthsTable.orgId, orgId)),
           )
       : [];
-  const workMonthToStream = new Map(allWorkMonths.map((wm) => [wm.id, wm.lienStreamId]));
-  const streamToProject = new Map(allStreams.map((s) => [s.id, s.lienProjectId]));
+  const workMonthToSov = new Map(allWorkMonths.map((wm) => [wm.id, wm.lienScheduleOfValuesId]));
+  const sovToProject = new Map(allSovs.map((s) => [s.id, s.lienProjectId]));
   const allWorkMonthIds = allWorkMonths.map((wm) => wm.id);
   const allDeadlines =
     allWorkMonthIds.length > 0
@@ -205,16 +205,16 @@ router.get("/", async (req, res) => {
   // Group earliest unsatisfied deadline per project (past = overdue, future = upcoming).
   const nextDeadlineByProject = new Map<
     string,
-    { id: string; adjustedDate: Date; lienStreamId: string }
+    { id: string; adjustedDate: Date; lienScheduleOfValuesId: string }
   >();
   for (const d of allDeadlines) {
     if (d.satisfiedAt) continue;
-    const streamId = workMonthToStream.get(d.workMonthId);
-    if (!streamId) continue;
-    const projectId = streamToProject.get(streamId);
+    const sovId = workMonthToSov.get(d.workMonthId);
+    if (!sovId) continue;
+    const projectId = sovToProject.get(sovId);
     if (!projectId) continue;
     const existing = nextDeadlineByProject.get(projectId);
-    const candidate = { id: d.id, adjustedDate: d.adjustedDate, lienStreamId: streamId };
+    const candidate = { id: d.id, adjustedDate: d.adjustedDate, lienScheduleOfValuesId: sovId };
     if (
       !existing ||
       new Date(candidate.adjustedDate).getTime() < new Date(existing.adjustedDate).getTime()
@@ -223,15 +223,15 @@ router.get("/", async (req, res) => {
     }
   }
 
-  // Attach streams + compute live checklist for each project
+  // Attach sovs + compute live checklist for each project
   const projectsWithMeta = projects.map((p) => {
-    const streams = allStreams.filter((s) => s.lienProjectId === p.id);
+    const sovs = allSovs.filter((s) => s.lienProjectId === p.id);
     const parties = allParties.filter((pp) => pp.lienProjectId === p.id);
     const { complete: liveChecklistComplete } = computeChecklist(p, parties);
     return {
       ...p,
       completionChecklistComplete: liveChecklistComplete,
-      streams,
+      sovs,
       nextDeadline: nextDeadlineByProject.get(p.id) ?? null,
     };
   });
@@ -254,7 +254,7 @@ router.get("/", async (req, res) => {
     const validRisks: RiskLevel[] = ["high", "medium", "low", "ok"];
     if (validRisks.includes(risk as RiskLevel)) {
       filtered = filtered.filter((p) => {
-        const statuses = p.streams.map((s) => s.status);
+        const statuses = p.sovs.map((s) => s.status);
         return highestRisk(statuses) === (risk as RiskLevel);
       });
     }
@@ -644,11 +644,11 @@ router.post("/:id/sync", async (req, res) => {
   // Collect the project's synced streams to return alongside the refreshed project
   const syncedStreams = await db
     .select()
-    .from(lienStreamsTable)
+    .from(lienScheduleOfValuesTable)
     .where(
       and(
-        eq(lienStreamsTable.lienProjectId, id),
-        eq(lienStreamsTable.orgId, orgId),
+        eq(lienScheduleOfValuesTable.lienProjectId, id),
+        eq(lienScheduleOfValuesTable.orgId, orgId),
       ),
     );
 
@@ -685,11 +685,11 @@ router.get("/:id/deadlines", async (req, res) => {
 
   const streams = await db
     .select()
-    .from(lienStreamsTable)
+    .from(lienScheduleOfValuesTable)
     .where(
       and(
-        eq(lienStreamsTable.lienProjectId, id),
-        eq(lienStreamsTable.orgId, orgId),
+        eq(lienScheduleOfValuesTable.lienProjectId, id),
+        eq(lienScheduleOfValuesTable.orgId, orgId),
       ),
     );
 
@@ -708,7 +708,7 @@ router.get("/:id/deadlines", async (req, res) => {
     .from(workMonthsTable)
     .where(
       and(
-        inArray(workMonthsTable.lienStreamId, streamIds),
+        inArray(workMonthsTable.lienScheduleOfValuesId, streamIds),
         eq(workMonthsTable.orgId, orgId),
       ),
     );
@@ -747,7 +747,7 @@ router.get("/:id/deadlines", async (req, res) => {
   // Build nested response: stream → workMonths → deadlines
   const streamsWithDeadlines = streams.map((stream) => {
     const workMonths = allWorkMonths
-      .filter((wm) => wm.lienStreamId === stream.id)
+      .filter((wm) => wm.lienScheduleOfValuesId === stream.id)
       .map((wm) => ({
         ...wm,
         deadlines: allDeadlines
@@ -824,11 +824,11 @@ router.get("/:id", async (req, res) => {
       ),
     db
       .select()
-      .from(lienStreamsTable)
+      .from(lienScheduleOfValuesTable)
       .where(
         and(
-          eq(lienStreamsTable.lienProjectId, id),
-          eq(lienStreamsTable.orgId, orgId),
+          eq(lienScheduleOfValuesTable.lienProjectId, id),
+          eq(lienScheduleOfValuesTable.orgId, orgId),
         ),
       ),
     db

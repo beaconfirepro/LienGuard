@@ -68,7 +68,7 @@ import { WorkspaceHeader } from "@/components/nav/WorkspaceLayout";
 // Types
 // ---------------------------------------------------------------------------
 
-interface LienStream {
+interface ScheduleOfValues {
   id: string;
   workStream: string;
   status: string;
@@ -113,7 +113,7 @@ interface ChecklistItem {
 interface ProjectDetailResponse {
   project: Project;
   parties: Party[];
-  streams: LienStream[];
+  sovs: ScheduleOfValues[];
   subSystemType: SubSystemType | null;
   checklist: { complete: boolean; missing: ChecklistItem[] };
 }
@@ -150,7 +150,7 @@ interface WorkMonth {
 }
 
 interface StreamWithWorkMonths {
-  stream: LienStream;
+  sov: ScheduleOfValues;
   workMonths: WorkMonth[];
   summary?: { workMonthsProcessed: number; deadlinesComputed: number };
 }
@@ -410,7 +410,7 @@ function CreateNoticeButton({
     mutationFn: () =>
       apiFetch<{ notice: StreamNotice }>(`/notices`, {
         method: "POST",
-        body: JSON.stringify({ lienStreamId: streamId, workMonthId, noticeType }),
+        body: JSON.stringify({ lienScheduleOfValuesId: streamId, workMonthId, noticeType }),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["stream-notices", streamId] });
@@ -499,22 +499,22 @@ function earliestNoticeDays(deadlines: Deadline[]): number | null {
 // ---------------------------------------------------------------------------
 
 function StreamCard({
-  stream,
+  sov,
   projectId,
   onOpenFiling,
 }: {
-  stream: LienStream;
+  sov: ScheduleOfValues;
   projectId: string;
-  onOpenFiling: (streamId: string) => void;
+  onOpenFiling: (sovId: string) => void;
 }) {
   const [open, setOpen] = React.useState(false);
 
   // Shares the TanStack Query cache with StreamDeadlinesPanel (same queryKey),
   // so this does not trigger a second network request.
   const { data } = useQuery({
-    queryKey: ["stream-work-months", stream.id],
+    queryKey: ["stream-work-months", sov.id],
     queryFn: () =>
-      apiFetch<StreamWithWorkMonths>(`/streams/${stream.id}/work-months`),
+      apiFetch<StreamWithWorkMonths>(`/streams/${sov.id}/work-months`),
   });
 
   const workMonths = data?.workMonths ?? [];
@@ -547,10 +547,10 @@ function StreamCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium capitalize">
-              {stream.workStream}
+              {sov.workStream}
             </span>
             <span className="text-xs text-muted-foreground">
-              Opened {new Date(stream.openedAt).toLocaleDateString()}
+              Opened {new Date(sov.openedAt).toLocaleDateString()}
             </span>
           </div>
           {/* Summary line — visible when collapsed and expanded */}
@@ -585,7 +585,7 @@ function StreamCard({
         <span
           onClick={(e) => {
             e.stopPropagation();
-            onOpenFiling(stream.id);
+            onOpenFiling(sov.id);
           }}
           role="button"
           tabIndex={0}
@@ -593,7 +593,7 @@ function StreamCard({
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
               e.stopPropagation();
-              onOpenFiling(stream.id);
+              onOpenFiling(sov.id);
             }
           }}
           className={cn(
@@ -607,17 +607,17 @@ function StreamCard({
         <span
           className={cn(
             "shrink-0 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-            STREAM_STATUS_COLORS[stream.status] ?? "bg-gray-100 text-gray-600",
+            STREAM_STATUS_COLORS[sov.status] ?? "bg-gray-100 text-gray-600",
           )}
         >
-          {STREAM_STATUS_LABELS[stream.status] ?? stream.status}
+          {STREAM_STATUS_LABELS[sov.status] ?? sov.status}
         </span>
       </button>
 
       {/* Deadlines sub-panel */}
       {open && (
         <div className="px-3 pb-3">
-          <StreamDeadlinesPanel streamId={stream.id} projectId={projectId} />
+          <StreamDeadlinesPanel streamId={sov.id} projectId={projectId} />
         </div>
       )}
     </div>
@@ -1991,7 +1991,7 @@ function LienSetupCard({ projectId, project }: { projectId: string; project: Pro
 // Upcoming Deadlines card (right rail) — nearest unsatisfied deadline / stream
 // ---------------------------------------------------------------------------
 
-function StreamUpcomingRow({ stream }: { stream: LienStream }) {
+function StreamUpcomingRow({ stream }: { stream: ScheduleOfValues }) {
   const { data } = useQuery({
     queryKey: ["stream-work-months", stream.id],
     queryFn: () => apiFetch<StreamWithWorkMonths>(`/streams/${stream.id}/work-months`),
@@ -2044,7 +2044,7 @@ function StreamUpcomingRow({ stream }: { stream: LienStream }) {
   );
 }
 
-function UpcomingDeadlinesCard({ streams }: { streams: LienStream[] }) {
+function UpcomingDeadlinesCard({ streams }: { streams: ScheduleOfValues[] }) {
   return (
     <Panel title="Deadlines">
       <div className="flex flex-col gap-2 p-3">

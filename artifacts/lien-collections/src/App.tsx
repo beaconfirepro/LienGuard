@@ -29,6 +29,7 @@ function Router() {
         <Route path="/holds" component={VendorHoldsPage} />
         <Route path="/collections" component={CollectionsPage} />
         <Route path="/collections/:accountId" component={AccountDetailPage} />
+        <Route path="/notices" component={SendQueuePage} />
         <Route path="/send-queue" component={SendQueuePage} />
         <Route path="/waivers" component={WaiversPage} />
         <Route path="/filing/:streamId" component={FilingWorkspacePage} />

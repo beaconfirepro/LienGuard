@@ -27,7 +27,7 @@ interface QueueNotice {
   createdAt: string;
   noticeDeadline: string | null;
   recipients: Recipient[];
-  stream: { id: string; workStream: string; status: string } | null;
+  sov: { id: string; workStream: string; status: string } | null;
   project: {
     id: string;
     projectName: string;
@@ -322,7 +322,7 @@ export default function SendQueuePage() {
               {selected.project?.projectName ?? "Notice preview"}
             </div>
             <div className="mt-0.5 text-[12px]" style={{ color: "var(--text-dim)" }}>
-              {selected.stream?.workStream ?? ""} stream ·{" "}
+              {selected.sov?.workStream ?? ""} stream ·{" "}
               {fmtMonthListed(selected.monthListed)} · {statuteRef(selected.noticeType)}
             </div>
           </div>

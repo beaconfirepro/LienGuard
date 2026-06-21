@@ -1,10 +1,12 @@
 import { useResponsive } from "@/hooks/use-responsive";
+import { ChevronUp, ChevronDown } from "lucide-react";
 
 interface Column<T> {
   key: string;
   header: string;
   align?: "left" | "right" | "center";
   render?: (row: T) => React.ReactNode;
+  sortable?: boolean;
 }
 
 interface ResponsiveTableProps<T> {
@@ -12,6 +14,8 @@ interface ResponsiveTableProps<T> {
   rows: T[];
   gridTemplate?: string;
   onRowClick?: (row: T) => void;
+  sortBy?: { key: string; direction: "asc" | "desc" } | null;
+  onSort?: (key: string) => void;
 }
 
 export function ResponsiveTable<T>({
@@ -19,6 +23,8 @@ export function ResponsiveTable<T>({
   rows,
   gridTemplate,
   onRowClick,
+  sortBy,
+  onSort,
 }: ResponsiveTableProps<T>) {
   const { isMobile } = useResponsive();
 
@@ -48,14 +54,32 @@ export function ResponsiveTable<T>({
 
   return (
     <div className="overflow-hidden rounded-lg border" style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}>
+      {/* Header Row */}
       <div
         className="grid gap-2.5 border-b px-[18px] py-2.5 text-[10.5px] font-semibold uppercase tracking-wide"
         style={{ gridTemplateColumns: gridTemplate, background: "var(--surface-2)", borderColor: "var(--helm-border)", color: "var(--text-muted-color)" }}
       >
         {columns.map((c) => (
-          <span key={c.key} style={{ textAlign: c.align ?? "left" }}>{c.header}</span>
+          <button
+            key={c.key}
+            onClick={() => c.sortable && onSort?.(c.key)}
+            className={c.sortable ? "flex items-center gap-1 hover:opacity-80 cursor-pointer justify-start" : ""}
+            disabled={!c.sortable}
+            title={c.sortable ? "Click to sort" : ""}
+            style={{ textAlign: c.align === "right" ? "right" : "left" }}
+          >
+            <span>{c.header}</span>
+            {c.sortable && sortBy?.key === c.key && (
+              sortBy.direction === "asc" ? (
+                <ChevronUp className="h-3 w-3" />
+              ) : (
+                <ChevronDown className="h-3 w-3" />
+              )
+            )}
+          </button>
         ))}
       </div>
+      {/* Data Rows */}
       {rows.map((row, ri) => (
         <div
           key={ri}

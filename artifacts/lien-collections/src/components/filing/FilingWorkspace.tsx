@@ -40,7 +40,7 @@ type FilingStatus =
 
 type ReleaseStatus = "not_required" | "requested" | "generated" | "signed" | "filed";
 
-interface LienStream {
+interface ScheduleOfValues {
   id: string;
   workStream: "construction" | "design";
   status: string;
@@ -260,7 +260,7 @@ export default function FilingWorkspace({ streamId }: { streamId: string }) {
     queryKey: ["filing-stream", streamId],
     queryFn: () =>
       apiFetch<{
-        stream: LienStream;
+        sov: ScheduleOfValues;
         project: LienProject | null;
         filing: LienFiling | null;
         release: LienRelease | null;
@@ -517,7 +517,7 @@ export default function FilingWorkspace({ streamId }: { streamId: string }) {
     );
   }
 
-  if (!data?.stream) {
+  if (!data?.sov) {
     return (
       <div
         className="flex items-center justify-center py-24 text-[13px]"
@@ -528,7 +528,7 @@ export default function FilingWorkspace({ streamId }: { streamId: string }) {
     );
   }
 
-  const { stream, workMonths, notices } = data;
+  const { sov, workMonths, notices } = data;
   const overdueMonths = workMonths.filter((wm) => wm.derivedOverdue && !wm.clearedFlag);
   const filingStep = filing ? filingStatusStep(filing.status) : -1;
   const totalClaim = notices
@@ -542,7 +542,7 @@ export default function FilingWorkspace({ streamId }: { streamId: string }) {
         {[
           { label: "Overdue months", value: overdueMonths.length.toString() },
           { label: "Total claim", value: totalClaim > 0 ? money(totalClaim) : "—" },
-          { label: "Stream opened", value: fmtDate(stream.openedAt) },
+          { label: "Stream opened", value: fmtDate(sov.openedAt) },
           {
             label: "Filing status",
             value: (filing?.status ?? "not filed").replace(/_/g, " "),

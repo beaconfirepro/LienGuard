@@ -14,12 +14,12 @@ interface Project {
   hubspotProjectId: string;
   lienWorkflowType: string;
   contractorTier: string;
-  streams: { id: string; workStream: string; status: string }[];
+  sovs: { id: string; workStream: string; status: string }[];
   completionChecklistComplete: boolean;
   nextDeadline: {
     id: string;
     adjustedDate: string;
-    lienStreamId: string;
+    lienScheduleOfValuesId: string;
   } | null;
 }
 
@@ -58,11 +58,11 @@ const RISK_ORDER = [
   "filed",
   "open",
 ];
-function highestRisk(streams: Project["streams"]) {
+function highestRisk(sovs: Project["sovs"]) {
   for (const s of RISK_ORDER) {
-    if (streams.some((st) => st.status === s)) return s;
+    if (sovs.some((st) => st.status === s)) return s;
   }
-  return streams[0]?.status ?? "open";
+  return sovs[0]?.status ?? "open";
 }
 
 function daysUntil(dateStr: string): number {
@@ -527,6 +527,7 @@ export default function DashboardPage() {
             )}
           </div>
 
+          {/* PRETEST_REQUIRED: Reserved dashboard card is unfinished; implement or hide before UX acceptance testing. */}
           {/* Placeholder card — reserved for future content */}
           <div
             className="flex min-h-[180px] flex-col items-center justify-center gap-1 rounded-lg border border-dashed p-6 text-center"
