@@ -10,10 +10,16 @@ import {
   lienRulesTable,
   documentTemplatesTable,
   lienProjectsTable,
+  riskScoreConfigsTable,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { requireAdmin, requireAdminOrPm } from "../lib/admin";
+import {
+  DEFAULT_RISK_CONFIG,
+  loadRiskConfig,
+  validateRiskConfig,
+} from "../lib/riskScore";
 import {
   DOCUMENT_SCHEMAS,
   DOCUMENT_TYPES,
@@ -1221,6 +1227,78 @@ router.post("/document-templates/:type/preview", async (req, res) => {
     resolved,
     source: projectName ? { kind: "project", projectName } : { kind: "sample" },
   });
+});
+
+// ---------------------------------------------------------------------------
+// Risk Scoring
+// Org-wide configuration of the collection risk score factor bands. The shared
+// calculator (lib/riskScore.ts) reads this config on every recompute, so saved
+// changes immediately drive new scores. When no row exists, defaults are used.
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /config/risk-scoring
+ * Returns the org's saved risk-scoring config (or defaults), plus the system
+ * defaults so the UI can offer a reset and indicate whether the org has
+ * customized its scoring.
+ */
+router.get("/risk-scoring", async (req, res) => {
+  const { orgId } = getSession(req);
+  const config = await loadRiskConfig(orgId);
+  const isDefault =
+    JSON.stringify(config) === JSON.stringify(DEFAULT_RISK_CONFIG);
+  res.json({ config, defaults: DEFAULT_RISK_CONFIG, isDefault });
+});
+
+/**
+ * PUT /config/risk-scoring
+ * Admin-only. Validates and upserts the org's risk-scoring config.
+ */
+router.put("/risk-scoring", requireAdmin, async (req, res) => {
+  const { orgId } = getSession(req);
+
+  const body = req.body as { config?: unknown };
+  const candidate = body && body.config !== undefined ? body.config : req.body;
+  const parsed = validateRiskConfig(candidate);
+  if (!parsed.success) {
+    res.status(400).json({
+      error: "Invalid risk-scoring configuration",
+      details: parsed.issues,
+    });
+    return;
+  }
+
+  const config = parsed.data;
+
+  const [existing] = await db
+    .select()
+    .from(riskScoreConfigsTable)
+    .where(eq(riskScoreConfigsTable.orgId, orgId))
+    .limit(1);
+
+  if (existing) {
+    await db
+      .update(riskScoreConfigsTable)
+      .set({ config })
+      .where(eq(riskScoreConfigsTable.orgId, orgId));
+  } else {
+    await db.insert(riskScoreConfigsTable).values({ orgId, config });
+  }
+
+  res.json({ config });
+});
+
+/**
+ * DELETE /config/risk-scoring
+ * Admin-only. Removes the org's custom config so scoring falls back to the
+ * system defaults (reset-to-defaults).
+ */
+router.delete("/risk-scoring", requireAdmin, async (req, res) => {
+  const { orgId } = getSession(req);
+  await db
+    .delete(riskScoreConfigsTable)
+    .where(eq(riskScoreConfigsTable.orgId, orgId));
+  res.json({ config: DEFAULT_RISK_CONFIG, defaults: DEFAULT_RISK_CONFIG, isDefault: true });
 });
 
 export default router;

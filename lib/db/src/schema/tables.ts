@@ -608,6 +608,23 @@ export const collectionAccountsTable = pgTable(
   (t) => [index("collection_accounts_org_id_idx").on(t.orgId)],
 );
 
+// Per-organization risk-scoring configuration. The actual band/threshold/point
+// structure is validated + typed in the api-server shared calculator
+// (lib/riskScore.ts); stored here as jsonb so the model can evolve without a
+// migration. When no row exists for an org, the calculator falls back to the
+// hardcoded defaults, preserving original behavior.
+export const riskScoreConfigsTable = pgTable(
+  "risk_score_configs",
+  {
+    id: id(),
+    orgId: orgId(),
+    config: jsonb("config").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("risk_score_configs_org_id_idx").on(t.orgId)],
+);
+
 export const collectionActivitiesTable = pgTable(
   "collection_activities",
   {

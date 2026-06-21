@@ -37,9 +37,41 @@ import {
   paymentPlansTable,
   paymentPlanInstallmentsTable,
   holdsTable,
+  riskScoreConfigsTable,
 } from "./schema";
 
 const ORG = "org_beacon_test_001";
+
+// Default collection risk-scoring bands, mirroring DEFAULT_RISK_CONFIG in the
+// api-server shared calculator (artifacts/api-server/src/lib/riskScore.ts).
+// Seeding this row preserves today's scoring while making it editable in
+// Company Settings. The calculator falls back to these same defaults when the
+// row is absent, so behavior is identical with or without the seed.
+const DEFAULT_RISK_CONFIG = {
+  age: [
+    { threshold: 90, points: 40, inclusive: false },
+    { threshold: 60, points: 33, inclusive: false },
+    { threshold: 30, points: 22, inclusive: false },
+    { threshold: 0, points: 10, inclusive: false },
+  ],
+  ratio: [
+    { threshold: 0.75, points: 30, inclusive: true },
+    { threshold: 0.5, points: 22, inclusive: true },
+    { threshold: 0.25, points: 15, inclusive: true },
+    { threshold: 0, points: 7, inclusive: false },
+  ],
+  brokenPromises: [
+    { threshold: 3, points: 20, inclusive: true },
+    { threshold: 2, points: 16, inclusive: true },
+    { threshold: 1, points: 10, inclusive: true },
+  ],
+  exposure: [
+    { threshold: 50000, points: 10, inclusive: true },
+    { threshold: 25000, points: 8, inclusive: true },
+    { threshold: 10000, points: 6, inclusive: true },
+    { threshold: 2500, points: 3, inclusive: true },
+  ],
+};
 const d = (s: string) => new Date(s);
 
 async function main() {
@@ -49,6 +81,12 @@ async function main() {
   await db
     .insert(organizationsTable)
     .values({ id: ORG, name: "Beacon Fire Protection (Test)" })
+    .onConflictDoNothing();
+
+  // ── Risk-scoring config (defaults) ───────────────────────────────────────
+  await db
+    .insert(riskScoreConfigsTable)
+    .values({ orgId: ORG, config: DEFAULT_RISK_CONFIG })
     .onConflictDoNothing();
 
   // ── Jurisdiction + Rule Set (Texas) ─────────────────────────────────────

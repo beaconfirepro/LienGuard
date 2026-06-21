@@ -56,6 +56,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
 import { UsersRolesTab } from "@/components/settings/UsersRolesTab";
+import { RiskScoringTab } from "@/components/settings/RiskScoringTab";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@workspace/replit-auth-web";
 import {
@@ -77,6 +78,7 @@ import {
   ChevronDown,
   Trash2,
   Users as UsersIcon,
+  Gauge,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -3087,6 +3089,7 @@ export default function ConfigPage() {
           },
           { value: "documents", label: "Document Templates", Icon: FileText },
           { value: "integrations", label: "Integrations", Icon: Banknote },
+          { value: "risk", label: "Risk Scoring", Icon: Gauge },
           { value: "users", label: "Users & Roles", Icon: UsersIcon },
         ].map((t) => (
           <button
@@ -3161,6 +3164,10 @@ export default function ConfigPage() {
 
           <TabsContent value="integrations">
             <IntegrationsTab />
+          </TabsContent>
+
+          <TabsContent value="risk">
+            <RiskScoringTab />
           </TabsContent>
 
           <TabsContent value="users">

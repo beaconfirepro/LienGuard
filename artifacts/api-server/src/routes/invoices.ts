@@ -17,6 +17,7 @@ import {
 import { eq, and } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { qboSyncClient } from "../lib/clients/qbo";
+import { loadRiskConfig, scoreRisk } from "../lib/riskScore";
 
 const router = Router();
 router.use(requireSession);
@@ -194,36 +195,20 @@ async function recomputeRiskScoreForAccount(
     );
 
   const totalAR = unpaidInvoices.reduce((sum, inv) => sum + Number(inv.amount), 0);
-
-  // Factor 1: Days since oldest overdue (0-40 pts, ~40%)
-  let agePts = 0;
-  if (oldestOverdueDays > 90) agePts = 40;
-  else if (oldestOverdueDays > 60) agePts = 33;
-  else if (oldestOverdueDays > 30) agePts = 22;
-  else if (oldestOverdueDays > 0) agePts = 10;
-
-  // Factor 2: Overdue/total-AR ratio (0-30 pts, ~30%)
   const overdueRatio = totalAR > 0 ? totalOverdue / totalAR : 0;
-  let ratioPts = 0;
-  if (overdueRatio >= 0.75) ratioPts = 30;
-  else if (overdueRatio >= 0.5) ratioPts = 22;
-  else if (overdueRatio >= 0.25) ratioPts = 15;
-  else if (overdueRatio > 0) ratioPts = 7;
 
-  // Factor 3: Broken promises (0-20 pts, ~20%)
-  let brokenPts = 0;
-  if (brokenPromises.length >= 3) brokenPts = 20;
-  else if (brokenPromises.length === 2) brokenPts = 16;
-  else if (brokenPromises.length === 1) brokenPts = 10;
-
-  // Factor 4: Exposure vs threshold (0-10 pts, ~10%)
-  let exposurePts = 0;
-  if (totalOverdue >= 50000) exposurePts = 10;
-  else if (totalOverdue >= 25000) exposurePts = 8;
-  else if (totalOverdue >= 10000) exposurePts = 6;
-  else if (totalOverdue >= 2500) exposurePts = 3;
-
-  const riskScore = Math.min(agePts + ratioPts + brokenPts + exposurePts, 100);
+  // Score using the org's configurable risk-scoring bands (falls back to
+  // DEFAULT_RISK_CONFIG when the org has not customized them).
+  const config = await loadRiskConfig(orgId);
+  const { riskScore } = scoreRisk(
+    {
+      oldestOverdueDays,
+      overdueRatio,
+      brokenPromiseCount: brokenPromises.length,
+      totalOverdue,
+    },
+    config,
+  );
 
   // If all invoices are now cleared → resolve account to "current"
   const newStatus =
