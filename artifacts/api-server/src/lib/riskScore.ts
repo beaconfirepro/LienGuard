@@ -1,5 +1,10 @@
-import { db, riskScoreConfigsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import {
+  db,
+  riskScoreConfigsTable,
+  invoiceLinksTable,
+  promisesToPayTable,
+} from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // Shared collection-risk scoring calculator
@@ -17,8 +22,9 @@ import { eq } from "drizzle-orm";
 // is used, which reproduces the original hardcoded behavior exactly.
 //
 // Both recompute paths (account-detail GET in collections.ts and the
-// invoice-clear path in invoices.ts) load the org config and call scoreRisk so
-// the math stays consistent everywhere.
+// invoice-clear path in invoices.ts) go through computeAccountRiskMetrics, which
+// loads the org config and calls scoreRisk so the math stays consistent
+// everywhere.
 // ---------------------------------------------------------------------------
 
 /**
@@ -235,4 +241,106 @@ export async function loadRiskConfig(orgId: string): Promise<RiskScoreConfig> {
 
   const parsed = validateRiskConfig(row.config);
   return parsed.success ? parsed.data : DEFAULT_RISK_CONFIG;
+}
+
+export interface RiskMetrics {
+  riskScore: number;
+  oldestOverdueDays: number;
+  totalOverdue: number;
+  /** Number of unpaid invoices past their due date. */
+  overdueCount: number;
+}
+
+/**
+ * Single source of truth for collection account risk math.
+ *
+ * Fetches live unpaid invoices + broken-promise history, derives the overdue
+ * total, oldest-overdue age, and overdue count, then scores the account using
+ * the org's configured bands (DEFAULT_RISK_CONFIG when none are saved). Both
+ * the account-detail recompute (collections.ts) and the invoice-clear flow
+ * (invoices.ts) call this so the two paths can never drift apart.
+ *
+ * This function only computes and returns the figures — callers are
+ * responsible for persisting them (and any path-specific side effects such as
+ * resolving an account back to "current").
+ */
+export async function computeAccountRiskMetrics(params: {
+  accountId: string;
+  orgId: string;
+  linkedClientId: string;
+}): Promise<RiskMetrics> {
+  const { accountId, orgId, linkedClientId } = params;
+  const today = new Date();
+
+  // Unpaid invoices for this client (cleared invoices are excluded)
+  const unpaidInvoices = await db
+    .select()
+    .from(invoiceLinksTable)
+    .where(
+      and(
+        eq(invoiceLinksTable.orgId, orgId),
+        eq(invoiceLinksTable.linkedClientId, linkedClientId),
+        eq(invoiceLinksTable.clearedFlag, false),
+      ),
+    );
+
+  const overdueInvoices = unpaidInvoices.filter(
+    (inv) => new Date(inv.dueDate) < today,
+  );
+
+  const totalOverdue = overdueInvoices.reduce(
+    (sum, inv) => sum + Number(inv.amount),
+    0,
+  );
+
+  const oldestOverdueDays =
+    overdueInvoices.length > 0
+      ? Math.max(
+          ...overdueInvoices.map((inv) =>
+            Math.floor(
+              (today.getTime() - new Date(inv.dueDate).getTime()) /
+                (1000 * 60 * 60 * 24),
+            ),
+          ),
+        )
+      : 0;
+
+  // Broken promises count
+  const brokenPromises = await db
+    .select()
+    .from(promisesToPayTable)
+    .where(
+      and(
+        eq(promisesToPayTable.orgId, orgId),
+        eq(promisesToPayTable.accountId, accountId),
+        eq(promisesToPayTable.status, "broken"),
+      ),
+    );
+
+  // Total AR (all unpaid invoices — including non-overdue) for ratio computation
+  const totalAR = unpaidInvoices.reduce(
+    (sum, inv) => sum + Number(inv.amount),
+    0,
+  );
+
+  const overdueRatio = totalAR > 0 ? totalOverdue / totalAR : 0;
+
+  // Score using the org's configured bands (defaults reproduce prior behavior)
+  const config = await loadRiskConfig(orgId);
+  const { riskScore } = scoreRisk(
+    {
+      oldestOverdueDays,
+      overdueRatio,
+      brokenPromiseCount: brokenPromises.length,
+      totalOverdue,
+    },
+    config,
+  );
+
+  return {
+    riskScore,
+    oldestOverdueDays,
+    totalOverdue,
+    overdueCount: overdueInvoices.length,
+  };
 }

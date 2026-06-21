@@ -37,7 +37,7 @@ import { eq, and, inArray, desc, asc, isNull, sql } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { hubspotClient } from "../lib/clients/hubspot";
 import { qboSyncClient } from "../lib/clients/qbo";
-import { loadRiskConfig, scoreRisk } from "../lib/riskScore";
+import { computeAccountRiskMetrics } from "../lib/riskScore";
 
 const router = Router();
 
@@ -78,71 +78,14 @@ async function recomputeRiskScore(
   accountId: string,
   orgId: string,
   linkedClientId: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   escalationStage: string,
 ): Promise<{ riskScore: number; oldestOverdueDays: number; totalOverdue: number }> {
-  const today = new Date();
-
-  // Unpaid overdue invoices for this client
-  const unpaidInvoices = await db
-    .select()
-    .from(invoiceLinksTable)
-    .where(
-      and(
-        eq(invoiceLinksTable.orgId, orgId),
-        eq(invoiceLinksTable.linkedClientId, linkedClientId),
-        eq(invoiceLinksTable.clearedFlag, false),
-      ),
-    );
-
-  const overdueInvoices = unpaidInvoices.filter(
-    (inv) => new Date(inv.dueDate) < today,
-  );
-
-  const totalOverdue = overdueInvoices.reduce(
-    (sum, inv) => sum + Number(inv.amount),
-    0,
-  );
-
-  const oldestOverdueDays =
-    overdueInvoices.length > 0
-      ? Math.max(
-          ...overdueInvoices.map((inv) =>
-            Math.floor(
-              (today.getTime() - new Date(inv.dueDate).getTime()) /
-                (1000 * 60 * 60 * 24),
-            ),
-          ),
-        )
-      : 0;
-
-  // Broken promises count
-  const brokenPromises = await db
-    .select()
-    .from(promisesToPayTable)
-    .where(
-      and(
-        eq(promisesToPayTable.orgId, orgId),
-        eq(promisesToPayTable.accountId, accountId),
-        eq(promisesToPayTable.status, "broken"),
-      ),
-    );
-
-  // Total AR (all unpaid invoices — including non-overdue) for ratio computation
-  const totalAR = unpaidInvoices.reduce((sum, inv) => sum + Number(inv.amount), 0);
-  const overdueRatio = totalAR > 0 ? totalOverdue / totalAR : 0;
-
-  // Score using the org's configurable risk-scoring bands (falls back to
-  // DEFAULT_RISK_CONFIG when the org has not customized them).
-  const config = await loadRiskConfig(orgId);
-  const { riskScore } = scoreRisk(
-    {
-      oldestOverdueDays,
-      overdueRatio,
-      brokenPromiseCount: brokenPromises.length,
-      totalOverdue,
-    },
-    config,
-  );
+  // All risk math (including the org's configurable scoring bands) lives in the
+  // shared module so this path and the invoice-clear path can never compute
+  // different figures.
+  const { riskScore, oldestOverdueDays, totalOverdue } =
+    await computeAccountRiskMetrics({ accountId, orgId, linkedClientId });
 
   // Persist refreshed values
   await db

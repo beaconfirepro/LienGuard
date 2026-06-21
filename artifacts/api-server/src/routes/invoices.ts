@@ -11,13 +11,12 @@ import { db } from "@workspace/db";
 import {
   invoiceLinksTable,
   collectionAccountsTable,
-  promisesToPayTable,
   lienProjectsTable,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { qboSyncClient } from "../lib/clients/qbo";
-import { loadRiskConfig, scoreRisk } from "../lib/riskScore";
+import { computeAccountRiskMetrics } from "../lib/riskScore";
 
 const router = Router();
 router.use(requireSession);
@@ -141,78 +140,26 @@ router.post("/invoices/:id/clear", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Inline risk recomputation (mirrors collections.ts logic without a shared
-// module import — keeps invoices.ts self-contained while ensuring the score
-// stays fresh after a payment clear).
+// Risk recomputation after a payment clear. The risk math itself lives in the
+// shared computeAccountRiskMetrics module so this path can never drift from the
+// account-detail recompute in collections.ts. This wrapper adds the
+// clear-specific side effect of resolving an account back to "current" once
+// every overdue invoice is cleared.
 // ---------------------------------------------------------------------------
 async function recomputeRiskScoreForAccount(
   account: typeof collectionAccountsTable.$inferSelect,
   orgId: string,
 ): Promise<void> {
-  const today = new Date();
-
-  const unpaidInvoices = await db
-    .select()
-    .from(invoiceLinksTable)
-    .where(
-      and(
-        eq(invoiceLinksTable.orgId, orgId),
-        eq(invoiceLinksTable.linkedClientId, account.linkedClientId),
-        eq(invoiceLinksTable.clearedFlag, false),
-      ),
-    );
-
-  const overdueInvoices = unpaidInvoices.filter(
-    (inv) => new Date(inv.dueDate) < today,
-  );
-
-  const totalOverdue = overdueInvoices.reduce(
-    (sum, inv) => sum + Number(inv.amount),
-    0,
-  );
-
-  const oldestOverdueDays =
-    overdueInvoices.length > 0
-      ? Math.max(
-          ...overdueInvoices.map((inv) =>
-            Math.floor(
-              (today.getTime() - new Date(inv.dueDate).getTime()) /
-                (1000 * 60 * 60 * 24),
-            ),
-          ),
-        )
-      : 0;
-
-  const brokenPromises = await db
-    .select()
-    .from(promisesToPayTable)
-    .where(
-      and(
-        eq(promisesToPayTable.orgId, orgId),
-        eq(promisesToPayTable.accountId, account.id),
-        eq(promisesToPayTable.status, "broken"),
-      ),
-    );
-
-  const totalAR = unpaidInvoices.reduce((sum, inv) => sum + Number(inv.amount), 0);
-  const overdueRatio = totalAR > 0 ? totalOverdue / totalAR : 0;
-
-  // Score using the org's configurable risk-scoring bands (falls back to
-  // DEFAULT_RISK_CONFIG when the org has not customized them).
-  const config = await loadRiskConfig(orgId);
-  const { riskScore } = scoreRisk(
-    {
-      oldestOverdueDays,
-      overdueRatio,
-      brokenPromiseCount: brokenPromises.length,
-      totalOverdue,
-    },
-    config,
-  );
+  const { riskScore, oldestOverdueDays, totalOverdue, overdueCount } =
+    await computeAccountRiskMetrics({
+      accountId: account.id,
+      orgId,
+      linkedClientId: account.linkedClientId,
+    });
 
   // If all invoices are now cleared → resolve account to "current"
   const newStatus =
-    overdueInvoices.length === 0 && account.status !== "written_off"
+    overdueCount === 0 && account.status !== "written_off"
       ? "current"
       : account.status;
 
