@@ -6,6 +6,7 @@ import { Panel, useRightPanel, useLeftPanel } from "@/components/nav/AppShell";
 import { QueueList } from "@/components/ui/queue-list";
 import { AgingBuckets } from "@/components/ui/aging-buckets";
 import { ListPageLayout, ListTableState } from "@/components/ui/list-page";
+import { ResponsiveTable } from "@/components/ui/responsive-table";
 import { money, alpha } from "@/lib/utils";
 
 function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
@@ -103,8 +104,11 @@ export default function CollectionsPage() {
   const qc = useQueryClient();
   const [callIds, setCallIds] = React.useState<string[]>([]);
   const [closed, setClosed] = React.useState<Record<string, boolean>>({});
+  const [search, setSearch] = React.useState("");
   const [filterStatus, setFilterStatus] = React.useState("");
   const [filterStage, setFilterStage] = React.useState("");
+  const [sortKey, setSortKey] = React.useState<"risk" | "overdue" | "oldest" | "name" | "stage">("risk");
+  const [sortDir, setSortDir] = React.useState<"asc" | "desc">("desc");
   const [selectedHoldClientId, setSelectedHoldClientId] = React.useState<string>("");
 
   const { data: accountsData, isLoading: loadingAccounts } = useQuery({
@@ -168,10 +172,44 @@ export default function CollectionsPage() {
 
   // Apply filters
   const accounts = allAccounts.filter((a) => {
+    const name = (a.cachedName ?? a.id).toLowerCase();
+    const status = (a.status ?? "").toLowerCase();
+    const stageLabel = (STAGE_LABELS[a.escalationStage] ?? a.escalationStage ?? "").toLowerCase();
+    const q = search.trim().toLowerCase();
+    if (q && !name.includes(q) && !status.includes(q) && !stageLabel.includes(q)) return false;
     if (filterStatus && a.status !== filterStatus) return false;
     if (filterStage && a.escalationStage !== filterStage) return false;
     return true;
   });
+
+  const sortedAccounts = React.useMemo(() => {
+    const sorted = [...accounts].sort((a, b) => {
+      let av: string | number = 0;
+      let bv: string | number = 0;
+
+      if (sortKey === "risk") {
+        av = a.riskScore ?? -1;
+        bv = b.riskScore ?? -1;
+      } else if (sortKey === "overdue") {
+        av = Number(a.totalOverdue ?? 0);
+        bv = Number(b.totalOverdue ?? 0);
+      } else if (sortKey === "oldest") {
+        av = a.oldestOverdueDays ?? 0;
+        bv = b.oldestOverdueDays ?? 0;
+      } else if (sortKey === "name") {
+        av = (a.cachedName ?? a.id).toLowerCase();
+        bv = (b.cachedName ?? b.id).toLowerCase();
+      } else if (sortKey === "stage") {
+        av = STAGE_ORDER.indexOf(a.escalationStage);
+        bv = STAGE_ORDER.indexOf(b.escalationStage);
+      }
+
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [accounts, sortKey, sortDir]);
 
   const agingValues = aging
     ? [aging.current, aging.d1_30, aging.d31_60, aging.d61_90, aging.d91plus]
@@ -202,7 +240,143 @@ export default function CollectionsPage() {
     .filter((h) => (selectedHoldClientId ? h.linkedClientId === selectedHoldClientId : true))
     .sort((a, b) => Number(b.supplierBillAmount ?? 0) - Number(a.supplierBillAmount ?? 0));
 
-  const activeFilterCount = (filterStatus ? 1 : 0) + (filterStage ? 1 : 0);
+  const callSig = callAccts.map((a) => a.id).join(",");
+  const lienNoticeSig = lienNoticeClients.map((a) => a.id).join(",");
+  const holdSig = recommendedHolds.map((h) => h.id).join(",");
+
+  const activeFilterCount = (filterStatus ? 1 : 0) + (filterStage ? 1 : 0) + (search.trim() ? 1 : 0);
+
+  const tableColumns = [
+    {
+      key: "account",
+      header: "Account",
+      sortable: false,
+      render: (a: CollectionAccount) => (
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-semibold" style={{ color: "var(--text-base)" }}>
+            {a.cachedName ?? a.id}
+          </div>
+          <div className="truncate text-[11.5px]" style={{ color: "var(--text-muted-color)" }}>
+            {a.hasOpenPromise ? "Promise on file" : "No active promise"}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "stage",
+      header: "Stage",
+      sortable: false,
+      render: (a: CollectionAccount) => {
+        const c = STAGE_COLOR[a.escalationStage] ?? "#6b7280";
+        return (
+          <span
+            className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold"
+            style={{ color: c, background: alpha(c, 0.14) }}
+          >
+            {STAGE_LABELS[a.escalationStage] ?? a.escalationStage}
+          </span>
+        );
+      },
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortable: false,
+      render: (a: CollectionAccount) => (
+        <span className="text-[12px] capitalize" style={{ color: "var(--text-dim)" }}>
+          {a.status.replace(/_/g, " ")}
+        </span>
+      ),
+    },
+    {
+      key: "oldest",
+      header: "Oldest",
+      align: "right" as const,
+      sortable: false,
+      render: (a: CollectionAccount) => (
+        <span className="font-mono text-[12px]" style={{ color: a.oldestOverdueDays > 60 ? "#eb143f" : "var(--text-dim)" }}>
+          {a.oldestOverdueDays}d
+        </span>
+      ),
+    },
+    {
+      key: "risk",
+      header: "Risk",
+      align: "right" as const,
+      sortable: false,
+      render: (a: CollectionAccount) => <RiskPill risk={a.riskScore} />,
+    },
+    {
+      key: "overdue",
+      header: "Overdue",
+      align: "right" as const,
+      sortable: false,
+      render: (a: CollectionAccount) => (
+        <span className="font-mono text-[12.5px] font-semibold" style={{ color: "#eb143f" }}>
+          {money(Number(a.totalOverdue))}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      align: "right" as const,
+      sortable: false,
+      render: (a: CollectionAccount) => {
+        const on = callIds.includes(a.id);
+        return (
+          <div className="flex items-center justify-end gap-1.5">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                logActivityMut.mutate({ accountId: a.id, method: "phone" });
+              }}
+              className="flex items-center rounded-md border px-2 py-1 text-[11px]"
+              style={{ color: "#14eba3", background: alpha("#14eba3", 0.1), borderColor: alpha("#14eba3", 0.25) }}
+            >
+              <Phone className="h-3 w-3" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                promiseMut.mutate({ accountId: a.id });
+              }}
+              disabled={a.hasOpenPromise}
+              className="flex items-center rounded-md border px-2 py-1 text-[11px] disabled:opacity-40"
+              style={{ color: "#6366f1", background: alpha("#6366f1", 0.1), borderColor: alpha("#6366f1", 0.25) }}
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                advanceMut.mutate({ accountId: a.id });
+              }}
+              disabled={a.hasOpenPromise}
+              className="flex items-center rounded-md border px-2 py-1 text-[11px] disabled:opacity-40"
+              style={{ color: "#f59f0a", background: alpha("#f59f0a", 0.1), borderColor: alpha("#f59f0a", 0.25) }}
+            >
+              <ChevronRight className="h-3 w-3" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleCall(a.id);
+              }}
+              className="flex items-center rounded-md border px-2 py-1 text-[11px]"
+              style={
+                on
+                  ? { color: "#14eba3", background: alpha("#14eba3", 0.14), borderColor: alpha("#14eba3", 0.3) }
+                  : { color: "var(--text-base)", background: "var(--surface-2)", borderColor: "var(--helm-border)" }
+              }
+            >
+              {on ? <Check className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+            </button>
+          </div>
+        );
+      },
+    },
+  ];
 
   useRightPanel(
     <Panel title="Call Queue" accent="#eb143f" count={callAccts.length}>
@@ -216,7 +390,7 @@ export default function CollectionsPage() {
         }))}
       />
     </Panel>,
-    [callAccts.length],
+    [callSig],
   );
 
   useLeftPanel(
@@ -313,7 +487,7 @@ export default function CollectionsPage() {
         )}
       </div>
     </Panel>,
-    [lienNoticeClients, recommendedHolds, selectedHoldClientId],
+    [lienNoticeSig, holdSig, selectedHoldClientId],
   );
 
   return (
@@ -343,6 +517,13 @@ export default function CollectionsPage() {
         filters={
           <>
             <Filter className="h-4 w-4 shrink-0" style={{ color: "var(--text-dim)" }} />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search account, status, stage..."
+              className="min-w-[220px] rounded-md border px-3 py-1.5 text-[12.5px]"
+              style={{ background: "var(--surface)", borderColor: search ? "#6366f1" : "var(--helm-border)", color: "var(--text-base)" }}
+            />
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
@@ -359,9 +540,28 @@ export default function CollectionsPage() {
             >
               {STAGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
+            <select
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as "risk" | "overdue" | "oldest" | "name" | "stage")}
+              className="rounded-md border px-3 py-1.5 text-[12.5px]"
+              style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-base)" }}
+            >
+              <option value="risk">Sort: Risk</option>
+              <option value="overdue">Sort: Overdue</option>
+              <option value="oldest">Sort: Oldest Days</option>
+              <option value="name">Sort: Name</option>
+              <option value="stage">Sort: Stage</option>
+            </select>
+            <button
+              onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+              className="rounded-md border px-2.5 py-1.5 text-[12px]"
+              style={{ borderColor: "var(--helm-border)", color: "var(--text-base)" }}
+            >
+              {sortDir === "asc" ? "Asc" : "Desc"}
+            </button>
             {activeFilterCount > 0 && (
               <button
-                onClick={() => { setFilterStatus(""); setFilterStage(""); }}
+                onClick={() => { setSearch(""); setFilterStatus(""); setFilterStage(""); }}
                 className="text-[12px]"
                 style={{ color: "var(--text-dim)" }}
               >
@@ -369,7 +569,7 @@ export default function CollectionsPage() {
               </button>
             )}
             <span className="ml-auto text-[12px]" style={{ color: "var(--text-muted-color)" }}>
-              {accounts.length} account{accounts.length !== 1 ? "s" : ""}
+              {sortedAccounts.length} account{sortedAccounts.length !== 1 ? "s" : ""}
             </span>
           </>
         }
@@ -456,7 +656,7 @@ export default function CollectionsPage() {
       <ListTableState
         isLoading={loadingAccounts}
         isError={false}
-        isEmpty={accounts.length === 0}
+        isEmpty={false}
         loadingText="Loading accounts…"
         errorText="Failed to load accounts."
         emptyText={
@@ -465,118 +665,22 @@ export default function CollectionsPage() {
             : "No collection accounts found."
         }
       >
-      {STAGE_ORDER.map((stage) => {
-        const list = accounts
-          .filter((a) => a.escalationStage === stage && a.oldestOverdueDays > 0)
-          .sort((a, b) => (b.riskScore ?? 0) - (a.riskScore ?? 0));
-        if (!list.length) return null;
-        const stageColor = STAGE_COLOR[stage] ?? "#6b7280";
-        return (
-          <Section
-            key={stage}
-            open={!closed[stage]}
-            onToggle={() => toggleSection(stage)}
-            header={
-              <>
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ background: stageColor }}
-                />
-                <span className="text-[12.5px] font-semibold" style={{ color: "var(--text-base)" }}>
-                  {STAGE_LABELS[stage] ?? stage}
-                </span>
-                <span
-                  className="rounded-full border px-2 py-px font-mono text-[11px]"
-                  style={{ borderColor: "var(--helm-border)", color: "var(--text-muted-color)" }}
-                >
-                  {list.length}
-                </span>
-                <span className="ml-auto font-mono text-[12.5px]" style={{ color: "var(--text-dim)" }}>
-                  {money(list.reduce((x, a) => x + Number(a.totalOverdue), 0))}
-                </span>
-              </>
-            }
-          >
-            {list.map((a) => {
-              const on = callIds.includes(a.id);
-              return (
-                <div
-                  key={a.id}
-                  className="flex cursor-pointer items-center gap-2 border-b px-4 py-3 last:border-0"
-                  style={{ borderColor: "var(--helm-border)" }}
-                  onClick={() => navigate(`/collections/${a.id}`)}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-medium" style={{ color: "var(--text-base)" }}>
-                      {a.cachedName ?? a.id}
-                    </div>
-                    <div className="truncate text-[11.5px]" style={{ color: "var(--text-muted-color)" }}>
-                      {a.oldestOverdueDays}d oldest · {a.status}
-                      {a.hasOpenPromise && (
-                        <span className="ml-1.5 text-[#6366f1]">· promise on file</span>
-                      )}
-                    </div>
-                  </div>
-                  <RiskPill risk={a.riskScore} />
-                  <span className="w-[64px] shrink-0 text-right font-mono text-[13px] font-semibold text-[#eb143f]">
-                    {money(Number(a.totalOverdue))}
-                  </span>
-                  {/* Per-row quick actions */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      logActivityMut.mutate({ accountId: a.id, method: "phone" });
-                    }}
-                    title="Log contact"
-                    className="flex shrink-0 items-center gap-1 rounded-md border px-2 py-1.5 text-[11.5px] font-semibold"
-                    style={{ color: "#14eba3", background: alpha("#14eba3", 0.1), borderColor: alpha("#14eba3", 0.25) }}
-                  >
-                    <Phone className="h-3 w-3" />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      promiseMut.mutate({ accountId: a.id });
-                    }}
-                    disabled={a.hasOpenPromise}
-                    title={a.hasOpenPromise ? "Promise already on file" : "Record promise"}
-                    className="flex shrink-0 items-center gap-1 rounded-md border px-2 py-1.5 text-[11.5px] font-semibold disabled:opacity-40"
-                    style={{ color: "#6366f1", background: alpha("#6366f1", 0.1), borderColor: alpha("#6366f1", 0.25) }}
-                  >
-                    <Plus className="h-3 w-3" />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      advanceMut.mutate({ accountId: a.id });
-                    }}
-                    disabled={a.hasOpenPromise}
-                    title={a.hasOpenPromise ? "Suppressed — promise on file" : "Escalate"}
-                    className="flex shrink-0 items-center gap-1 rounded-md border px-2 py-1.5 text-[11.5px] font-semibold disabled:opacity-40"
-                    style={{ color: "#f59f0a", background: alpha("#f59f0a", 0.1), borderColor: alpha("#f59f0a", 0.25) }}
-                  >
-                    <ChevronRight className="h-3 w-3" />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleCall(a.id);
-                    }}
-                    className="flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-semibold"
-                    style={
-                      on
-                        ? { color: "#14eba3", background: alpha("#14eba3", 0.14), borderColor: alpha("#14eba3", 0.3) }
-                        : { color: "var(--text-base)", background: "var(--surface-2)", borderColor: "var(--helm-border)" }
-                    }
-                  >
-                    {on ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-                  </button>
-                </div>
-              );
-            })}
-          </Section>
-        );
-      })}
+      <ResponsiveTable
+        columns={tableColumns}
+        rows={sortedAccounts}
+        gridTemplate="1.55fr 1.05fr .8fr .55fr .55fr .8fr 1.1fr"
+        onRowClick={(a: CollectionAccount) => navigate(`/collections/${a.id}`)}
+      />
+      {!loadingAccounts && sortedAccounts.length === 0 && (
+        <div
+          className="mt-2 rounded-lg border px-4 py-3 text-center text-[12px]"
+          style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-muted-color)" }}
+        >
+          {activeFilterCount > 0
+            ? "No accounts match the current filters."
+            : "No collection accounts found."}
+        </div>
+      )}
       </ListTableState>
       </ListPageLayout>
     </>
