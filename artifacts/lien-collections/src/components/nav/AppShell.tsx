@@ -91,16 +91,16 @@ function CollapsibleCard({
 /* ─── Navigation config ──────────────────────────────────────────────────── */
 const MODULE_NAV = [
   { key: "dashboard", label: "Dashboard", to: "/", Icon: LayoutGrid },
-  { key: "liens", label: "Projects", to: "/liens", Icon: Landmark },
-  { key: "notices", label: "Notices", to: "/notices", Icon: Send },
   { key: "waivers", label: "Waivers", to: "/waivers", Icon: FileSignature },
-  { key: "collections", label: "Collections", to: "/collections", Icon: DollarSign },
   { key: "holds", label: "Vendor Holds", to: "/holds", Icon: Lock },
+  { key: "collections", label: "Collections", to: "/collections", Icon: DollarSign },
+  { key: "notices", label: "Notices", to: "/notices", Icon: Send },
+  { key: "liens", label: "Liens", to: "/liens", Icon: Landmark },
 ];
 
 const TITLES: [RegExp, string][] = [
   [/^\/settings$/, "Company Settings"],
-  [/^\/liens$/, "Projects"],
+  [/^\/liens$/, "Liens"],
   [/^\/notices$/, "Notices"],
   [/^\/send-queue$/, "Ready-to-Send Queue"],
   [/^\/projects\//, "Project Workspace"],
@@ -590,10 +590,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <nav className="fixed inset-x-0 bottom-0 z-40 flex h-[62px] border-t" style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}>
             {[
               { label: "Dashboard", to: "/", Icon: LayoutGrid },
-              { label: "Projects", to: "/liens", Icon: Landmark },
-              { label: "Notices", to: "/notices", Icon: Send },
-              { label: "Collections", to: "/collections", Icon: DollarSign },
               { label: "Waivers", to: "/waivers", Icon: FileSignature },
+              { label: "Vendor Holds", to: "/holds", Icon: Lock },
+              { label: "Collections", to: "/collections", Icon: DollarSign },
+              { label: "Notices", to: "/notices", Icon: Send },
             ].map(({ label, to, Icon }) => {
               const active =
                 to === "/" ? location === to :
