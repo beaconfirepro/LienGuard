@@ -43,20 +43,38 @@ alongside the engine tests, against an ephemeral Postgres in CI.
 
 ---
 
-## Phase B — Trust the legal core  `⬜`
+## Phase B — Trust the legal core  `🔨 in progress`
 
 **Goal:** statutory math is test-locked and no document can be sent on an unreviewed rule set.
 
 | # | Task | Status |
 |---|------|--------|
-| B1 | Legal review of the seeded Texas Ch. 53 rule set (notice/filing/retainage/post-filing) | ⬜ |
-| B2 | Enforce the `lien_rule_sets.legalReviewed` gate in all notice/affidavit send paths | ⬜ |
-| B3 | Unit tests for `deadlineEngine` against the documented Ch. 53 worked examples (incl. weekend/holiday roll-forward) | ⬜ |
-| B4 | Unit tests for `holdEngine` and `riskScore` | ⬜ |
+| B1 | Legal review of the seeded Texas Ch. 53 rule set (notice/filing/retainage/post-filing) — **human/legal task, not code** | ⬜ |
+| B2 | Enforce the `lien_rule_sets.legalReviewed` gate in the notice-send + filing export/record paths | ✅ |
+| B3 | Unit tests for `deadlineEngine` against the documented Ch. 53 worked examples (incl. weekend/holiday roll-forward) | ✅ |
+| B4 | Unit tests for `holdEngine` and `riskScore` | 🔨 |
 | B5 | Integration tests for notice/waiver/filing state machines + unconditional-waiver cleared-gate | ⬜ |
 | B6 | Wire `uat-e2e.ts` into CI against an ephemeral Postgres service | ⬜ |
 
 **Exit criteria:** engines test-locked; sending blocked on unreviewed rule sets; UAT e2e in CI.
+
+**Done in this pass:**
+- `deadlineEngine` unit suite (14 tests) locking the statutory math: the Mar 2026 → Jun 15
+  notice deadline, the Feb 14 (Sat) → Feb 17 retainage roll-forward over Presidents' Day,
+  calendar vs business-day offsets, completion/filing anchors (incl. null-anchor skip),
+  unsupported-anchor guard, sourceData provenance, and the Texas-holiday helpers
+  (Thanksgiving, observed Independence Day).
+- `legalReview` gate (DD-04): pure `legalReviewEnforced` + `ruleSetsPermitSend` (7 tests),
+  a fail-closed DB resolver (SOV → project → jurisdiction → rule sets), wired into
+  `POST /notices/:id/send`, `POST /filing/:id/export`, and `POST /filing/:id/record`.
+  Enforced in production only; relaxed in dev/test/UAT (or `LEGAL_REVIEW_BYPASS=1`).
+
+**Remaining (next passes):**
+- B4: `riskScore` pure math is already covered by `risk-scoring.test.ts`; `holdEngine` needs
+  DB-backed integration tests (CI now has Postgres).
+- B5/B6: state-machine integration tests + `uat-e2e.ts` in CI.
+- B1: schedule the legal review; once done, flip `legalReviewed` on the Texas rule set so the
+  gate passes in production.
 
 ---
 

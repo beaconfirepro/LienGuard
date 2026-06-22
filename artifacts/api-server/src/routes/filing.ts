@@ -38,6 +38,7 @@ import {
   type RegionContent,
 } from "../lib/documentTemplates";
 import { renderRichText } from "../lib/pdfRichText";
+import { legalReviewBlockReason } from "../lib/legalReview";
 
 const router = Router();
 
@@ -519,6 +520,13 @@ router.post("/filing/:id/export", requireSession, async (req, res) => {
     return;
   }
 
+  // DD-04: a lien may not be exported for filing on an unreviewed rule set.
+  const exportBlock = await legalReviewBlockReason(orgId, filing.lienScheduleOfValuesId, "export this lien for filing");
+  if (exportBlock) {
+    res.status(409).json({ error: exportBlock });
+    return;
+  }
+
   const [updated] = await db
     .update(lienFilingsTable)
     .set({ status: "exported", updatedAt: new Date() })
@@ -555,6 +563,13 @@ router.post("/filing/:id/record", requireSession, async (req, res) => {
     res.status(409).json({
       error: `Record requires status affidavit_draft, exported, or compliance_check; current: ${filing.status}`,
     });
+    return;
+  }
+
+  // DD-04: a lien may not be recorded on an unreviewed rule set.
+  const recordBlock = await legalReviewBlockReason(orgId, filing.lienScheduleOfValuesId, "record this lien");
+  if (recordBlock) {
+    res.status(409).json({ error: recordBlock });
     return;
   }
 
