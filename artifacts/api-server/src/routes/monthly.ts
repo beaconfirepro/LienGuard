@@ -149,12 +149,12 @@ router.post("/run", async (req, res) => {
     }
   }
 
-  // 6. Check which stream+workMonth combos already have a notice.
-  const existingNotices = streamIds.length
+  // 6. Check which SOV+workMonth combos already have a notice.
+  const existingNotices = sovIds.length
     ? await db
         .select({ lienScheduleOfValuesId: noticesTable.lienScheduleOfValuesId, workMonthId: noticesTable.workMonthId, noticeType: noticesTable.noticeType })
         .from(noticesTable)
-        .where(and(eq(noticesTable.orgId, orgId), inArray(noticesTable.lienScheduleOfValuesId, streamIds)))
+        .where(and(eq(noticesTable.orgId, orgId), inArray(noticesTable.lienScheduleOfValuesId, sovIds)))
     : [];
 
   // Key includes noticeType so that an existing early_warning doesn't block
@@ -201,7 +201,7 @@ router.post("/run", async (req, res) => {
     await db.insert(noticesTable).values({
       id: noticeId,
       orgId,
-      lienScheduleOfValuesId: stream.id,
+      lienScheduleOfValuesId: sov.id,
       workMonthId: wm.id,
       noticeType,
       status: "draft",
@@ -232,8 +232,8 @@ router.post("/run", async (req, res) => {
   let supplierRisksFlagged = 0;
   for (const wm of workMonths) {
     if (!atRiskWorkMonthIds.has(wm.id)) continue;
-    const stream = streamMap.get(wm.lienScheduleOfValuesId);
-    if (!stream) continue;
+    const sov = sovMap.get(wm.lienScheduleOfValuesId);
+    if (!sov) continue;
 
     // Notice deadline for this specific work month.
     const dl = deadlines.find((d) => d.workMonthId === wm.id);
@@ -529,7 +529,7 @@ router.get("/send-queue", async (req, res) => {
   const deadlineByWorkMonth = new Map(deadlines.map((d) => [d.workMonthId!, d]));
 
   const enriched = notices.map((n) => {
-    const sov = sovMap.get(n.lienScheduleOfValuesId);
+    const sov = streamMap.get(n.lienScheduleOfValuesId);
     const project = sov ? projectMap.get(sov.lienProjectId) : undefined;
     const deadline = n.workMonthId ? deadlineByWorkMonth.get(n.workMonthId) : undefined;
 

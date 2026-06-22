@@ -26,6 +26,7 @@ function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
 
 interface CollectionAccount {
   id: string;
+  linkedClientId: string | null;
   status: string;
   escalationStage: string;
   totalOverdue: string;

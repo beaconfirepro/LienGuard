@@ -305,7 +305,7 @@ router.get("/reports/timeline/:projectId", requireSession, async (req, res) => {
   for (const r of releases) {
     const eventDate = r.signedDate ?? r.requestedAt ?? r.createdAt;
     const filing = filings.find((f) => f.id === r.filingId);
-    const stream = filing ? streams.find((s) => s.id === filing.lienScheduleOfValuesId) : undefined;
+    const stream = filing ? sovs.find((s) => s.id === filing.lienScheduleOfValuesId) : undefined;
     events.push({
       eventType: `release_${r.status}`,
       date: new Date(eventDate).toISOString(),
@@ -328,7 +328,7 @@ router.get("/reports/timeline/:projectId", requireSession, async (req, res) => {
       legalPropertyAddress: project.legalPropertyAddress,
       lienWorkflowType: project.lienWorkflowType,
     },
-    streams: streams.map((s) => ({ id: s.id, workStream: s.workStream, status: s.status })),
+    streams: sovs.map((s) => ({ id: s.id, workStream: s.workStream, status: s.status })),
     events,
   });
 });

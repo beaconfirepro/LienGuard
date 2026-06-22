@@ -105,15 +105,15 @@ export default function DashboardPage() {
   const activeHoldsCount = accountsData?.activeHoldsCount ?? 0;
 
   const atRisk = projects.filter((p) => {
-    const r = highestRisk(p.streams);
+    const r = highestRisk(p.sovs);
     return r === "at_risk" || r === "filing" || r === "lapsed";
   });
   const incompleteCount = projects.filter(
     (p) => !p.completionChecklistComplete,
   ).length;
-  const totalStreams = projects.reduce((a, p) => a + p.streams.length, 0);
+  const totalStreams = projects.reduce((a, p) => a + p.sovs.length, 0);
   const lapsed = projects.filter((p) =>
-    p.streams.some((s) => s.status === "lapsed"),
+    p.sovs.some((s) => s.status === "lapsed"),
   ).length;
 
   const totalOverdue = agingData?.totalOverdue ?? 0;
@@ -167,11 +167,11 @@ export default function DashboardPage() {
   ];
 
   const deadlineRows = projects
-    .filter((p) => p.streams.length > 0)
+    .filter((p) => p.sovs.length > 0)
     .map((p) => ({
       id: p.id,
       name: p.cachedProjectName ?? p.hubspotProjectId,
-      status: highestRisk(p.streams),
+      status: highestRisk(p.sovs),
       days: p.nextDeadline ? daysUntil(p.nextDeadline.adjustedDate) : null,
     }))
     .sort((a, b) => {
@@ -524,7 +524,7 @@ export default function DashboardPage() {
                 items={atRisk.slice(0, 6).map((p, i) => ({
                   id: p.id,
                   title: p.cachedProjectName ?? p.hubspotProjectId,
-                  sub: `${highestRisk(p.streams).replace("_", " ")} · stream active`,
+                  sub: `${highestRisk(p.sovs).replace("_", " ")} · stream active`,
                   action: i === 0 ? "View project" : undefined,
                   actionTone: "#f59e0b",
                 }))}
