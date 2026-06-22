@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Link, useLocation } from "wouter";
+import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/react";
 import { cn } from "@/lib/utils";
 import { useResponsive } from "@/hooks/use-responsive";
 import { useTheme } from "@/lib/theme";
@@ -132,7 +133,7 @@ function userDisplayName(user: { firstName: string | null; lastName: string | nu
 }
 
 /* ─── Login gate (unauthenticated) ───────────────────────────────────────── */
-function LoginScreen({ onLogin }: { onLogin: () => void }) {
+function LoginScreen() {
   return (
     <div className="flex min-h-screen items-center justify-center px-4 dark" style={{ background: "var(--bg)" }}>
       <div
@@ -151,13 +152,12 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
         <p className="mt-5 text-[13.5px] leading-relaxed" style={{ color: "var(--text-dim)" }}>
           Please log in to access the workspace.
         </p>
-        <button
-          onClick={onLogin}
-          className="mt-6 w-full rounded-md py-2.5 text-[14px] font-semibold text-[#1a1205] transition-opacity hover:opacity-90"
-          style={{ background: "linear-gradient(135deg,#f59e0b,#f97316)" }}
-        >
-          Log in
-        </button>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
+          <Show when="signed-out">
+            <SignInButton />
+            <SignUpButton />
+          </Show>
+        </div>
       </div>
     </div>
   );
@@ -218,7 +218,7 @@ function PendingAccessScreen({
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { isDesktop, isTablet, isMobile, width } = useResponsive();
-  const { user, isLoading, isAuthenticated, login, logout } = useAuth();
+  const { user, isLoading, isAuthenticated, logout } = useAuth();
   const { resolved: resolvedTheme, setTheme, syncFromServer } = useTheme();
   const [location] = useLocation();
   const [drawer, setDrawer] = React.useState(false);
@@ -258,7 +258,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAuthenticated) {
-    return <LoginScreen onLogin={login} />;
+    return <LoginScreen />;
   }
 
   if (user && !user.role) {
@@ -409,6 +409,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               >
                 <LogOut className="h-[18px] w-[18px]" />
               </button>
+              <Show when="signed-in">
+                <UserButton />
+              </Show>
             </div>
           </header>
 
