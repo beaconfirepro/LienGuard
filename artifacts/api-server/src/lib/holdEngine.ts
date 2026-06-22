@@ -53,6 +53,122 @@ export interface HoldRecomputeResult {
 
 type HoldType = "schedule_hold" | "material_hold";
 
+// ---------------------------------------------------------------------------
+// Pure hold-decision logic (unit-tested in holdEngine.test.ts)
+//
+// The decision of *which* vendor bills to hold and *which* existing holds to
+// clear is separated from all DB I/O so it can be exercised directly. The
+// recomputeHolds transaction below loads the inputs, calls planHoldChanges, and
+// applies the resulting plan.
+// ---------------------------------------------------------------------------
+
+/** A vendor bill (supplier invoice) considered for holding. */
+export interface HoldBill {
+  id: string;
+  lienProjectId: string | null;
+  linkedClientId: string | null;
+  clearedFlag: boolean;
+}
+
+/** An existing, still-open bill-based hold. */
+export interface ActiveBillHold {
+  id: string;
+  holdType: HoldType;
+  supplierInvoiceId: string | null;
+}
+
+export interface HoldPlanInput {
+  vendorBills: HoldBill[];
+  /** Projects with ≥1 past-due, uncleared, non-supplier receivable. */
+  overdueProjectIds: Set<string>;
+  /** Clients whose overdue balance exceeds the material-hold threshold. */
+  overThresholdClientIds: Set<string>;
+  /** Per-client overdue balance, for the material-hold reason text. */
+  clientOverdueAmount: Map<string, number>;
+  materialThreshold: number;
+  activeBillHolds: ActiveBillHold[];
+}
+
+export interface PlannedHold {
+  holdType: HoldType;
+  bill: HoldBill;
+  reason: string;
+}
+
+export interface HoldPlan {
+  /** New holds to insert (a bill not already held for that hold type). */
+  toCreate: PlannedHold[];
+  /** Existing hold IDs to clear (no longer justified this pass). */
+  toClearHoldIds: string[];
+}
+
+function formatUsd(n: number): string {
+  return n.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+/**
+ * Decide hold changes for one recompute pass. Pure — no I/O.
+ *
+ * A vendor bill is held when it is uncleared and either (a) its project has a
+ * past-due receivable (schedule_hold) or (b) its client's overdue balance
+ * exceeds the threshold (material_hold). A bill can carry both hold types.
+ * Existing bill-based holds that are no longer justified this pass are cleared.
+ */
+export function planHoldChanges(input: HoldPlanInput): HoldPlan {
+  const {
+    vendorBills,
+    overdueProjectIds,
+    overThresholdClientIds,
+    clientOverdueAmount,
+    materialThreshold,
+    activeBillHolds,
+  } = input;
+
+  const activeByKey = new Map<string, string>();
+  for (const h of activeBillHolds) {
+    activeByKey.set(`${h.holdType}|${h.supplierInvoiceId}`, h.id);
+  }
+
+  const toCreate: PlannedHold[] = [];
+  const stillJustified = new Set<string>();
+
+  const ensure = (holdType: HoldType, bill: HoldBill, reason: string) => {
+    const key = `${holdType}|${bill.id}`;
+    stillJustified.add(key);
+    if (activeByKey.has(key)) return; // already held — leave it
+    toCreate.push({ holdType, bill, reason });
+  };
+
+  for (const bill of vendorBills) {
+    if (bill.clearedFlag) continue; // never hold an already-paid vendor bill
+
+    if (bill.lienProjectId && overdueProjectIds.has(bill.lienProjectId)) {
+      ensure("schedule_hold", bill, "Vendor payment withheld — project has a past-due receivable");
+    }
+
+    if (bill.linkedClientId && overThresholdClientIds.has(bill.linkedClientId)) {
+      const overdue = clientOverdueAmount.get(bill.linkedClientId) ?? 0;
+      ensure(
+        "material_hold",
+        bill,
+        `Vendor payment withheld — client overdue balance $${formatUsd(overdue)} exceeds threshold $${materialThreshold.toFixed(2)}`,
+      );
+    }
+  }
+
+  // Clear active bill-based holds no longer justified (bill paid, project no
+  // longer overdue, or client back under threshold).
+  const toClearHoldIds: string[] = [];
+  for (const [key, holdId] of activeByKey) {
+    if (!stillJustified.has(key)) toClearHoldIds.push(holdId);
+  }
+
+  return { toCreate, toClearHoldIds };
+}
+
 export async function recomputeHolds(orgId: string): Promise<HoldRecomputeResult> {
   const now = new Date();
   const materialThreshold = getMaterialHoldThreshold();
@@ -121,7 +237,7 @@ export async function recomputeHolds(orgId: string): Promise<HoldRecomputeResult
         ),
       );
 
-    // Index of currently active bill-based holds keyed by `${holdType}|${billId}`.
+    // Currently active bill-based holds.
     const activeBillHolds = await tx
       .select({
         id: holdsTable.id,
@@ -137,59 +253,31 @@ export async function recomputeHolds(orgId: string): Promise<HoldRecomputeResult
         ),
       );
 
-    const activeByKey = new Map<string, string>();
-    for (const h of activeBillHolds) {
-      activeByKey.set(`${h.holdType}|${h.supplierInvoiceId}`, h.id);
-    }
+    // Pure decision of what to set/clear this pass.
+    const plan = planHoldChanges({
+      vendorBills,
+      overdueProjectIds,
+      overThresholdClientIds,
+      clientOverdueAmount,
+      materialThreshold,
+      activeBillHolds,
+    });
 
-    // Track which active holds remain justified this pass so we can clear the rest.
-    const stillJustified = new Set<string>();
-
-    const ensureHold = async (
-      holdType: HoldType,
-      bill: { id: string; lienProjectId: string | null; linkedClientId: string | null },
-      reason: string,
-    ) => {
-      const key = `${holdType}|${bill.id}`;
-      stillJustified.add(key);
-      if (activeByKey.has(key)) return; // already held
+    for (const planned of plan.toCreate) {
       await tx.insert(holdsTable).values({
         id: randomUUID(),
         orgId,
-        holdType,
-        lienProjectId: bill.lienProjectId,
-        linkedClientId: bill.linkedClientId,
-        supplierInvoiceId: bill.id,
-        reason,
+        holdType: planned.holdType,
+        lienProjectId: planned.bill.lienProjectId,
+        linkedClientId: planned.bill.linkedClientId,
+        supplierInvoiceId: planned.bill.id,
+        reason: planned.reason,
         setAt: now,
       });
       set++;
-    };
-
-    for (const bill of vendorBills) {
-      if (bill.clearedFlag) continue; // never hold an already-paid vendor bill
-
-      if (bill.lienProjectId && overdueProjectIds.has(bill.lienProjectId)) {
-        await ensureHold("schedule_hold", bill, "Vendor payment withheld — project has a past-due receivable");
-      }
-
-      if (bill.linkedClientId && overThresholdClientIds.has(bill.linkedClientId)) {
-        const overdue = clientOverdueAmount.get(bill.linkedClientId) ?? 0;
-        await ensureHold(
-          "material_hold",
-          bill,
-          `Vendor payment withheld — client overdue balance $${overdue.toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })} exceeds threshold $${materialThreshold.toFixed(2)}`,
-        );
-      }
     }
 
-    // Clear bill-based holds that are no longer justified (bill paid, project no
-    // longer overdue, or client back under threshold).
-    for (const [key, holdId] of activeByKey) {
-      if (stillJustified.has(key)) continue;
+    for (const holdId of plan.toClearHoldIds) {
       await tx
         .update(holdsTable)
         .set({ clearedAt: now, updatedAt: now })
