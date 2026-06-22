@@ -1,7 +1,7 @@
-# LienGuard by HELM — UAT How-To Guide
+# LiensEasy by HELM — UAT How-To Guide
 
 This guide teaches a non-technical tester **how to operate every feature** of
-LienGuard by HELM: where to click, what to type, and what should happen. It is
+LiensEasy by HELM: where to click, what to type, and what should happen. It is
 the companion to [`UAT_TEST_PLAN.md`](./UAT_TEST_PLAN.md), which lists the
 pass/fail cases. Wherever a walkthrough lets you complete specific test cases,
 the case IDs (e.g. `DASH-A1`) are listed so you can move between this guide and
@@ -49,7 +49,7 @@ All data is scoped to the single test org `org_beacon_test_001`.
 ### 1.2 Start the app
 
 - Start the **API Server** workflow and the **web** workflow.
-- Open the web app from the preview pane (the **LienGuard by HELM** artifact,
+- Open the web app from the preview pane (the **LiensEasy by HELM** artifact,
   served at `/`).
 - For direct API checks, the server is reachable at
   `https://$REPLIT_DEV_DOMAIN/api/...`.

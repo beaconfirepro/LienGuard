@@ -279,7 +279,7 @@ export default function UsersPage() {
               Team &amp; Access
             </h1>
             <p className="text-[13px]" style={{ color: "var(--text-dim)" }}>
-              Manage who can access LienGuard and what they can do.
+              Manage who can access LiensEasy and what they can do.
             </p>
           </div>
           <div className="flex items-center gap-2">

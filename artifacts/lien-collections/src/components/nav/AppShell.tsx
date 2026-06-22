@@ -114,7 +114,7 @@ const TITLES: [RegExp, string][] = [
 ];
 
 function getTitle(path: string) {
-  return TITLES.find(([re]) => re.test(path))?.[1] ?? "LienGuard";
+  return TITLES.find(([re]) => re.test(path))?.[1] ?? "LiensEasy";
 }
 
 /* ─── Main AppShell ──────────────────────────────────────────────────────── */
@@ -143,7 +143,7 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
           <Landmark className="h-7 w-7 text-amber-500" />
         </div>
         <div className="text-[18px] font-bold tracking-tight" style={{ color: "var(--text-base)" }}>
-          LienGuard
+          LiensEasy
         </div>
         <div className="mt-1 text-[11px] font-semibold uppercase tracking-[1.5px]" style={{ color: "var(--text-muted-color)" }}>
           by HELM
@@ -192,7 +192,7 @@ function PendingAccessScreen({
           doesn't have a role assigned yet. An administrator needs to grant you access before you can use the workspace.
         </p>
         <p className="mt-3 text-[12.5px] leading-relaxed" style={{ color: "var(--text-muted-color)" }}>
-          Please reach out to your LienGuard admin. Once they've assigned your role, reload this page to get started.
+          Please reach out to your LiensEasy admin. Once they've assigned your role, reload this page to get started.
         </p>
         <button
           onClick={() => window.location.reload()}
@@ -306,8 +306,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* ─── Left rail (Helm slot) ───────────────────────────────────────
             In the standalone module app this rail is intentionally empty — it
-            is the slot the Helm platform fills when LienGuard runs inside Helm.
-            LienGuard's own nav lives in the top bar; its brand in the header. */}
+            is the slot the Helm platform fills when LiensEasy runs inside Helm.
+            LiensEasy's own nav lives in the top bar; its brand in the header. */}
         {isDesktop && (
           <aside
             className="sticky top-0 h-screen shrink-0 border-r"
@@ -328,12 +328,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Menu className="h-6 w-6" />
               </button>
             )}
-            {/* LienGuard brand — the app's identity lives in the header */}
+            {/* LiensEasy brand — the app's identity lives in the header */}
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
               <Landmark className="h-[22px] w-[22px] shrink-0 text-amber-500" />
               <div className="min-w-0">
                 <div className="text-[16px] font-bold leading-[1.1] tracking-tight md:text-[18px]" style={{ color: "var(--text-base)" }}>
-                  LienGuard <span className="font-medium" style={{ color: "var(--text-dim)" }}>by Helm</span>
+                  LiensEasy <span className="font-medium" style={{ color: "var(--text-dim)" }}>by Helm</span>
                 </div>
                 <div className="mt-0.5 flex items-center gap-2">
                   <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold tracking-wide" style={{ color: "#14eba3", background: "rgba(20,235,163,.12)" }}>
@@ -531,7 +531,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="flex flex-wrap items-center justify-between gap-3 border-t px-6 py-3 text-[11px]"
             style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-muted-color)", marginBottom: isMobile ? 62 : 0 }}
           >
-            <span>© 2026 HELM Fire Protection · LienGuard v1.0</span>
+            <span>© 2026 HELM Fire Protection · LiensEasy v1.0</span>
             <span className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-[#14eba3]" />
               Status: Operational
@@ -625,7 +625,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               <div className="flex h-16 items-center justify-between border-b px-[18px]" style={{ borderColor: "var(--helm-border)" }}>
                 <span className="text-[15px] font-bold leading-tight" style={{ color: "var(--text-base)" }}>
-                  LienGuard
+                  LiensEasy
                   <span className="block text-[9.5px] font-semibold uppercase tracking-[0.16em]" style={{ color: "var(--text-muted-color)" }}>By HELM</span>
                 </span>
                 <button onClick={() => setDrawer(false)} style={{ color: "var(--text-dim)" }}>

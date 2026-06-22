@@ -329,7 +329,7 @@ export default function ProfilePage() {
         {/* Identity + avatar */}
         <Section
           title="Account"
-          description="Your photo and display name appear across LienGuard."
+          description="Your photo and display name appear across LiensEasy."
         >
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
             {/* Avatar */}
