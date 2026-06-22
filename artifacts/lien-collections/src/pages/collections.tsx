@@ -151,7 +151,7 @@ export default function CollectionsPage() {
         body: JSON.stringify({
           method,
           activityDate: activityDate ?? new Date().toISOString().slice(0, 10),
-          notes: notes ?? "Logged from call queue",
+          notes,
         }),
       }),
     onSuccess: () => {
