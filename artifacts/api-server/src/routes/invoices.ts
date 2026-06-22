@@ -11,12 +11,12 @@ import { db } from "@workspace/db";
 import {
   invoiceLinksTable,
   collectionAccountsTable,
-  promisesToPayTable,
   lienProjectsTable,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { qboSyncClient } from "../lib/clients/qbo";
+import { computeAccountRiskMetrics } from "../lib/riskScore";
 
 const router = Router();
 router.use(requireSession);
@@ -140,94 +140,26 @@ router.post("/invoices/:id/clear", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Inline risk recomputation (mirrors collections.ts logic without a shared
-// module import — keeps invoices.ts self-contained while ensuring the score
-// stays fresh after a payment clear).
+// Risk recomputation after a payment clear. The risk math itself lives in the
+// shared computeAccountRiskMetrics module so this path can never drift from the
+// account-detail recompute in collections.ts. This wrapper adds the
+// clear-specific side effect of resolving an account back to "current" once
+// every overdue invoice is cleared.
 // ---------------------------------------------------------------------------
 async function recomputeRiskScoreForAccount(
   account: typeof collectionAccountsTable.$inferSelect,
   orgId: string,
 ): Promise<void> {
-  const today = new Date();
-
-  const unpaidInvoices = await db
-    .select()
-    .from(invoiceLinksTable)
-    .where(
-      and(
-        eq(invoiceLinksTable.orgId, orgId),
-        eq(invoiceLinksTable.linkedClientId, account.linkedClientId),
-        eq(invoiceLinksTable.clearedFlag, false),
-      ),
-    );
-
-  const overdueInvoices = unpaidInvoices.filter(
-    (inv) => new Date(inv.dueDate) < today,
-  );
-
-  const totalOverdue = overdueInvoices.reduce(
-    (sum, inv) => sum + Number(inv.amount),
-    0,
-  );
-
-  const oldestOverdueDays =
-    overdueInvoices.length > 0
-      ? Math.max(
-          ...overdueInvoices.map((inv) =>
-            Math.floor(
-              (today.getTime() - new Date(inv.dueDate).getTime()) /
-                (1000 * 60 * 60 * 24),
-            ),
-          ),
-        )
-      : 0;
-
-  const brokenPromises = await db
-    .select()
-    .from(promisesToPayTable)
-    .where(
-      and(
-        eq(promisesToPayTable.orgId, orgId),
-        eq(promisesToPayTable.accountId, account.id),
-        eq(promisesToPayTable.status, "broken"),
-      ),
-    );
-
-  const totalAR = unpaidInvoices.reduce((sum, inv) => sum + Number(inv.amount), 0);
-
-  // Factor 1: Days since oldest overdue (0-40 pts, ~40%)
-  let agePts = 0;
-  if (oldestOverdueDays > 90) agePts = 40;
-  else if (oldestOverdueDays > 60) agePts = 33;
-  else if (oldestOverdueDays > 30) agePts = 22;
-  else if (oldestOverdueDays > 0) agePts = 10;
-
-  // Factor 2: Overdue/total-AR ratio (0-30 pts, ~30%)
-  const overdueRatio = totalAR > 0 ? totalOverdue / totalAR : 0;
-  let ratioPts = 0;
-  if (overdueRatio >= 0.75) ratioPts = 30;
-  else if (overdueRatio >= 0.5) ratioPts = 22;
-  else if (overdueRatio >= 0.25) ratioPts = 15;
-  else if (overdueRatio > 0) ratioPts = 7;
-
-  // Factor 3: Broken promises (0-20 pts, ~20%)
-  let brokenPts = 0;
-  if (brokenPromises.length >= 3) brokenPts = 20;
-  else if (brokenPromises.length === 2) brokenPts = 16;
-  else if (brokenPromises.length === 1) brokenPts = 10;
-
-  // Factor 4: Exposure vs threshold (0-10 pts, ~10%)
-  let exposurePts = 0;
-  if (totalOverdue >= 50000) exposurePts = 10;
-  else if (totalOverdue >= 25000) exposurePts = 8;
-  else if (totalOverdue >= 10000) exposurePts = 6;
-  else if (totalOverdue >= 2500) exposurePts = 3;
-
-  const riskScore = Math.min(agePts + ratioPts + brokenPts + exposurePts, 100);
+  const { riskScore, oldestOverdueDays, totalOverdue, overdueCount } =
+    await computeAccountRiskMetrics({
+      accountId: account.id,
+      orgId,
+      linkedClientId: account.linkedClientId,
+    });
 
   // If all invoices are now cleared → resolve account to "current"
   const newStatus =
-    overdueInvoices.length === 0 && account.status !== "written_off"
+    overdueCount === 0 && account.status !== "written_off"
       ? "current"
       : account.status;
 

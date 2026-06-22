@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Link, useLocation } from "wouter";
+import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/react";
 import { cn } from "@/lib/utils";
 import { useResponsive } from "@/hooks/use-responsive";
 import { useTheme } from "@/lib/theme";
@@ -12,7 +13,7 @@ import {
   Sun, Moon, PanelRightClose, PanelRightOpen,
   PanelLeftClose, PanelLeftOpen, FileSignature, LogOut,
   ChevronDown, User, Users2,
-  Send, Shield,
+  Send, Shield, FileText,
 } from "lucide-react";
 
 /* ─── Panel context (inner left + right) ─────────────────────────────────── */
@@ -91,16 +92,18 @@ function CollapsibleCard({
 /* ─── Navigation config ──────────────────────────────────────────────────── */
 const MODULE_NAV = [
   { key: "dashboard", label: "Dashboard", to: "/", Icon: LayoutGrid },
-  { key: "liens", label: "Projects", to: "/liens", Icon: Landmark },
-  { key: "notices", label: "Notices", to: "/notices", Icon: Send },
   { key: "waivers", label: "Waivers", to: "/waivers", Icon: FileSignature },
-  { key: "collections", label: "Collections", to: "/collections", Icon: DollarSign },
   { key: "holds", label: "Vendor Holds", to: "/holds", Icon: Lock },
+  { key: "collections", label: "Collections", to: "/collections", Icon: DollarSign },
+  { key: "notices", label: "Notices", to: "/notices", Icon: Send },
+  { key: "projects", label: "Projects", to: "/liens", Icon: Landmark },
+  { key: "liens", label: "Liens", to: "/liens-board", Icon: FileText },
 ];
 
 const TITLES: [RegExp, string][] = [
   [/^\/settings$/, "Company Settings"],
   [/^\/liens$/, "Projects"],
+  [/^\/liens-board$/, "Liens"],
   [/^\/notices$/, "Notices"],
   [/^\/send-queue$/, "Ready-to-Send Queue"],
   [/^\/projects\//, "Project Workspace"],
@@ -114,7 +117,7 @@ const TITLES: [RegExp, string][] = [
 ];
 
 function getTitle(path: string) {
-  return TITLES.find(([re]) => re.test(path))?.[1] ?? "LienGuard";
+  return TITLES.find(([re]) => re.test(path))?.[1] ?? "LiensEasy";
 }
 
 /* ─── Main AppShell ──────────────────────────────────────────────────────── */
@@ -132,7 +135,7 @@ function userDisplayName(user: { firstName: string | null; lastName: string | nu
 }
 
 /* ─── Login gate (unauthenticated) ───────────────────────────────────────── */
-function LoginScreen({ onLogin }: { onLogin: () => void }) {
+function LoginScreen() {
   return (
     <div className="flex min-h-screen items-center justify-center px-4 dark" style={{ background: "var(--bg)" }}>
       <div
@@ -143,7 +146,7 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
           <img src="/helm-logo.svg" alt="HELM" className="mx-auto h-24 w-24 rounded-xl" />
         </div>
         <div className="text-[18px] font-bold tracking-tight" style={{ color: "var(--text-base)" }}>
-          LienGuard
+          LiensEasy
         </div>
         <div className="mt-1 text-[11px] font-semibold uppercase tracking-[1.5px]" style={{ color: "var(--text-muted-color)" }}>
           by HELM
@@ -151,13 +154,12 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
         <p className="mt-5 text-[13.5px] leading-relaxed" style={{ color: "var(--text-dim)" }}>
           Please log in to access the workspace.
         </p>
-        <button
-          onClick={onLogin}
-          className="mt-6 w-full rounded-md py-2.5 text-[14px] font-semibold text-[#1a1205] transition-opacity hover:opacity-90"
-          style={{ background: "linear-gradient(135deg,#f59e0b,#f97316)" }}
-        >
-          Log in
-        </button>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
+          <Show when="signed-out">
+            <SignInButton />
+            <SignUpButton />
+          </Show>
+        </div>
       </div>
     </div>
   );
@@ -192,7 +194,7 @@ function PendingAccessScreen({
           doesn't have a role assigned yet. An administrator needs to grant you access before you can use the workspace.
         </p>
         <p className="mt-3 text-[12.5px] leading-relaxed" style={{ color: "var(--text-muted-color)" }}>
-          Please reach out to your LienGuard admin. Once they've assigned your role, reload this page to get started.
+          Please reach out to your LiensEasy admin. Once they've assigned your role, reload this page to get started.
         </p>
         <button
           onClick={() => window.location.reload()}
@@ -218,7 +220,7 @@ function PendingAccessScreen({
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { isDesktop, isTablet, isMobile, width } = useResponsive();
-  const { user, isLoading, isAuthenticated, login, logout } = useAuth();
+  const { user, isLoading, isAuthenticated, logout } = useAuth();
   const { resolved: resolvedTheme, setTheme, syncFromServer } = useTheme();
   const [location] = useLocation();
   const [drawer, setDrawer] = React.useState(false);
@@ -258,7 +260,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAuthenticated) {
-    return <LoginScreen onLogin={login} />;
+    return <LoginScreen />;
   }
 
   if (user && !user.role) {
@@ -276,9 +278,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     location.startsWith("/send-queue");
   const isModuleActive = (m: { key: string; to: string }) =>
     m.to === "/" ? location === "/" :
-      m.key === "liens" ? isLiensSection :
-        m.key === "notices" ? isNoticesSection :
-          location.startsWith(m.to);
+    m.key === "projects" ? isLiensSection :
+    m.key === "notices" ? isNoticesSection :
+    location.startsWith(m.to);
 
   /* Inner left panel (DD-UI: LP · content · RP) is now page-registered via
      useLeftPanel — pages decide its content. */
@@ -306,8 +308,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* ─── Left rail (Helm slot) ───────────────────────────────────────
             In the standalone module app this rail is intentionally empty — it
-            is the slot the Helm platform fills when LienGuard runs inside Helm.
-            LienGuard's own nav lives in the top bar; its brand in the header. */}
+            is the slot the Helm platform fills when LiensEasy runs inside Helm.
+            LiensEasy's own nav lives in the top bar; its brand in the header. */}
         {isDesktop && (
           <aside
             className="sticky top-0 h-screen shrink-0 border-r"
@@ -328,12 +330,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Menu className="h-6 w-6" />
               </button>
             )}
-            {/* LienGuard brand — the app's identity lives in the header */}
+            {/* LiensEasy brand — the app's identity lives in the header */}
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
               <img src="/helm-icon.svg" alt="HELM" className="h-[28px] w-[28px] shrink-0 rounded-md" />
               <div className="min-w-0">
                 <div className="text-[16px] font-bold leading-[1.1] tracking-tight md:text-[18px]" style={{ color: "var(--text-base)" }}>
-                  LienGuard <span className="font-medium" style={{ color: "var(--text-dim)" }}>by Helm</span>
+                  LiensEasy <span className="font-medium" style={{ color: "var(--text-dim)" }}>by Helm</span>
                 </div>
                 <div className="mt-0.5 flex items-center gap-2">
                   <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold tracking-wide" style={{ color: "#14eba3", background: "rgba(20,235,163,.12)" }}>
@@ -409,6 +411,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               >
                 <LogOut className="h-[18px] w-[18px]" />
               </button>
+              <Show when="signed-in">
+                <UserButton />
+              </Show>
             </div>
           </header>
 
@@ -531,7 +536,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="flex flex-wrap items-center justify-between gap-3 border-t px-6 py-3 text-[11px]"
             style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-muted-color)", marginBottom: isMobile ? 62 : 0 }}
           >
-            <span>© 2026 HELM Fire Protection · LienGuard v1.0</span>
+            <span>© 2026 HELM Fire Protection · LiensEasy v1.0</span>
             <span className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-[#14eba3]" />
               Status: Operational
@@ -590,10 +595,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <nav className="fixed inset-x-0 bottom-0 z-40 flex h-[62px] border-t" style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}>
             {[
               { label: "Dashboard", to: "/", Icon: LayoutGrid },
-              { label: "Projects", to: "/liens", Icon: Landmark },
-              { label: "Notices", to: "/notices", Icon: Send },
-              { label: "Collections", to: "/collections", Icon: DollarSign },
               { label: "Waivers", to: "/waivers", Icon: FileSignature },
+              { label: "Vendor Holds", to: "/holds", Icon: Lock },
+              { label: "Collections", to: "/collections", Icon: DollarSign },
+              { label: "Notices", to: "/notices", Icon: Send },
             ].map(({ label, to, Icon }) => {
               const active =
                 to === "/" ? location === to :
@@ -625,7 +630,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               <div className="flex h-16 items-center justify-between border-b px-[18px]" style={{ borderColor: "var(--helm-border)" }}>
                 <span className="text-[15px] font-bold leading-tight" style={{ color: "var(--text-base)" }}>
-                  LienGuard
+                  LiensEasy
                   <span className="block text-[9.5px] font-semibold uppercase tracking-[0.16em]" style={{ color: "var(--text-muted-color)" }}>By HELM</span>
                 </span>
                 <button onClick={() => setDrawer(false)} style={{ color: "var(--text-dim)" }}>
@@ -639,8 +644,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {MODULE_NAV.map((m) => {
                   const active =
                     m.to === "/" ? location === "/" :
-                      m.key === "liens" ? (location.startsWith(m.to) || isLiensSection) :
-                        location.startsWith(m.to);
+                    m.key === "projects" ? isLiensSection :
+                    location.startsWith(m.to);
                   return (
                     <div key={m.key}>
                       <Link href={m.to}>

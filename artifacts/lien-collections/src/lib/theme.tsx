@@ -3,7 +3,7 @@ import * as React from "react";
 export type Theme = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
 
-const STORAGE_KEY = "lienguard-theme";
+const STORAGE_KEY = "liengeasy-theme";
 
 function readStored(): Theme {
   try {

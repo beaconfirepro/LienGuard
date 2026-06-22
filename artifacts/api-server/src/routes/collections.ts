@@ -37,6 +37,7 @@ import { eq, and, inArray, desc, asc, isNull, sql } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { hubspotClient } from "../lib/clients/hubspot";
 import { qboSyncClient } from "../lib/clients/qbo";
+import { computeAccountRiskMetrics } from "../lib/riskScore";
 
 const router = Router();
 
@@ -77,88 +78,14 @@ async function recomputeRiskScore(
   accountId: string,
   orgId: string,
   linkedClientId: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   escalationStage: string,
 ): Promise<{ riskScore: number; oldestOverdueDays: number; totalOverdue: number }> {
-  const today = new Date();
-
-  // Unpaid overdue invoices for this client
-  const unpaidInvoices = await db
-    .select()
-    .from(invoiceLinksTable)
-    .where(
-      and(
-        eq(invoiceLinksTable.orgId, orgId),
-        eq(invoiceLinksTable.linkedClientId, linkedClientId),
-        eq(invoiceLinksTable.clearedFlag, false),
-      ),
-    );
-
-  const overdueInvoices = unpaidInvoices.filter(
-    (inv) => new Date(inv.dueDate) < today,
-  );
-
-  const totalOverdue = overdueInvoices.reduce(
-    (sum, inv) => sum + Number(inv.amount),
-    0,
-  );
-
-  const oldestOverdueDays =
-    overdueInvoices.length > 0
-      ? Math.max(
-          ...overdueInvoices.map((inv) =>
-            Math.floor(
-              (today.getTime() - new Date(inv.dueDate).getTime()) /
-                (1000 * 60 * 60 * 24),
-            ),
-          ),
-        )
-      : 0;
-
-  // Broken promises count
-  const brokenPromises = await db
-    .select()
-    .from(promisesToPayTable)
-    .where(
-      and(
-        eq(promisesToPayTable.orgId, orgId),
-        eq(promisesToPayTable.accountId, accountId),
-        eq(promisesToPayTable.status, "broken"),
-      ),
-    );
-
-  // Total AR (all unpaid invoices — including non-overdue) for ratio computation
-  const totalAR = unpaidInvoices.reduce((sum, inv) => sum + Number(inv.amount), 0);
-
-  // Score factors matching spec weights (40 / 30 / 20 / 10 = 100)
-  // Factor 1: Days since oldest overdue invoice (0-40 pts, ~40% weight)
-  let agePts = 0;
-  if (oldestOverdueDays > 90) agePts = 40;
-  else if (oldestOverdueDays > 60) agePts = 33;
-  else if (oldestOverdueDays > 30) agePts = 22;
-  else if (oldestOverdueDays > 0) agePts = 10;
-
-  // Factor 2: Overdue-to-total-AR ratio (0-30 pts, ~30% weight)
-  const overdueRatio = totalAR > 0 ? totalOverdue / totalAR : 0;
-  let ratioPts = 0;
-  if (overdueRatio >= 0.75) ratioPts = 30;
-  else if (overdueRatio >= 0.5) ratioPts = 22;
-  else if (overdueRatio >= 0.25) ratioPts = 15;
-  else if (overdueRatio > 0) ratioPts = 7;
-
-  // Factor 3: Broken promises count (0-20 pts, ~20% weight)
-  let brokenPts = 0;
-  if (brokenPromises.length >= 3) brokenPts = 20;
-  else if (brokenPromises.length === 2) brokenPts = 16;
-  else if (brokenPromises.length === 1) brokenPts = 10;
-
-  // Factor 4: Total overdue exposure vs threshold (0-10 pts, ~10% weight)
-  let exposurePts = 0;
-  if (totalOverdue >= 50000) exposurePts = 10;
-  else if (totalOverdue >= 25000) exposurePts = 8;
-  else if (totalOverdue >= 10000) exposurePts = 6;
-  else if (totalOverdue >= 2500) exposurePts = 3;
-
-  const riskScore = Math.min(agePts + ratioPts + brokenPts + exposurePts, 100);
+  // All risk math (including the org's configurable scoring bands) lives in the
+  // shared module so this path and the invoice-clear path can never compute
+  // different figures.
+  const { riskScore, oldestOverdueDays, totalOverdue } =
+    await computeAccountRiskMetrics({ accountId, orgId, linkedClientId });
 
   // Persist refreshed values
   await db

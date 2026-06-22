@@ -24,3 +24,4 @@
 - [AuthUser role passthrough](authuser-role-passthrough.md) — frontend role is gated by the AuthUser OpenAPI schema; GetCurrentAuthUserResponse.parse strips any field not in the schema, so role must be declared there + codegen rerun.
 - [Role is DB-authoritative](authuser-role-field.md) — resolve users.role from DB per-request (session copy goes stale); role rides OpenAPI AuthUser for UI gating (rerun codegen); role===null = no-access-yet.
 - [Invite/add-user claim flow](invite-claim-flow.md) — admin pre-creates user by email (placeholder uuid id); login adopts real OIDC sub onto that row (email-unique blocks naive insert); emails lowercased both sides.
+- [zod not in api-server](api-server-zod.md) — api-server has no direct zod dep and api-zod doesn't re-export z; hand-roll request validation or add zod (catalog:) first.

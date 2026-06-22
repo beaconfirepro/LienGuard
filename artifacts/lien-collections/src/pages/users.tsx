@@ -9,8 +9,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldAlert, Users as UsersIcon, Clock, ShieldCheck } from "lucide-react";
+import {
+  ShieldAlert,
+  Users as UsersIcon,
+  Clock,
+  ShieldCheck,
+  UserPlus,
+} from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Fetch helper (session cookie — mirrors the pattern used across the app)
@@ -220,6 +238,63 @@ export default function UsersPage() {
     enabled: isAdmin,
   });
 
+  // --- Add user dialog state ---------------------------------------------
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const [inviteOpen, setInviteOpen] = React.useState(false);
+  const [inviteEmail, setInviteEmail] = React.useState("");
+  const [inviteRole, setInviteRole] = React.useState<Role | typeof NO_ROLE_VALUE>(
+    NO_ROLE_VALUE,
+  );
+  const [emailError, setEmailError] = React.useState<string | null>(null);
+
+  function resetInvite() {
+    setInviteEmail("");
+    setInviteRole(NO_ROLE_VALUE);
+    setEmailError(null);
+  }
+
+  const invite = useMutation({
+    mutationFn: ({ email, role }: { email: string; role: Role | null }) =>
+      apiFetch<{ user: TeamUser }>("/users", {
+        method: "POST",
+        body: JSON.stringify({ email, role }),
+      }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["team-users"] });
+      setInviteOpen(false);
+      resetInvite();
+      const u = res.user;
+      toast({
+        title: "User added",
+        description: u.role
+          ? `${u.email} can sign in as ${ROLE_LABELS[u.role]}. Their role applies once they log in.`
+          : `${u.email} can sign in. Assign a role once they appear in the list.`,
+      });
+    },
+    onError: (err: Error) => {
+      // Surface duplicate-email and other API errors inline on the form.
+      setEmailError(err.message);
+    },
+  });
+
+  function submitInvite(e: React.FormEvent) {
+    e.preventDefault();
+    const email = inviteEmail.trim();
+    if (!email) {
+      setEmailError("Email address is required.");
+      return;
+    }
+    if (!EMAIL_RE.test(email)) {
+      setEmailError("Enter a valid email address.");
+      return;
+    }
+    setEmailError(null);
+    invite.mutate({
+      email,
+      role: inviteRole === NO_ROLE_VALUE ? null : inviteRole,
+    });
+  }
+
   const setRole = useMutation({
     mutationFn: ({ id, role }: { id: string; role: Role | null }) =>
       apiFetch<{ user: TeamUser }>(`/users/${id}/role`, {
@@ -279,7 +354,7 @@ export default function UsersPage() {
               Team &amp; Access
             </h1>
             <p className="text-[13px]" style={{ color: "var(--text-dim)" }}>
-              Manage who can access LienGuard and what they can do.
+              Manage who can access LiensEasy and what they can do.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -304,6 +379,91 @@ export default function UsersPage() {
             >
               {users.length} total
             </span>
+            <Dialog
+              open={inviteOpen}
+              onOpenChange={(open) => {
+                setInviteOpen(open);
+                if (!open) resetInvite();
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button size="sm" className="gap-1.5">
+                  <UserPlus className="h-4 w-4" />
+                  Add user
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <form onSubmit={submitInvite}>
+                  <DialogHeader>
+                    <DialogTitle>Add a team member</DialogTitle>
+                    <DialogDescription>
+                      Pre-create a user by email so they can sign in. Their role
+                      takes effect the first time they log in.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="mt-4 space-y-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="invite-email">Email address</Label>
+                      <Input
+                        id="invite-email"
+                        type="email"
+                        autoFocus
+                        placeholder="teammate@company.com"
+                        value={inviteEmail}
+                        onChange={(e) => {
+                          setInviteEmail(e.target.value);
+                          if (emailError) setEmailError(null);
+                        }}
+                        aria-invalid={emailError ? true : undefined}
+                      />
+                      {emailError && (
+                        <p className="text-[12px] text-red-400">{emailError}</p>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="invite-role">Role (optional)</Label>
+                      <Select
+                        value={inviteRole}
+                        onValueChange={(v) =>
+                          setInviteRole(v as Role | typeof NO_ROLE_VALUE)
+                        }
+                      >
+                        <SelectTrigger id="invite-role">
+                          <SelectValue placeholder="No role yet" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_ROLE_VALUE}>
+                            <span className="text-muted-foreground">
+                              No role yet
+                            </span>
+                          </SelectItem>
+                          {ROLE_OPTIONS.map((r) => (
+                            <SelectItem key={r} value={r}>
+                              {ROLE_LABELS[r]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <DialogFooter className="mt-6">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setInviteOpen(false);
+                        resetInvite();
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={invite.isPending}>
+                      {invite.isPending ? "Adding…" : "Add user"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
 
