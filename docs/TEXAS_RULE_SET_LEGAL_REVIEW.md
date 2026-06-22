@@ -148,15 +148,16 @@ No statutory notice may be **sent**, and no lien may be **exported or recorded**
 on a rule set that has not passed legal review — enforced in production by
 `legalReview.ts` (`legalReviewed` must be `true` on the jurisdiction's rule set).
 
-> 🚩 **Action required before relying on the gate.** The seed currently ships
-> the Texas rule set with **`legalReviewed: true`** (`lib/db/src/seed.ts:107`).
-> That means the gate **passes by default today, before any real review.** To make
-> the gate meaningful:
-> 1. Set the seeded value to **`legalReviewed: false`**.
-> 2. Complete this review (Section 4).
-> 3. Flip the flag to `true` only via the admin review endpoint
+The seed now ships the Texas rule set **locked** (`legalReviewed: false`,
+`lib/db/src/seed.ts`), so in production the gate blocks until a real review. To
+lift the gate:
+> 1. Complete this review (Section 4).
+> 2. Flip the flag to `true` **only** via the admin review endpoint
 >    (`PATCH /config/rule-sets/:id/review`) once counsel signs off — and record
->    who/when below.
+>    who/when in Section 6.
+
+The gate is enforced in production only, so development, test, and UAT flows are
+unaffected by the locked flag.
 
 ---
 

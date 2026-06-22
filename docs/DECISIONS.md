@@ -44,13 +44,12 @@ Branch protection is a **single** ruleset targeting `main` only (require PR + re
 `build-and-test`). Targeting all branches blocks feature-branch pushes (checks can't run
 before the branch exists). _(2026-06-22)_
 
-## ED-04 — DD-04 legal-review gate: enforced in prod, ships locked 🔄
+## ED-04 — DD-04 legal-review gate: enforced in prod, ships locked ✅
 No notice is sent and no lien is exported/recorded on a rule set with
 `legalReviewed = false`, enforced in **production only** (relaxed in dev/test/UAT, or via
-`LEGAL_REVIEW_BYPASS=1`). **The seed must ship `legalReviewed: false`** so the gate is
-meaningful; flip to `true` only after counsel signs off (see
-`docs/TEXAS_RULE_SET_LEGAL_REVIEW.md`). _Currently the seed ships `true` — to be fixed._
-_(2026-06-22)_
+`LEGAL_REVIEW_BYPASS=1`). The seed now ships **`legalReviewed: false`**; it is flipped to
+`true` only after counsel signs off, via the admin review endpoint (see
+`docs/TEXAS_RULE_SET_LEGAL_REVIEW.md`). _(2026-06-22)_
 
 ## ED-05 — "Pure core, thin I/O" for testable logic ✅
 Decision logic is extracted into pure functions unit-tested without a DB, with DB I/O kept

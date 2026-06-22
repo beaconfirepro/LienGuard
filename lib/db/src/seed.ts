@@ -104,7 +104,11 @@ async function main() {
       version: "TX-2022.01",
       effectiveDate: d("2022-01-01"),
       statuteRef: "Tex. Prop. Code Ch. 53",
-      legalReviewed: true,
+      // DD-04 gate ships LOCKED. Counsel must review the rule set
+      // (docs/TEXAS_RULE_SET_LEGAL_REVIEW.md) and flip this to true via the admin
+      // review endpoint before these rules are used in production. The gate is
+      // enforced in production only, so dev/test/UAT are unaffected.
+      legalReviewed: false,
     })
     .onConflictDoNothing();
 
