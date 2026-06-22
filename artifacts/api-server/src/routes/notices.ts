@@ -38,6 +38,7 @@ import {
   type RegionContent,
 } from "../lib/documentTemplates";
 import { renderRichText } from "../lib/pdfRichText";
+import { legalReviewBlockReason } from "../lib/legalReview";
 
 const router = Router();
 router.use(requireSession);
@@ -666,6 +667,14 @@ router.post("/notices/:id/send", async (req, res) => {
 
   if (notice.status !== "approved") {
     res.status(409).json({ error: `Notice must be in 'approved' status to send (current: '${notice.status}')` });
+    return;
+  }
+
+  // DD-04: a statutory notice may not go out on a rule set that has not passed
+  // legal review (enforced in production only).
+  const blockReason = await legalReviewBlockReason(orgId, notice.lienScheduleOfValuesId, "send this notice");
+  if (blockReason) {
+    res.status(409).json({ error: blockReason });
     return;
   }
 
