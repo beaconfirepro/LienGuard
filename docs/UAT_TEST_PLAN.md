@@ -1,6 +1,6 @@
-# LienGuard by HELM — User Acceptance Test (UAT) Plan
+# LiensEasy by HELM — User Acceptance Test (UAT) Plan
 
-This plan walks a tester through verifying every major feature of LienGuard against
+This plan walks a tester through verifying every major feature of LiensEasy against
 the seeded test data. It is written so a non-technical tester can follow it.
 
 Each feature area is split into two groups:
@@ -53,7 +53,7 @@ All data is scoped to the single test org `org_beacon_test_001`.
 ### 1.2 Start the app
 
 - Start the **API Server** workflow and the **web** workflow.
-- Open the web app from the preview pane (the **LienGuard by HELM** artifact,
+- Open the web app from the preview pane (the **LiensEasy by HELM** artifact,
   served at `/`).
 - The API is reachable for direct checks at
   `https://$REPLIT_DEV_DOMAIN/api/...`.

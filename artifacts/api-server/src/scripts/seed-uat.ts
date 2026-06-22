@@ -3,7 +3,7 @@
  *
  * Adds the remaining enum states and per-role users that the base seed
  * (lib/db/src/seed.ts), seed-phase5.ts, and seed-phase6.ts do not cover, so
- * every major workflow and user role in LienGuard has end-to-end UAT coverage.
+ * every major workflow and user role in LiensEasy has end-to-end UAT coverage.
  *
  * Run AFTER the base seed + phase5 + phase6:
  *   pnpm dlx tsx src/scripts/seed-uat.ts
