@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   planHoldChanges,
   type HoldBill,
-  type ActiveBillHold,
   type HoldPlanInput,
 } from "../src/lib/holdEngine";
 
@@ -147,5 +146,20 @@ describe("planHoldChanges — idempotency with existing holds", () => {
     );
     expect(plan.toCreate).toEqual([]);
     expect(plan.toClearHoldIds).toEqual(["hold_1"]);
+  });
+
+  it("never clears a legacy/manual hold (null supplierInvoiceId), even if passed in", () => {
+    // The engine only manages bill-based holds; project/client-wide manual holds
+    // must be left untouched regardless of what the caller passes.
+    const plan = planHoldChanges(
+      input({
+        vendorBills: [],
+        activeBillHolds: [
+          { id: "manual_1", holdType: "material_hold", supplierInvoiceId: null },
+        ],
+      }),
+    );
+    expect(plan.toCreate).toEqual([]);
+    expect(plan.toClearHoldIds).toEqual([]);
   });
 });

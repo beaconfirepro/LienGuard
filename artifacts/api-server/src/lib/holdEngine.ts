@@ -129,6 +129,10 @@ export function planHoldChanges(input: HoldPlanInput): HoldPlan {
 
   const activeByKey = new Map<string, string>();
   for (const h of activeBillHolds) {
+    // Only ever touch bill-based holds. A legacy/manual hold (null
+    // supplierInvoiceId) must be left untouched — never keyed here, so it can
+    // never be reported as stale and cleared, even if a caller passes mixed holds.
+    if (h.supplierInvoiceId == null) continue;
     activeByKey.set(`${h.holdType}|${h.supplierInvoiceId}`, h.id);
   }
 
