@@ -231,6 +231,8 @@ router.get("/reports/timeline/:projectId", requireSession, async (req, res) => {
       label: `${dl.ruleKind.replace(/_/g, " ")} deadline`,
       streamId: wm?.lienScheduleOfValuesId,
       workStream: sov?.workStream,
+      entityId: dl.id,
+      meta: {
         adjustedDate: new Date(dl.adjustedDate).toISOString().slice(0, 10),
         satisfiedAt: dl.satisfiedAt ? new Date(dl.satisfiedAt).toISOString().slice(0, 10) : null,
       },
@@ -247,6 +249,8 @@ router.get("/reports/timeline/:projectId", requireSession, async (req, res) => {
       label: `${n.noticeType.replace(/_/g, " ")} notice — ${n.status}`,
       streamId: n.lienScheduleOfValuesId,
       workStream: sov?.workStream,
+      entityId: n.id,
+      meta: {
         status: n.status,
         claimAmount: n.claimAmount,
         sentAt: n.sentAt ? new Date(n.sentAt).toISOString().slice(0, 10) : null,
@@ -282,6 +286,8 @@ router.get("/reports/timeline/:projectId", requireSession, async (req, res) => {
       label: `Lien filed — ${f.county ?? "county TBD"} (${f.status})`,
       streamId: f.lienScheduleOfValuesId,
       workStream: sov?.workStream,
+      entityId: f.id,
+      meta: {
         status: f.status,
         county: f.county,
         recordingRef: f.recordingRef,
