@@ -844,6 +844,7 @@ export default function CollectionsPage() {
                   method: logMethod,
                   activityDate: logDate || undefined,
                   notes: logNotes.trim() || undefined,
+                });
               }}
               className="rounded-md px-4 py-2 text-[12.5px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
               style={{ background: "#6366f1", color: "white" }}

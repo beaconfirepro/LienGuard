@@ -98,7 +98,7 @@ export function useAuth(): AuthState {
   }, [load]);
 
   const login = useCallback(() => {
-    void openSignIn({ afterSignInUrl: "/" });
+    void openSignIn();
   }, [openSignIn]);
 
   const logout = useCallback(() => {
