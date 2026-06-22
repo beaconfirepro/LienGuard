@@ -194,11 +194,11 @@ export default function ProjectsView() {
         items={
           draftNotices.length > 0
             ? draftNotices.map((n) => ({
-                id: n.id,
-                title: n.project?.projectName ?? "Unknown project",
-                sub: `Draft · ${fmtMonthListed(n.monthListed)}`,
-                onClick: () => setLocation(`/send-queue?notice=${n.id}`),
-              }))
+              id: n.id,
+              title: n.project?.projectName ?? "Unknown project",
+              sub: `Draft · ${fmtMonthListed(n.monthListed)}`,
+              onClick: () => setLocation(`/send-queue?notice=${n.id}`),
+            }))
             : [{ id: "empty", title: "Nothing to send", sub: "No draft notices" }]
         }
       />
@@ -212,13 +212,13 @@ export default function ProjectsView() {
         items={
           readyNotices.length > 0
             ? readyNotices.map((n) => ({
-                id: n.id,
-                title: n.project?.projectName ?? "Unknown project",
-                sub: `Approved · ${fmtMonthListed(n.monthListed)}`,
-                action: "Send",
-                actionTone: "#f59e0b",
-                onClick: () => setLocation(`/send-queue?notice=${n.id}`),
-              }))
+              id: n.id,
+              title: n.project?.projectName ?? "Unknown project",
+              sub: `Approved · ${fmtMonthListed(n.monthListed)}`,
+              action: "Send",
+              actionTone: "#f59e0b",
+              onClick: () => setLocation(`/send-queue?notice=${n.id}`),
+            }))
             : [{ id: "empty", title: "Queue empty", sub: "Approve notices to send" }]
         }
       />

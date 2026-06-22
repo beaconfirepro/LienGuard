@@ -253,10 +253,10 @@ export default function CollectionsPage() {
       sortable: false,
       render: (a: CollectionAccount) => (
         <div className="min-w-0">
-          <div className="truncate text-[13px] font-semibold" style={{ color: "var(--text-base)" }}>
+          <div className="whitespace-normal break-words text-[13px] font-semibold leading-tight" style={{ color: "var(--text-base)" }}>
             {a.cachedName ?? a.id}
           </div>
-          <div className="truncate text-[11.5px]" style={{ color: "var(--text-muted-color)" }}>
+          <div className="mt-0.5 whitespace-normal text-[11.5px] leading-tight" style={{ color: "var(--text-muted-color)" }}>
             {a.hasOpenPromise ? "Promise on file" : "No active promise"}
           </div>
         </div>
@@ -312,7 +312,7 @@ export default function CollectionsPage() {
       align: "right" as const,
       sortable: false,
       render: (a: CollectionAccount) => (
-        <span className="font-mono text-[12.5px] font-semibold" style={{ color: "#eb143f" }}>
+        <span className="whitespace-nowrap font-mono text-[12.5px] font-semibold" style={{ color: "#eb143f" }}>
           {money(Number(a.totalOverdue))}
         </span>
       ),
@@ -325,7 +325,7 @@ export default function CollectionsPage() {
       render: (a: CollectionAccount) => {
         const on = callIds.includes(a.id);
         return (
-          <div className="flex items-center justify-end gap-1.5">
+          <div className="flex flex-nowrap items-center justify-end gap-1.5 whitespace-nowrap">
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -575,113 +575,114 @@ export default function CollectionsPage() {
         }
       >
 
-      {/* Call list */}
-      <Section
-        open={!closed["__call"]}
-        onToggle={() => toggleSection("__call")}
-        header={
-          <>
-            <Phone className="h-[17px] w-[17px] shrink-0 text-[#14eba3]" />
-            <div className="flex-1">
-              <div className="text-[14.5px] font-semibold" style={{ color: "var(--text-base)" }}>
-                Call list
-              </div>
-              <div className="text-[11px]" style={{ color: "var(--text-muted-color)" }}>
-                Ranked by risk
-              </div>
-            </div>
-            <span
-              className="rounded-full px-2 py-0.5 font-mono text-[11px] font-semibold text-[#14eba3]"
-              style={{ background: alpha("#14eba3", 0.14) }}
-            >
-              {callAccts.length}
-            </span>
-            <span className="font-mono text-[12.5px] font-semibold text-[#eb143f]">
-              {money(callAccts.reduce((x, a) => x + Number(a.totalOverdue), 0))}
-            </span>
-          </>
-        }
-      >
-        {callAccts.length === 0 ? (
-          <div className="px-4 py-6 text-center text-xs leading-relaxed" style={{ color: "var(--text-muted-color)" }}>
-            Add accounts to the call list below.
-          </div>
-        ) : (
-          callAccts.map((a) => (
-            <div
-              key={a.id}
-              className="flex cursor-pointer items-center gap-3 border-b px-[18px] py-3 last:border-0"
-              style={{ borderColor: "var(--helm-border)" }}
-              onClick={() => navigate(`/collections/${a.id}`)}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13.5px] font-semibold" style={{ color: "var(--text-base)" }}>
-                  {a.cachedName ?? a.id}
+        {/* Call list */}
+        <Section
+          open={!closed["__call"]}
+          onToggle={() => toggleSection("__call")}
+          header={
+            <>
+              <Phone className="h-[17px] w-[17px] shrink-0 text-[#14eba3]" />
+              <div className="flex-1">
+                <div className="text-[14.5px] font-semibold" style={{ color: "var(--text-base)" }}>
+                  Call list
                 </div>
-                <div className="truncate text-[11.5px]" style={{ color: "var(--text-muted-color)" }}>
-                  {STAGE_LABELS[a.escalationStage] ?? a.escalationStage} · {a.oldestOverdueDays}d oldest
+                <div className="text-[11px]" style={{ color: "var(--text-muted-color)" }}>
+                  Ranked by risk
                 </div>
               </div>
-              <RiskPill risk={a.riskScore} />
-              <span className="w-[74px] shrink-0 text-right font-mono text-[13.5px] font-semibold text-[#eb143f]">
-                {money(Number(a.totalOverdue))}
+              <span
+                className="rounded-full px-2 py-0.5 font-mono text-[11px] font-semibold text-[#14eba3]"
+                style={{ background: alpha("#14eba3", 0.14) }}
+              >
+                {callAccts.length}
               </span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  logActivityMut.mutate({ accountId: a.id, method: "phone" });
-                }}
-                className="flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-[12px] font-semibold text-[#14eba3]"
-                style={{ background: alpha("#14eba3", 0.14), borderColor: alpha("#14eba3", 0.3) }}
-              >
-                <Phone className="h-3.5 w-3.5" />
-                Log call
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleCall(a.id);
-                }}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border"
-                style={{ borderColor: "var(--helm-border)", color: "var(--text-muted-color)" }}
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))
-        )}
-      </Section>
-
-      {/* Escalation stage buckets */}
-      <ListTableState
-        isLoading={loadingAccounts}
-        isError={false}
-        isEmpty={false}
-        loadingText="Loading accounts…"
-        errorText="Failed to load accounts."
-        emptyText={
-          activeFilterCount > 0
-            ? "No accounts match the current filters."
-            : "No collection accounts found."
-        }
-      >
-      <ResponsiveTable
-        columns={tableColumns}
-        rows={sortedAccounts}
-        gridTemplate="1.55fr 1.05fr .8fr .55fr .55fr .8fr 1.1fr"
-        onRowClick={(a: CollectionAccount) => navigate(`/collections/${a.id}`)}
-      />
-      {!loadingAccounts && sortedAccounts.length === 0 && (
-        <div
-          className="mt-2 rounded-lg border px-4 py-3 text-center text-[12px]"
-          style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-muted-color)" }}
+              <span className="font-mono text-[12.5px] font-semibold text-[#eb143f]">
+                {money(callAccts.reduce((x, a) => x + Number(a.totalOverdue), 0))}
+              </span>
+            </>
+          }
         >
-          {activeFilterCount > 0
-            ? "No accounts match the current filters."
-            : "No collection accounts found."}
-        </div>
-      )}
-      </ListTableState>
+          {callAccts.length === 0 ? (
+            <div className="px-4 py-6 text-center text-xs leading-relaxed" style={{ color: "var(--text-muted-color)" }}>
+              Add accounts to the call list below.
+            </div>
+          ) : (
+            callAccts.map((a) => (
+              <div
+                key={a.id}
+                className="flex cursor-pointer items-center gap-3 border-b px-[18px] py-3 last:border-0"
+                style={{ borderColor: "var(--helm-border)" }}
+                onClick={() => navigate(`/collections/${a.id}`)}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13.5px] font-semibold" style={{ color: "var(--text-base)" }}>
+                    {a.cachedName ?? a.id}
+                  </div>
+                  <div className="truncate text-[11.5px]" style={{ color: "var(--text-muted-color)" }}>
+                    {STAGE_LABELS[a.escalationStage] ?? a.escalationStage} · {a.oldestOverdueDays}d oldest
+                  </div>
+                </div>
+                <RiskPill risk={a.riskScore} />
+                <span className="w-[74px] shrink-0 text-right font-mono text-[13.5px] font-semibold text-[#eb143f]">
+                  {money(Number(a.totalOverdue))}
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    logActivityMut.mutate({ accountId: a.id, method: "phone" });
+                  }}
+                  className="flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-[12px] font-semibold text-[#14eba3]"
+                  style={{ background: alpha("#14eba3", 0.14), borderColor: alpha("#14eba3", 0.3) }}
+                >
+                  <Phone className="h-3.5 w-3.5" />
+                  Log call
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleCall(a.id);
+                  }}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border"
+                  style={{ borderColor: "var(--helm-border)", color: "var(--text-muted-color)" }}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))
+          )}
+        </Section>
+
+        {/* Escalation stage buckets */}
+        <ListTableState
+          isLoading={loadingAccounts}
+          isError={false}
+          isEmpty={false}
+          loadingText="Loading accounts…"
+          errorText="Failed to load accounts."
+          emptyText={
+            activeFilterCount > 0
+              ? "No accounts match the current filters."
+              : "No collection accounts found."
+          }
+        >
+          <ResponsiveTable
+            columns={tableColumns}
+            rows={sortedAccounts}
+            gridTemplate="minmax(180px,1.55fr) minmax(140px,1.05fr) minmax(110px,.8fr) minmax(72px,.55fr) minmax(90px,.55fr) minmax(110px,.8fr) minmax(172px,1.1fr)"
+            tabletWrapRows
+            onRowClick={(a: CollectionAccount) => navigate(`/collections/${a.id}`)}
+          />
+          {!loadingAccounts && sortedAccounts.length === 0 && (
+            <div
+              className="mt-2 rounded-lg border px-4 py-3 text-center text-[12px]"
+              style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-muted-color)" }}
+            >
+              {activeFilterCount > 0
+                ? "No accounts match the current filters."
+                : "No collection accounts found."}
+            </div>
+          )}
+        </ListTableState>
       </ListPageLayout>
     </>
   );
