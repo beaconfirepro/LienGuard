@@ -12,7 +12,7 @@ import {
   Sun, Moon, PanelRightClose, PanelRightOpen,
   PanelLeftClose, PanelLeftOpen, FileSignature, LogOut,
   ChevronDown, User, Users2,
-  Send, Shield,
+  Send, Shield, FileText,
 } from "lucide-react";
 
 /* ─── Panel context (inner left + right) ─────────────────────────────────── */
@@ -95,12 +95,14 @@ const MODULE_NAV = [
   { key: "holds", label: "Vendor Holds", to: "/holds", Icon: Lock },
   { key: "collections", label: "Collections", to: "/collections", Icon: DollarSign },
   { key: "notices", label: "Notices", to: "/notices", Icon: Send },
-  { key: "liens", label: "Liens", to: "/liens", Icon: Landmark },
+  { key: "projects", label: "Projects", to: "/liens", Icon: Landmark },
+  { key: "liens", label: "Liens", to: "/liens-board", Icon: FileText },
 ];
 
 const TITLES: [RegExp, string][] = [
   [/^\/settings$/, "Company Settings"],
-  [/^\/liens$/, "Liens"],
+  [/^\/liens$/, "Projects"],
+  [/^\/liens-board$/, "Liens"],
   [/^\/notices$/, "Notices"],
   [/^\/send-queue$/, "Ready-to-Send Queue"],
   [/^\/projects\//, "Project Workspace"],

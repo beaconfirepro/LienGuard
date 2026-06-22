@@ -16,6 +16,7 @@ import WaiversPage from "@/pages/waivers";
 import FilingWorkspacePage from "@/pages/filing-workspace";
 import ProfilePage from "@/pages/profile";
 import UsersPage from "@/pages/users";
+import LiensPage from "@/pages/liens-board";
 
 const queryClient = new QueryClient();
 
@@ -25,6 +26,7 @@ function Router() {
       <Switch>
         <Route path="/" component={DashboardPage} />
         <Route path="/liens" component={HomePage} />
+        <Route path="/liens-board" component={LiensPage} />
         <Route path="/projects/:id" component={ProjectDetailPage} />
         <Route path="/holds" component={VendorHoldsPage} />
         <Route path="/collections" component={CollectionsPage} />
