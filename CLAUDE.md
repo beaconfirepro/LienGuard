@@ -125,6 +125,18 @@ notarization gates) → filing/release on escalation → collections dunning lad
 - **AUTH_BYPASS:** dev/test treat every request as an authenticated user (role via `dev_role`
   cookie). Triple-guarded off in production, but it means local behavior ≠ real auth behavior.
 
+## Decisions & canonical knowledge
+
+Durable decisions live **in this repo** (a Claude cowork project is not visible to coding
+sessions). When a decision is made, record it so every session works off the same canon:
+- **`docs/DECISIONS.md`** — engineering & process decision log (`ED-xx`); complements the
+  product decisions (`DD-xx`) in `attached_assets/lien_collections_SCOPE.md`.
+- **`docs/PRODUCTION_PLAN.md`** — the phased plan (A–E) with live status.
+- **`docs/TEXAS_RULE_SET_LEGAL_REVIEW.md`** — seeded statutory rules ↔ code mapping for
+  counsel; note the `legalReviewed` gate (DD-04) and the seed-flag caveat.
+- **`.agents/memory/`** — hard-won technical gotchas.
+- Behavioral/operational rules that should bind every session belong in **this file**.
+
 ## Pointers
 
 - See the `pnpm-workspace` skill for workspace/TypeScript-project-reference details.
