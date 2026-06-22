@@ -477,7 +477,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 >
                   <PanelLeftClose className="h-4 w-4" />
                 </button>
-                {left}
+                <div className="pt-12">
+                  {left}
+                </div>
               </aside>
             )}
             {isDesktop && hasLeftPanel && !leftOpen && (
@@ -530,7 +532,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 >
                   <PanelRightClose className="h-4 w-4" />
                 </button>
-                {right}
+                <div className="pt-12">
+                  {right}
+                </div>
               </div>
             )}
             {isDesktop && hasRightPanel && !rightOpen && (
