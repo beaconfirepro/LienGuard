@@ -276,9 +276,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     location.startsWith("/send-queue");
   const isModuleActive = (m: { key: string; to: string }) =>
     m.to === "/" ? location === "/" :
-    m.key === "liens" ? isLiensSection :
-    m.key === "notices" ? isNoticesSection :
-    location.startsWith(m.to);
+      m.key === "liens" ? isLiensSection :
+        m.key === "notices" ? isNoticesSection :
+          location.startsWith(m.to);
 
   /* Inner left panel (DD-UI: LP · content · RP) is now page-registered via
      useLeftPanel — pages decide its content. */
@@ -597,9 +597,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             ].map(({ label, to, Icon }) => {
               const active =
                 to === "/" ? location === to :
-                to === "/liens" ? isLiensSection :
-                to === "/notices" ? isNoticesSection :
-                location.startsWith(to);
+                  to === "/liens" ? isLiensSection :
+                    to === "/notices" ? isNoticesSection :
+                      location.startsWith(to);
               return (
                 <Link key={label} href={to}>
                   <div
@@ -639,8 +639,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {MODULE_NAV.map((m) => {
                   const active =
                     m.to === "/" ? location === "/" :
-                    m.key === "liens" ? (location.startsWith(m.to) || isLiensSection) :
-                    location.startsWith(m.to);
+                      m.key === "liens" ? (location.startsWith(m.to) || isLiensSection) :
+                        location.startsWith(m.to);
                   return (
                     <div key={m.key}>
                       <Link href={m.to}>
