@@ -420,22 +420,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="sticky top-16 z-20 flex h-12 items-center gap-3 border-b px-4 md:px-6"
             style={{ background: "var(--bg)", borderColor: "var(--helm-border)" }}
           >
-            {!!left && isDesktop && (
-              <button
-                onClick={() => setLeftOpen((o) => !o)}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors"
-                style={{
-                  background: leftOpen ? "var(--surface-3)" : "var(--surface-2)",
-                  borderColor: "var(--helm-border)",
-                  color: leftOpen ? "var(--text-base)" : "var(--text-dim)",
-                }}
-                title={leftOpen ? "Collapse panel" : "Expand panel"}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-3)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = leftOpen ? "var(--surface-3)" : "var(--surface-2)")}
-              >
-                {leftOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
-              </button>
-            )}
             {isDesktop ? (
               <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
                 {MODULE_NAV.map((m) => {
@@ -462,27 +446,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <div className="truncate text-[15.5px] font-semibold" style={{ color: "var(--text-base)" }}>{title}</div>
               </div>
             )}
-            {!!right && isDesktop && (
-              <button
-                onClick={() => setRightOpen((o) => !o)}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors"
-                style={{
-                  background: rightOpen ? "var(--surface-3)" : "var(--surface-2)",
-                  borderColor: "var(--helm-border)",
-                  color: rightOpen ? "var(--text-base)" : "var(--text-dim)",
-                }}
-                title={rightOpen ? "Collapse panel" : "Expand panel"}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-3)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = rightOpen ? "var(--surface-3)" : "var(--surface-2)")}
-              >
-                {rightOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
-              </button>
-            )}
           </div>
 
           {/* Body — inner left tab · content · right panel (DD-UI: LP · content · RP) */}
           <div
-            className="grid flex-1 items-start gap-4 p-4 md:gap-[18px] md:p-[18px]"
+            className="relative grid flex-1 items-start gap-4 p-4 md:gap-[18px] md:p-[18px]"
             style={{
               gridTemplateColumns: [
                 leftCol ? "208px" : null,
@@ -494,11 +462,37 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           >
             {leftCol && (
               <aside
-                className="sticky top-[120px] overflow-hidden rounded-lg border"
+                className="relative sticky top-[120px] overflow-hidden rounded-lg border"
                 style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
               >
+                <button
+                  onClick={() => setLeftOpen((o) => !o)}
+                  className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full border shadow-md transition-colors"
+                  style={{
+                    background: "var(--surface-3)",
+                    borderColor: "var(--helm-border)",
+                    color: "var(--text-base)",
+                  }}
+                  title="Collapse panel"
+                >
+                  <PanelLeftClose className="h-4 w-4" />
+                </button>
                 {left}
               </aside>
+            )}
+            {isDesktop && hasLeftPanel && !leftOpen && (
+              <button
+                onClick={() => setLeftOpen(true)}
+                className="absolute left-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full border shadow-md transition-colors"
+                style={{
+                  background: "var(--surface-3)",
+                  borderColor: "var(--helm-border)",
+                  color: "var(--text-base)",
+                }}
+                title="Expand panel"
+              >
+                <PanelLeftOpen className="h-4 w-4" />
+              </button>
             )}
             <div className="flex min-w-0 flex-col gap-4">
               {/* Tablet: left panel as collapsible card above content */}
@@ -518,14 +512,40 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {(rightCol || rightStacked) && (
               <div
                 className={cn(
-                  "overflow-hidden rounded-lg border",
+                  "relative overflow-hidden rounded-lg border",
                   rightStacked && "col-span-full",
                   rightCol && "sticky top-[120px]",
                 )}
                 style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
               >
+                <button
+                  onClick={() => setRightOpen((o) => !o)}
+                  className="absolute left-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full border shadow-md transition-colors"
+                  style={{
+                    background: "var(--surface-3)",
+                    borderColor: "var(--helm-border)",
+                    color: "var(--text-base)",
+                  }}
+                  title="Collapse panel"
+                >
+                  <PanelRightClose className="h-4 w-4" />
+                </button>
                 {right}
               </div>
+            )}
+            {isDesktop && hasRightPanel && !rightOpen && (
+              <button
+                onClick={() => setRightOpen(true)}
+                className="absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full border shadow-md transition-colors"
+                style={{
+                  background: "var(--surface-3)",
+                  borderColor: "var(--helm-border)",
+                  color: "var(--text-base)",
+                }}
+                title="Expand panel"
+              >
+                <PanelRightOpen className="h-4 w-4" />
+              </button>
             )}
           </div>
 
