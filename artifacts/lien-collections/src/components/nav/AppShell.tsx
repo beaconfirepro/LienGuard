@@ -278,7 +278,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     location.startsWith("/send-queue");
   const isModuleActive = (m: { key: string; to: string }) =>
     m.to === "/" ? location === "/" :
-    m.key === "liens" ? isLiensSection :
+    m.key === "projects" ? isLiensSection :
     m.key === "notices" ? isNoticesSection :
     location.startsWith(m.to);
 
@@ -641,7 +641,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {MODULE_NAV.map((m) => {
                   const active =
                     m.to === "/" ? location === "/" :
-                    m.key === "liens" ? (location.startsWith(m.to) || isLiensSection) :
+                    m.key === "projects" ? isLiensSection :
                     location.startsWith(m.to);
                   return (
                     <div key={m.key}>
