@@ -2084,7 +2084,7 @@ function DeadlinesTab({
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const { project, parties, streams, checklist } = data;
+  const { project, parties, sovs: streams, checklist } = data;
 
   // New stream form state
   const [newStream, setNewStream] = React.useState({ workStream: "" });
@@ -2221,7 +2221,7 @@ function DeadlinesTab({
               {streams.map((s) => (
                 <StreamCard
                   key={s.id}
-                  stream={s}
+                  sov={s}
                   projectId={id!}
                   onOpenFiling={onOpenFiling}
                 />
@@ -2334,7 +2334,7 @@ export default function ProjectDetailPage() {
 
   const [showHolds, setShowHolds] = React.useState(false);
 
-  const streams = data?.streams ?? [];
+  const streams = data?.sovs ?? [];
 
   // Filing Workspace now lives at its own route (/filing/:streamId), reached via
   // the Filings menu or a stream's "Open filing" action.

@@ -231,9 +231,9 @@ router.post("/filing/:streamId/escalate", requireSession, async (req, res) => {
       .where(eq(lienFilingsTable.id, existing.id));
   }
 
-  // Advance stream to "filing" status if not already further along.
-  const { stream } = ctx;
-  if (stream.status === "open" || stream.status === "at_risk" || stream.status === "notice_active") {
+  // Advance the SOV to "filing" status if not already further along.
+  const { sov } = ctx;
+  if (sov.status === "open" || sov.status === "at_risk" || sov.status === "notice_active") {
     await db
       .update(lienScheduleOfValuesTable)
       .set({ status: "filing", updatedAt: new Date() })
@@ -253,7 +253,7 @@ router.post("/filing/:streamId/affidavit", requireSession, async (req, res) => {
 
   const ctx = await getStreamWithProject(streamId, orgId);
   if (!ctx) { res.status(404).json({ error: "Stream not found" }); return; }
-  const { stream, project } = ctx;
+  const { project } = ctx;
 
   const workMonths = await db
     .select()
