@@ -1,0 +1,29 @@
+{
+  "name": "lien-collections",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Lien & Collections (Module 22) — Beacon Fire Protection / Helm. Standalone Replit build; design tokens mirror Helm's designSystem.js so integration is a move, not a rewrite.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 5173"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.51.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.408.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.25.1",
+    "tailwind-merge": "^2.4.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.39",
+    "tailwindcss": "^3.4.7",
+    "tailwindcss-animate": "^1.0.7",
+    "vite": "^5.3.4"
+  }
+}

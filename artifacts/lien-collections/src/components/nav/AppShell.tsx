@@ -139,8 +139,8 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
         className="w-full max-w-sm rounded-xl border p-8 text-center shadow-xl"
         style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
       >
-        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-xl" style={{ background: "var(--surface-3)" }}>
-          <Landmark className="h-7 w-7 text-amber-500" />
+        <div className="mx-auto mb-6">
+          <img src="/helm-logo.svg" alt="HELM" className="mx-auto h-24 w-24 rounded-xl" />
         </div>
         <div className="text-[18px] font-bold tracking-tight" style={{ color: "var(--text-base)" }}>
           LienGuard
@@ -330,7 +330,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             )}
             {/* LienGuard brand — the app's identity lives in the header */}
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
-              <Landmark className="h-[22px] w-[22px] shrink-0 text-amber-500" />
+              <img src="/helm-icon.svg" alt="HELM" className="h-[28px] w-[28px] shrink-0 rounded-md" />
               <div className="min-w-0">
                 <div className="text-[16px] font-bold leading-[1.1] tracking-tight md:text-[18px]" style={{ color: "var(--text-base)" }}>
                   LienGuard <span className="font-medium" style={{ color: "var(--text-dim)" }}>by Helm</span>

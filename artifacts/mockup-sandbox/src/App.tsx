@@ -100,6 +100,7 @@ function Gallery() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-8">
       <div className="text-center max-w-md">
+        <img src="/helm-logo.svg" alt="HELM" className="mx-auto mb-5 h-24 w-24 rounded-xl" />
         <h1 className="text-2xl font-semibold text-gray-900 mb-3">
           Component Preview Server
         </h1>
