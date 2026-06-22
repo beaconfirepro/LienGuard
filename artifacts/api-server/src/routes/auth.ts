@@ -26,9 +26,14 @@ const OIDC_COOKIE_TTL = 10 * 60 * 1000;
 const router: IRouter = Router();
 
 function getOrigin(req: Request): string {
-  const proto = req.headers["x-forwarded-proto"] || "https";
-  const host =
-    req.headers["x-forwarded-host"] || req.headers["host"] || "localhost";
+  // Some reverse proxies (e.g. Replit, AWS ELB) set x-forwarded-proto as a
+  // comma-separated list ("https, http"). Take only the first token.
+  const rawProto = req.headers["x-forwarded-proto"] || "https";
+  const proto = (Array.isArray(rawProto) ? rawProto[0] : rawProto)
+    .split(",")[0]
+    .trim();
+  const rawHost = req.headers["x-forwarded-host"] || req.headers["host"] || "localhost";
+  const host = Array.isArray(rawHost) ? rawHost[0] : rawHost;
   return `${proto}://${host}`;
 }
 
@@ -53,7 +58,12 @@ function setOidcCookie(res: Response, name: string, value: string) {
 }
 
 function getSafeReturnTo(value: unknown): string {
-  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) {
+  if (
+    typeof value !== "string" ||
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    value.startsWith("/api/")
+  ) {
     return "/";
   }
   return value;
@@ -123,7 +133,14 @@ router.get("/auth/user", async (req: Request, res: Response) => {
 });
 
 router.get("/login", async (req: Request, res: Response) => {
-  const config = await getOidcConfig();
+  let config: oidc.Configuration;
+  try {
+    config = await getOidcConfig();
+  } catch {
+    res.status(503).send("Authentication service unavailable. Please try again later.");
+    return;
+  }
+
   const callbackUrl = `${getOrigin(req)}/api/callback`;
 
   const returnTo = getSafeReturnTo(req.query.returnTo);
