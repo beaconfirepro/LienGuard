@@ -6,6 +6,7 @@ import { QueueList } from "@/components/ui/queue-list";
 import { AgingBuckets } from "@/components/ui/aging-buckets";
 import { DeadlineCountdown } from "@/components/ui/deadline-countdown";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { useLeftPanel, useRightPanel } from "@/components/nav/AppShell";
 import { money } from "@/lib/utils";
 
 interface Project {
@@ -73,6 +74,10 @@ function daysUntil(dateStr: string): number {
 }
 
 export default function DashboardPage() {
+  const blankPanel = React.useMemo(() => <div className="min-h-[220px] p-4" />, []);
+  useLeftPanel(blankPanel, [blankPanel]);
+  useRightPanel(blankPanel, [blankPanel]);
+
   const { data: projectsData } = useQuery({
     queryKey: ["projects"],
     queryFn: () => apiFetch<{ projects: Project[] }>("/projects"),
