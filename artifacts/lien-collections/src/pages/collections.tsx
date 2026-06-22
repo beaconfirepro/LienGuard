@@ -1,12 +1,20 @@
 import * as React from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Phone, Plus, Check, X, Filter } from "lucide-react";
+import { ChevronRight, ChevronDown, Phone, Plus, Check, X, Filter, MessageSquare } from "lucide-react";
 import { Panel, useRightPanel, useLeftPanel } from "@/components/nav/AppShell";
 import { QueueList } from "@/components/ui/queue-list";
 import { AgingBuckets } from "@/components/ui/aging-buckets";
 import { ListPageLayout, ListTableState } from "@/components/ui/list-page";
 import { ResponsiveTable } from "@/components/ui/responsive-table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { money, alpha } from "@/lib/utils";
 
 function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
@@ -105,11 +113,17 @@ export default function CollectionsPage() {
   const [callIds, setCallIds] = React.useState<string[]>([]);
   const [closed, setClosed] = React.useState<Record<string, boolean>>({});
   const [search, setSearch] = React.useState("");
-  const [filterStatus, setFilterStatus] = React.useState("");
-  const [filterStage, setFilterStage] = React.useState("");
+  const [filterStatuses, setFilterStatuses] = React.useState<string[]>([]);
+  const [filterStages, setFilterStages] = React.useState<string[]>([]);
   const [sortKey, setSortKey] = React.useState<"risk" | "overdue" | "oldest" | "name" | "stage">("risk");
   const [sortDir, setSortDir] = React.useState<"asc" | "desc">("desc");
   const [selectedHoldClientId, setSelectedHoldClientId] = React.useState<string>("");
+
+  // Log Contact modal state
+  const [logContactModal, setLogContactModal] = React.useState<{ accountId: string; accountName: string } | null>(null);
+  const [logMethod, setLogMethod] = React.useState("phone");
+  const [logDate, setLogDate] = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [logNotes, setLogNotes] = React.useState("");
 
   const { data: accountsData, isLoading: loadingAccounts } = useQuery({
     queryKey: ["collections/accounts"],
@@ -130,17 +144,21 @@ export default function CollectionsPage() {
   });
 
   const logActivityMut = useMutation({
-    mutationFn: ({ accountId, method }: { accountId: string; method: string }) =>
+    mutationFn: ({ accountId, method, activityDate, notes }: { accountId: string; method: string; activityDate?: string; notes?: string }) =>
       apiFetch(`/collections/accounts/${accountId}/activity`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           method,
-          activityDate: new Date().toISOString().slice(0, 10),
-          notes: "Logged from call queue",
+          activityDate: activityDate ?? new Date().toISOString().slice(0, 10),
+          notes: notes ?? "Logged from call queue",
         }),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["collections/accounts"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["collections/accounts"] });
+      setLogContactModal(null);
+      setLogNotes("");
+    },
   });
 
   const promiseMut = useMutation({
@@ -177,8 +195,8 @@ export default function CollectionsPage() {
     const stageLabel = (STAGE_LABELS[a.escalationStage] ?? a.escalationStage ?? "").toLowerCase();
     const q = search.trim().toLowerCase();
     if (q && !name.includes(q) && !status.includes(q) && !stageLabel.includes(q)) return false;
-    if (filterStatus && a.status !== filterStatus) return false;
-    if (filterStage && a.escalationStage !== filterStage) return false;
+    if (filterStatuses.length > 0 && !filterStatuses.includes(a.status)) return false;
+    if (filterStages.length > 0 && !filterStages.includes(a.escalationStage)) return false;
     return true;
   });
 
@@ -244,7 +262,7 @@ export default function CollectionsPage() {
   const lienNoticeSig = lienNoticeClients.map((a) => a.id).join(",");
   const holdSig = recommendedHolds.map((h) => h.id).join(",");
 
-  const activeFilterCount = (filterStatus ? 1 : 0) + (filterStage ? 1 : 0) + (search.trim() ? 1 : 0);
+  const activeFilterCount = filterStatuses.length + filterStages.length + (search.trim() ? 1 : 0);
 
   const tableColumns = [
     {
@@ -301,8 +319,8 @@ export default function CollectionsPage() {
     },
     {
       key: "risk",
-      header: "Risk",
-      align: "right" as const,
+      header: "Risk #",
+      align: "center" as const,
       sortable: false,
       render: (a: CollectionAccount) => <RiskPill risk={a.riskScore} />,
     },
@@ -329,12 +347,15 @@ export default function CollectionsPage() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                logActivityMut.mutate({ accountId: a.id, method: "phone" });
+                setLogContactModal({ accountId: a.id, accountName: a.cachedName ?? a.id });
+                setLogMethod("phone");
+                setLogDate(new Date().toISOString().slice(0, 10));
               }}
-              className="flex items-center rounded-md border px-2 py-1 text-[11px]"
+              className="flex items-center gap-1 rounded-md border px-2 py-1 text-[11px]"
               style={{ color: "#14eba3", background: alpha("#14eba3", 0.1), borderColor: alpha("#14eba3", 0.25) }}
+              title="Log contact"
             >
-              <Phone className="h-3 w-3" />
+              <MessageSquare className="h-3 w-3" />
             </button>
             <button
               onClick={(e) => {
@@ -384,10 +405,15 @@ export default function CollectionsPage() {
         items={callAccts.slice(0, 4).map((a) => ({
           id: a.id,
           title: a.cachedName ?? a.id,
-          sub: `Risk ${a.riskScore ?? "—"} · ${money(Number(a.totalOverdue))}`,
-          action: "Log call",
+          sub: `${money(Number(a.totalOverdue))} overdue · ${a.oldestOverdueDays}d oldest`,
+          badge: a.riskScore != null ? String(a.riskScore) : "—",
+          badgeTone: riskColor(a.riskScore),
+          action: "Log contact",
           actionTone: "#6366f1",
         }))}
+        onAction={(item) =>
+          setLogContactModal({ accountId: item.id, accountName: item.title })
+        }
       />
     </Panel>,
     [callSig],
@@ -524,22 +550,23 @@ export default function CollectionsPage() {
               className="min-w-[220px] rounded-md border px-3 py-1.5 text-[12.5px]"
               style={{ background: "var(--surface)", borderColor: search ? "#6366f1" : "var(--helm-border)", color: "var(--text-base)" }}
             />
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="rounded-md border px-3 py-1.5 text-[12.5px]"
-              style={{ background: "var(--surface)", borderColor: activeFilterCount > 0 && filterStatus ? "#6366f1" : "var(--helm-border)", color: "var(--text-base)" }}
-            >
-              {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            <select
-              value={filterStage}
-              onChange={(e) => setFilterStage(e.target.value)}
-              className="rounded-md border px-3 py-1.5 text-[12.5px]"
-              style={{ background: "var(--surface)", borderColor: activeFilterCount > 0 && filterStage ? "#6366f1" : "var(--helm-border)", color: "var(--text-base)" }}
-            >
-              {STAGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <MultiSelectFilter
+              label="Status"
+              options={STATUS_OPTIONS.filter((o) => o.value !== "")}
+              selected={filterStatuses}
+              onToggle={(v) =>
+                setFilterStatuses((s) => (s.includes(v) ? s.filter((x) => x !== v) : [...s, v]))
+              }
+            />
+            <MultiSelectFilter
+              label="Stage"
+              options={STAGE_OPTIONS.filter((o) => o.value !== "")}
+              selected={filterStages}
+              onToggle={(v) =>
+                setFilterStages((s) => (s.includes(v) ? s.filter((x) => x !== v) : [...s, v]))
+              }
+              getColor={(v) => STAGE_COLOR[v]}
+            />
             <select
               value={sortKey}
               onChange={(e) => setSortKey(e.target.value as "risk" | "overdue" | "oldest" | "name" | "stage")}
@@ -561,7 +588,7 @@ export default function CollectionsPage() {
             </button>
             {activeFilterCount > 0 && (
               <button
-                onClick={() => { setSearch(""); setFilterStatus(""); setFilterStage(""); }}
+                onClick={() => { setSearch(""); setFilterStatuses([]); setFilterStages([]); }}
                 className="text-[12px]"
                 style={{ color: "var(--text-dim)" }}
               >
@@ -571,6 +598,41 @@ export default function CollectionsPage() {
             <span className="ml-auto text-[12px]" style={{ color: "var(--text-muted-color)" }}>
               {sortedAccounts.length} account{sortedAccounts.length !== 1 ? "s" : ""}
             </span>
+            {/* Active filter pills */}
+            {(filterStatuses.length > 0 || filterStages.length > 0) && (
+              <>
+                {filterStatuses.map((v) => {
+                  const label = STATUS_OPTIONS.find((o) => o.value === v)?.label ?? v;
+                  return (
+                    <button
+                      key={`status-${v}`}
+                      onClick={() => setFilterStatuses((s) => s.filter((x) => x !== v))}
+                      className="flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold"
+                      style={{ background: alpha("#6366f1", 0.12), borderColor: alpha("#6366f1", 0.3), color: "#6366f1" }}
+                    >
+                      {label}
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  );
+                })}
+                {filterStages.map((v) => {
+                  const label = STAGE_LABELS[v] ?? v;
+                  const c = STAGE_COLOR[v] ?? "#6b7280";
+                  return (
+                    <button
+                      key={`stage-${v}`}
+                      onClick={() => setFilterStages((s) => s.filter((x) => x !== v))}
+                      className="flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold"
+                      style={{ background: alpha(c, 0.12), borderColor: alpha(c, 0.3), color: c }}
+                    >
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: c }} />
+                      {label}
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  );
+                })}
+              </>
+            )}
           </>
         }
       >
@@ -629,13 +691,15 @@ export default function CollectionsPage() {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  logActivityMut.mutate({ accountId: a.id, method: "phone" });
+                  setLogContactModal({ accountId: a.id, accountName: a.cachedName ?? a.id });
+                  setLogMethod("phone");
+                  setLogDate(new Date().toISOString().slice(0, 10));
                 }}
                 className="flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-[12px] font-semibold text-[#14eba3]"
                 style={{ background: alpha("#14eba3", 0.14), borderColor: alpha("#14eba3", 0.3) }}
               >
-                <Phone className="h-3.5 w-3.5" />
-                Log call
+                <MessageSquare className="h-3.5 w-3.5" />
+                Log contact
               </button>
               <button
                 onClick={(e) => {
@@ -683,6 +747,110 @@ export default function CollectionsPage() {
       )}
       </ListTableState>
       </ListPageLayout>
+
+      {/* Log Contact Modal */}
+      <Dialog
+        open={!!logContactModal}
+        onOpenChange={(o) => { if (!o) { setLogContactModal(null); setLogNotes(""); } }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Log Contact</DialogTitle>
+            <DialogDescription>
+              Record a contact activity for{" "}
+              <span className="font-semibold" style={{ color: "var(--text-base)" }}>
+                {logContactModal?.accountName}
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-2">
+            {/* Method */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-semibold" style={{ color: "var(--text-dim)" }}>
+                Contact Method
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { value: "phone", label: "Phone" },
+                  { value: "email", label: "Email" },
+                  { value: "sms", label: "SMS" },
+                  { value: "letter", label: "Letter" },
+                  { value: "portal", label: "Portal" },
+                  { value: "in_person", label: "In Person" },
+                ].map((m) => (
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => setLogMethod(m.value)}
+                    className="rounded-md border px-3 py-1.5 text-[12px] font-semibold transition-colors"
+                    style={
+                      logMethod === m.value
+                        ? { background: alpha("#6366f1", 0.15), borderColor: "#6366f1", color: "#6366f1" }
+                        : { background: "var(--surface-2)", borderColor: "var(--helm-border)", color: "var(--text-dim)" }
+                    }
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Date */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-semibold" style={{ color: "var(--text-dim)" }}>
+                Date
+              </label>
+              <input
+                type="date"
+                value={logDate}
+                onChange={(e) => setLogDate(e.target.value)}
+                className="rounded-md border px-3 py-1.5 text-[12.5px]"
+                style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-base)" }}
+              />
+            </div>
+            {/* Notes */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-semibold" style={{ color: "var(--text-dim)" }}>
+                Notes
+              </label>
+              <textarea
+                value={logNotes}
+                onChange={(e) => setLogNotes(e.target.value)}
+                placeholder="Add notes about this contact attempt..."
+                rows={3}
+                className="resize-none rounded-md border px-3 py-2 text-[12.5px] leading-relaxed"
+                style={{ background: "var(--surface)", borderColor: "var(--helm-border)", color: "var(--text-base)" }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => { setLogContactModal(null); setLogNotes(""); }}
+              className="rounded-md border px-4 py-2 text-[12.5px] font-semibold"
+              style={{ background: "var(--surface-2)", borderColor: "var(--helm-border)", color: "var(--text-dim)" }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={logActivityMut.isPending}
+              onClick={() => {
+                if (!logContactModal) return;
+                logActivityMut.mutate({
+                  accountId: logContactModal.accountId,
+                  method: logMethod,
+                  activityDate: logDate,
+                  notes: logNotes.trim() || undefined,
+                });
+              }}
+              className="rounded-md px-4 py-2 text-[12.5px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+              style={{ background: "#6366f1", color: "white" }}
+            >
+              {logActivityMut.isPending ? "Saving…" : "Save contact"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -722,7 +890,7 @@ function Section({
 function RiskPill({ risk }: { risk: number | null }) {
   const c = riskColor(risk);
   return (
-    <div className="flex shrink-0 items-center gap-1">
+    <div className="flex shrink-0 items-center justify-center gap-1">
       <span className="font-mono text-[9.5px]" style={{ color: "var(--text-muted-color)" }}>
         RISK
       </span>
@@ -774,5 +942,88 @@ function StageFilterRow({
         </span>
       )}
     </button>
+  );
+}
+
+function MultiSelectFilter({
+  label,
+  options,
+  selected,
+  onToggle,
+  getColor,
+}: {
+  label: string;
+  options: { value: string; label: string }[];
+  selected: string[];
+  onToggle: (value: string) => void;
+  getColor?: (value: string) => string;
+}) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[12.5px]"
+        style={{
+          background: "var(--surface)",
+          borderColor: selected.length > 0 ? "#6366f1" : "var(--helm-border)",
+          color: "var(--text-base)",
+        }}
+      >
+        {label}
+        {selected.length > 0 && (
+          <span
+            className="rounded-full px-1.5 py-0.5 font-mono text-[10px] font-semibold"
+            style={{ background: "#6366f1", color: "white" }}
+          >
+            {selected.length}
+          </span>
+        )}
+        <ChevronDown className="h-3 w-3" style={{ color: "var(--text-dim)" }} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div
+            className="absolute left-0 top-full z-20 mt-1 min-w-[160px] rounded-lg border p-1.5 shadow-lg"
+            style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}
+          >
+            {options.map((option) => {
+              const checked = selected.includes(option.value);
+              const color = getColor?.(option.value);
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => { onToggle(option.value); }}
+                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[12px] text-left transition-colors"
+                  style={{
+                    background: checked ? "var(--surface-2)" : "transparent",
+                    color: "var(--text-base)",
+                  }}
+                  onMouseEnter={(e) => !checked && (e.currentTarget.style.background = "var(--surface-2)")}
+                  onMouseLeave={(e) => !checked && (e.currentTarget.style.background = "transparent")}
+                >
+                  <span
+                    className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border"
+                    style={{
+                      background: checked ? "#6366f1" : "transparent",
+                      borderColor: checked ? "#6366f1" : "var(--helm-border)",
+                    }}
+                  >
+                    {checked && <Check className="h-2.5 w-2.5 text-white" />}
+                  </span>
+                  {color && (
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
+                  )}
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </span>
   );
 }
