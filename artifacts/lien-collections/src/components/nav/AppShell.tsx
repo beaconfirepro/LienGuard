@@ -13,7 +13,7 @@ import {
   Sun, Moon, PanelRightClose, PanelRightOpen,
   PanelLeftClose, PanelLeftOpen, FileSignature, LogOut,
   ChevronDown, User, Users2,
-  Send, Shield,
+  Send, Shield, FileText,
 } from "lucide-react";
 
 /* ─── Panel context (inner left + right) ─────────────────────────────────── */
@@ -92,16 +92,18 @@ function CollapsibleCard({
 /* ─── Navigation config ──────────────────────────────────────────────────── */
 const MODULE_NAV = [
   { key: "dashboard", label: "Dashboard", to: "/", Icon: LayoutGrid },
-  { key: "liens", label: "Projects", to: "/liens", Icon: Landmark },
-  { key: "notices", label: "Notices", to: "/notices", Icon: Send },
   { key: "waivers", label: "Waivers", to: "/waivers", Icon: FileSignature },
-  { key: "collections", label: "Collections", to: "/collections", Icon: DollarSign },
   { key: "holds", label: "Vendor Holds", to: "/holds", Icon: Lock },
+  { key: "collections", label: "Collections", to: "/collections", Icon: DollarSign },
+  { key: "notices", label: "Notices", to: "/notices", Icon: Send },
+  { key: "projects", label: "Projects", to: "/liens", Icon: Landmark },
+  { key: "liens", label: "Liens", to: "/liens-board", Icon: FileText },
 ];
 
 const TITLES: [RegExp, string][] = [
   [/^\/settings$/, "Company Settings"],
   [/^\/liens$/, "Projects"],
+  [/^\/liens-board$/, "Liens"],
   [/^\/notices$/, "Notices"],
   [/^\/send-queue$/, "Ready-to-Send Queue"],
   [/^\/projects\//, "Project Workspace"],
@@ -276,7 +278,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     location.startsWith("/send-queue");
   const isModuleActive = (m: { key: string; to: string }) =>
     m.to === "/" ? location === "/" :
-    m.key === "liens" ? isLiensSection :
+    m.key === "projects" ? isLiensSection :
     m.key === "notices" ? isNoticesSection :
     location.startsWith(m.to);
 
@@ -593,10 +595,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <nav className="fixed inset-x-0 bottom-0 z-40 flex h-[62px] border-t" style={{ background: "var(--surface)", borderColor: "var(--helm-border)" }}>
             {[
               { label: "Dashboard", to: "/", Icon: LayoutGrid },
-              { label: "Projects", to: "/liens", Icon: Landmark },
-              { label: "Notices", to: "/notices", Icon: Send },
-              { label: "Collections", to: "/collections", Icon: DollarSign },
               { label: "Waivers", to: "/waivers", Icon: FileSignature },
+              { label: "Vendor Holds", to: "/holds", Icon: Lock },
+              { label: "Collections", to: "/collections", Icon: DollarSign },
+              { label: "Notices", to: "/notices", Icon: Send },
             ].map(({ label, to, Icon }) => {
               const active =
                 to === "/" ? location === to :
@@ -642,7 +644,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {MODULE_NAV.map((m) => {
                   const active =
                     m.to === "/" ? location === "/" :
-                    m.key === "liens" ? (location.startsWith(m.to) || isLiensSection) :
+                    m.key === "projects" ? isLiensSection :
                     location.startsWith(m.to);
                   return (
                     <div key={m.key}>
