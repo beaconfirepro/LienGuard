@@ -411,9 +411,12 @@ export default function CollectionsPage() {
           action: "Log contact",
           actionTone: "#6366f1",
         }))}
-        onAction={(item) =>
-          setLogContactModal({ accountId: item.id, accountName: item.title })
-        }
+        onAction={(item) => {
+          setLogContactModal({ accountId: item.id, accountName: item.title });
+          setLogMethod("phone");
+          setLogDate(new Date().toISOString().slice(0, 10));
+          setLogNotes("");
+        }}
       />
     </Panel>,
     [callSig],
