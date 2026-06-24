@@ -68,12 +68,67 @@ current work. _(2026-06-22)_
 
 ---
 
+## Architecture re-founding (2026-06-24)
+
+The following decisions re-found LienGuard from a "standalone-but-integrated app" into the
+first **module** on the **Tower** platform. Full rationale and target architecture:
+`docs/ARCHITECTURE.md`. Migration sequence + checkpoints: `docs/MIGRATION_PLAN.md`.
+
+## ED-08 — Tower platform model; DD-01/DD-06 retired ✅
+LienGuard is **not a standalone app**. A product = `Tower (platform) + activated modules +
+one design system`; LienGuard = `Tower + lien-collections module + brand`. Tower owns auth,
+the design system, one multi-tenant Postgres, and module gating, and is never sold/seen
+alone. This **supersedes DD-01** (standalone app) and **DD-06** (own-Postgres / integrate-
+across-a-boundary as founding law). External SaaS (QBO/HubSpot/Connecteam) remain source of
+truth via adapter-backed **ports**; the module owns only extension data + workflow.
+_(2026-06-24)_
+
+## ED-09 — ORM is Prisma ✅
+Migrate off Drizzle to **Prisma** (the platform-wide ORM; Helm already uses it). Supersedes
+`.agents/memory/drizzle-prisma-decision.md`. The schema is authored as a **module-namespaced
+slice** so it can live in Tower's shared database. Domain engines stay ORM-agnostic (ED-05).
+_(2026-06-24)_
+
+## ED-10 — Data is Supabase Postgres; auth+tenancy is Clerk ✅
+Resolves the Phase C **Auth** and **Tenancy** open items. **Supabase Postgres** (RLS
+available for tenant isolation). **Clerk** for identity, with Clerk **Organizations** as the
+tenant layer — **`Clerk org id == orgId`**. Clerk↔Supabase via **Third-Party Auth** so RLS
+can read Clerk claims. **Clerk end-to-end**: the backend verifies the Clerk token; **Replit
+OIDC is removed** (the prior dual-auth pain was a frontend/backend IdP *split*, not Clerk
+itself). **`DEFAULT_ORG_ID` is removed**; `orgId` comes only from the Clerk session/org
+claim, never from a request. _(2026-06-24)_
+
+## ED-11 — One design system in Storybook 8 + Chromatic ✅
+A single design system, extracted to its own package, hosted in **Storybook 8** with
+**Chromatic** visual-regression as a CI gate (drift is caught automatically). Single-source
+tokens feed Tailwind; **no hardcoded colors**. Two-level nav: Tower owns the vertical primary
+bar, each module owns its horizontal secondary bar. Supersedes the SCOPE §256 "use Helm's
+app-shell grid" note. _(2026-06-24)_
+
+## ED-12 — One pnpm monorepo; task runner deferred ✅
+All of Tower, the design system, modules, and product shells live in one **pnpm-workspaces
+monorepo** (`beacon-platform`). Run tasks via `pnpm -r` for now; a task runner (**Nx**-
+leaning, for its generators + module-boundary linting) is **deferred** until the package
+count justifies it (~8+ packages). OpenAPI-first + Orval + Zod is **kept** as the API
+contract. _(2026-06-24)_
+
+## ED-13 — Migration is phased; current scope is H1 ✅
+Authorized scope is **Horizon H1**: move LienGuard onto the new foundation, lifted into the
+new monorepo, against a **Tower stub** (real Tower extraction from Helm is a later horizon).
+Phased, one PR per phase, green typecheck at every checkpoint, with credential and
+irreversible-cutover gates called out in `docs/MIGRATION_PLAN.md`. _(2026-06-24)_
+
+---
+
 ## Open / upcoming decisions ❓
 These are flagged for an explicit decision in their phase (see `docs/PRODUCTION_PLAN.md`):
 
-- **Auth model (Phase C).** Backend uses Replit OIDC + session cookies; frontend uses
-  Clerk. Pick one identity system end-to-end. _(owner: TBD)_
-- **Tenancy (Phase C).** Schema is multi-tenant but `orgId` is a hardcoded
-  `DEFAULT_ORG_ID`. Decide single-tenant (and lock it) vs. finish per-user org scoping.
-- **HELM integration contract (Phase E / E6).** Confirm the `/external/*` shapes against
-  `Beacon-Fire-Protection/helm` canon once that repo is readable in-session.
+- ~~**Auth model (Phase C).**~~ **Resolved — ED-10** (Clerk end-to-end).
+- ~~**Tenancy (Phase C).**~~ **Resolved — ED-10** (`orgId` from Clerk org; `DEFAULT_ORG_ID`
+  removed).
+- **HELM integration contract (later horizon).** Under the Tower model this becomes a
+  cross-module/Tower concern (reference layer + hold flags) rather than an `/external/*`
+  read API; confirm shapes when Tower is extracted from Helm. _(supersedes the old Phase E/E6
+  framing)_
+- **Credentials (gate before foundation swap).** Clerk app (Organizations), Supabase
+  project, Chromatic token — provisioned before the Prisma/Clerk phase. _(owner: Deb)_
