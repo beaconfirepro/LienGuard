@@ -112,5 +112,5 @@ Greenfield order, smallest-useful-first:
 5. **Product** `lienseasy` shell wiring Tower + the module.
 
 **Do not assume the order — confirm step 1's scope with the user before building.**
-Follow the operating rules in `docs/LESSONS_LEARNED.md` (confirm before big moves; verify access
-first; small reversible steps; concise).
+Follow the operating rules in `docs/lessons-learned/` (the latest `LL-*.md`) — confirm before big
+moves; verify access first; small reversible steps; concise.

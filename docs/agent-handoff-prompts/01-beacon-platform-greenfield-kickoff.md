@@ -11,7 +11,7 @@ You are starting a GREENFIELD build of the Beacon platform in beaconfirepro/beac
 
 READ FIRST (in this order), then follow them:
 1. docs/agent-handoff-prompts/01-beacon-platform-greenfield-brief.md  — full context + locked stack.
-2. docs/LESSONS_LEARNED.md  — operating rules. Follow them, especially: confirm before big moves;
+2. docs/lessons-learned/ (latest LL-*.md)  — operating rules. Follow them, especially: confirm before big moves;
    verify access/credentials FIRST; smallest reversible step; stay concise; friction = stop.
 
 THE ONE RULE THAT OVERRIDES EVERYTHING:

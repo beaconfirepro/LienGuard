@@ -1,8 +1,8 @@
 # LienGuard (Lien & Collections)
 
-> **🟢 EVERY SESSION, READ FIRST: [`docs/LESSONS_LEARNED.md`](docs/LESSONS_LEARNED.md)** — the
-> operating rules + retrospective that keep sessions fast and prevent repeated mistakes. Follow
-> its "operating rules for Claude." Handoff briefs/prompts live in `docs/agent-handoff-prompts/`.
+> **🟢 EVERY SESSION, READ FIRST: [`docs/lessons-learned/`](docs/lessons-learned/)** — per-session
+> retrospectives (`LL-<date>-<topic>-<slug>.md`). Read at least the most recent and follow its
+> "operating rules for Claude." Handoff briefs/prompts live in `docs/agent-handoff-prompts/`.
 
 A standalone web app that protects Beacon's money on construction projects. It does two
 jobs over the same data (an invoice that hasn't cleared): runs the **collections** process
