@@ -21,7 +21,7 @@ epic() { gh issue create --repo "$REPO" \
 epic 01 "module/tower" "agent/gary" "Foundation" \
 "Scaffold (pnpm + Nx), Clerk auth (org=tenant, end-to-end), Prisma + Supabase + RLS, Helm shell with Tower nav. Gate: Clerk + Supabase tower. DoD: green CI, orgId only from Clerk claim, tenant isolation proven."
 epic 02 "module/infra" "agent/cody" "CI + deploy pipeline" \
-"nx affected CI; deploy preview + prod so every later card can ship. Gate: deploy target."
+"nx affected CI; Vercel preview deploy per PR and prod on main (Node.js 24.x). Dev: https://beacon-platform-pi.vercel.app/"
 epic 03 "module/design" "agent/claude" "Design system" \
 "Storybook 8: single-source tokens, components, two-level nav shells; no hardcoded colors. Gate: Chromatic token."
 epic 04 "module/tower" "agent/cody" "Module framework" \

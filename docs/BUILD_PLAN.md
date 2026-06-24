@@ -41,8 +41,9 @@ inventing one. The build session ports it into `beacon-platform` and adapts it. 
    Scaffold (pnpm + Nx), Clerk auth (org = tenant, end-to-end), Prisma + Supabase + RLS, Helm shell
    with the Tower vertical nav. Green CI baseline; `orgId` only from the Clerk claim; tenant isolation
    proven.
-2. **CI + deploy pipeline** — owner deploy. Gate: deploy target.
-   `nx affected` CI; deploy to preview + prod so every later card can ship.
+2. **CI + deploy pipeline** — owner deploy. Target: **Vercel** (Node.js 24.x).
+   `nx affected` CI; Vercel preview deploy per PR and prod on `main`, so every later card can ship.
+   Dev: https://beacon-platform-pi.vercel.app/
 3. **Design system** — owner build. Gate: Chromatic token.
    Storybook 8: single-source tokens, components, the two-level nav shells. No hardcoded colors.
 4. **Module framework** — owner build.
@@ -70,7 +71,7 @@ inventing one. The build session ports it into `beacon-platform` and adapts it. 
 
 ## Open decisions
 
-- **Deploy target** for card 2 (Vercel / Fly / other). Owner: Deb.
+- ~~Deploy target for card 2~~ **Resolved: Vercel (Node.js 24.x)**, dev at https://beacon-platform-pi.vercel.app/ (ED-17).
 - **Lien module public brand** (ED-16): "LiensEasy" or folded into Helm.
 - Credential gates: Clerk + Supabase `tower` + Third-Party Auth (card 1), Chromatic (card 3).
 

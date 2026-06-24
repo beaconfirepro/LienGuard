@@ -55,6 +55,7 @@ LOCKED STACK (do not relitigate; rationale is in the brief):
 - OpenAPI-first + Orval (generated Zod + TanStack Query).
 - ONE design system in Storybook 8; single-source tokens; no hardcoded colors.
 - Two-level nav: Tower owns the vertical primary nav; each module owns its horizontal nav.
+- Deploy: Vercel (Node.js 24.x); preview per PR, prod on main. Dev: https://beacon-platform-pi.vercel.app/
 - Product = Helm (the public platform; internally Tower) + the modules a tenant enables. First
   module: lien-collections. Any public sub-brand for the lien module (e.g. LiensEasy) is TBD (ED-16).
 

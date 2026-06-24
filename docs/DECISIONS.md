@@ -151,6 +151,12 @@ module such as `lien`; final convention owned by Deb). `helm-dev` is the **legac
 database, not the platform DB, and stays separate until Helm migrates onto Tower (later horizon).
 Open sub-items below. _(2026-06-24)_
 
+## ED-17 — Deploy on Vercel (Node.js 24.x) ✅
+The platform deploys on **Vercel**, Node.js **24.x** runtime. Dev server:
+`https://beacon-platform-pi.vercel.app/`. CI uses `nx affected`; **preview** deploy per PR and **prod**
+on `main`, via Vercel's monorepo support. Resolves the deploy-target open item (BUILD_PLAN card 2).
+_(2026-06-24)_
+
 ---
 
 ## Open / upcoming decisions ❓
