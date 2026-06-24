@@ -40,6 +40,7 @@ import {
 import { renderRichText } from "../lib/pdfRichText";
 import { legalReviewBlockReason } from "../lib/legalReview";
 import { noticeEditError, noticeApproveError, noticeSendError } from "../lib/stateMachines";
+import { recordAudit } from "../lib/audit";
 
 const router = Router();
 router.use(requireSession);
@@ -367,6 +368,18 @@ router.post("/notices/:id/approve", async (req, res) => {
     })
     .where(and(eq(noticesTable.id, id), eq(noticesTable.orgId, orgId)))
     .returning();
+
+  const approveSession = getSession(req);
+  await recordAudit({
+    orgId,
+    actor: { userId: approveSession.userId, role: approveSession.role },
+    action: "notice.approve",
+    entityType: "notice",
+    entityId: id,
+    summary: `Notice approved (${notice.noticeType})`,
+    before: { status: existing.status },
+    after: { status: notice.status },
+  });
 
   res.json({ notice });
 });
@@ -753,6 +766,18 @@ router.post("/notices/:id/send", async (req, res) => {
       )
       .returning();
   }
+
+  const sendSession = getSession(req);
+  await recordAudit({
+    orgId,
+    actor: { userId: sendSession.userId, role: sendSession.role },
+    action: "notice.send",
+    entityType: "notice",
+    entityId: id,
+    summary: `Notice sent via certified mail (tracking ${mailing.trackingNumber ?? "n/a"})`,
+    before: { status: notice.status },
+    after: { status: updated.status, trackingNumber: mailing.trackingNumber ?? null },
+  });
 
   res.json({ notice: updated, mailing, satisfiedDeadlines });
 });

@@ -757,3 +757,34 @@ export const holdsTable = pgTable(
     index("holds_supplier_invoice_id_idx").on(t.supplierInvoiceId),
   ],
 );
+
+// Append-only audit trail of statutory & financial actions (D3). Every
+// legally-significant mutation (notice approve/send, waiver approvals, filing
+// export/record/release, invoice clear, deadline override, ...) records who did
+// what, when, with before/after snapshots. `details` is a flexible bag so
+// additional fields counsel may require (IP, request id, document content hash)
+// can be added without a schema change; promote them to columns later if needed.
+// There are no update/delete routes — entries are immutable.
+export const auditLogsTable = pgTable(
+  "audit_logs",
+  {
+    id: id(),
+    orgId: orgId(),
+    actorUserId: text("actor_user_id"), // null = system/automated action
+    actorRole: text("actor_role"),
+    action: text("action").notNull(), // e.g. "notice.send", "filing.record"
+    entityType: text("entity_type").notNull(), // e.g. "notice", "waiver", "filing"
+    entityId: text("entity_id"),
+    summary: text("summary").notNull(), // human-readable one-liner
+    before: jsonb("before"), // salient fields before the change (null on create)
+    after: jsonb("after"), // salient fields after the change
+    details: jsonb("details"), // extensible context bag (legal must-haves TBD)
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("audit_logs_org_id_idx").on(t.orgId),
+    index("audit_logs_entity_idx").on(t.entityType, t.entityId),
+    index("audit_logs_action_idx").on(t.action),
+    index("audit_logs_created_at_idx").on(t.createdAt),
+  ],
+);
