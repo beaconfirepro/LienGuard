@@ -107,7 +107,7 @@ as a *spec*: deadline engine (business-day/holiday roll-forward), risk scoring, 
 ## 8. What already exists (decisions, not code)
 
 - Architecture canon: `beaconfirepro/lienguard` → `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`
-  (ED-08…ED-13), `docs/MIGRATION_PLAN.md`. **These are decisions; there is no greenfield code yet.**
+  (ED-08…ED-16), `docs/MIGRATION_PLAN.md`. **These are decisions; there is no greenfield code yet.**
 - A Drizzle→Prisma schema translation of the old data model exists as a *reference artifact* only
   — treat it as a hint to the domain shape, not code to adopt.
 
