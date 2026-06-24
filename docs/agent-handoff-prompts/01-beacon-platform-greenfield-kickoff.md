@@ -40,7 +40,7 @@ lienguard to scope or paste them:
 
 FIRST COMMIT (once you can read the docs, before any build work): copy the reference docs from
 lienguard into THIS repo's docs/ (docs/USER_INSTRUCTIONS.md, docs/agent-handoff-prompts/,
-docs/lessons-learned/, and ARCHITECTURE.md / DECISIONS.md / MIGRATION_PLAN.md) so beacon-platform
+docs/lessons-learned/, and ARCHITECTURE.md / DECISIONS.md / BUILD_PLAN.md) so beacon-platform
 is self-documenting. Add a root CLAUDE.md pointing to docs/USER_INSTRUCTIONS.md (read and follow
 first) and docs/lessons-learned/. Commit and push that as the first commit, then proceed.
 
@@ -49,12 +49,13 @@ This is greenfield. Do NOT port, copy, or refactor the old LienGuard code. The o
 (beaconfirepro/lienguard) and its product spec are a REQUIREMENTS REFERENCE ONLY. Build clean.
 
 LOCKED STACK (do not relitigate; rationale is in the brief):
-- pnpm-workspaces monorepo (no task runner yet; Nx-leaning later).
+- pnpm-workspaces monorepo with Nx (task runner: orchestration, caching, affected runs, module-boundary lint).
 - Prisma, Supabase Postgres + RLS, Clerk (Organizations = tenant; org id == orgId) via Supabase
   Third-Party Auth, Clerk verified end-to-end.
 - OpenAPI-first + Orval (generated Zod + TanStack Query).
 - ONE design system in Storybook 8; single-source tokens; no hardcoded colors.
 - Two-level nav: Tower owns the vertical primary nav; each module owns its horizontal nav.
+- Deploy: Vercel (Node.js 24.x); preview per PR, prod on main. Dev: https://beacon-platform-pi.vercel.app/
 - Product = Helm (the public platform; internally Tower) + the modules a tenant enables. First
   module: lien-collections. Any public sub-brand for the lien module (e.g. LiensEasy) is TBD (ED-16).
 
@@ -70,6 +71,20 @@ FIRST ACTIONS (do these before building anything):
    foundation (Clerk + Supabase/Prisma + shell), then lien-collections module (fresh, against the
    module contract), then the Helm product shell (app). Do not assume; get my "go" on step 1's scope
    first.
+
+PROJECT TRACKING (GitHub Project #9 on beaconfirepro; full model in docs/BUILD_PLAN.md):
+- REUSE helm's issue/project/board system. Early task: port from beacon-fire-protection/helm into this
+  repo: .github/ISSUE_TEMPLATE/* (epic, story, bug, tech-debt, ...), .github/scripts/setup-labels.sh,
+  the label-to-board / board-to-label / agent-sub-issue-lifecycle workflows, .github/agents/* personas,
+  and the process docs. Adapt: org -> beaconfirepro, PROJECT_NUMBER -> 9, module/* relabelled
+  (tower, lien-collections, design, infra, integrations), story.yml pre-PR checklist -> Nx commands.
+  Then run the adapted setup-labels.sh and docs/agent-handoff-prompts/seed-issues.sh (the 12 type/epic
+  cards).
+- Hierarchy: type/epic -> type/story (a unit of work: one story = one branch = one PR = one agent, via
+  story.yml linked to its parent epic) -> type/bug / type/tech-debt. Personas via agent/* labels.
+- Drive the board by labels: add board/* (board/in_progress, board/in_review, ...) and the workflow
+  moves the card; open a PR ("Closes #"); on merge the story closes to Done. Nx handles task detail
+  below the story.
 
 WORKING STYLE:
 - This is a cloud session on an ephemeral container: commit to a branch and PUSH frequently;

@@ -72,7 +72,7 @@ current work. _(2026-06-22)_
 
 The following decisions re-found LienGuard from a "standalone-but-integrated app" into the
 first **module** on the **Tower** platform. Full rationale and target architecture:
-`docs/ARCHITECTURE.md`. Migration sequence + checkpoints: `docs/MIGRATION_PLAN.md`.
+`docs/ARCHITECTURE.md`. Migration sequence + checkpoints: `docs/BUILD_PLAN.md`.
 
 ## ED-08 — Tower platform model; DD-01/DD-06 retired ✅
 LienGuard is **not a standalone app**. A product = `Tower (platform) + activated modules +
@@ -116,7 +116,7 @@ contract. _(2026-06-24)_
 Authorized scope is **Horizon H1**: move LienGuard onto the new foundation, lifted into the
 new monorepo, against a **Tower stub** (real Tower extraction from Helm is a later horizon).
 Phased, one PR per phase, green typecheck at every checkpoint, with credential and
-irreversible-cutover gates called out in `docs/MIGRATION_PLAN.md`. _(2026-06-24)_
+irreversible-cutover gates called out in `docs/BUILD_PLAN.md`. _(2026-06-24)_
 
 ## ED-14 — Work in cloud sessions; commit to a branch regularly ✅
 **Default way of working, every time.** Development runs in **cloud sessions** (Claude Code on
@@ -150,6 +150,12 @@ A **table-naming convention separates Tower tables from module tables** in that 
 module such as `lien`; final convention owned by Deb). `helm-dev` is the **legacy** Helm app
 database, not the platform DB, and stays separate until Helm migrates onto Tower (later horizon).
 Open sub-items below. _(2026-06-24)_
+
+## ED-17 — Deploy on Vercel (Node.js 24.x) ✅
+The platform deploys on **Vercel**, Node.js **24.x** runtime. Dev server:
+`https://beacon-platform-pi.vercel.app/`. CI uses `nx affected`; **preview** deploy per PR and **prod**
+on `main`, via Vercel's monorepo support. Resolves the deploy-target open item (BUILD_PLAN card 2).
+_(2026-06-24)_
 
 ---
 

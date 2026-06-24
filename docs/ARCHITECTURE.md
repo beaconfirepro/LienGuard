@@ -6,7 +6,7 @@
 
 > This is the target architecture LienGuard is migrating to. It was decided in an
 > architecture working session (2026-06-24). The migration is phased — see
-> `docs/MIGRATION_PLAN.md` — and parts of this document describe the destination, not the
+> `docs/BUILD_PLAN.md` — and parts of this document describe the destination, not the
 > current code. Current divergences are called out inline.
 
 ---
@@ -78,5 +78,5 @@ A module that satisfies these is portable and agent-buildable by construction.
 Authorized now: **move LienGuard onto the new foundation**, lifted into the new
 `beacon-platform` monorepo, **against a Tower *stub*** (`packages/tower-stub`). Real Tower is
 extracted from Helm in a later horizon. The phased steps, checkpoints, and credential gates
-are in `docs/MIGRATION_PLAN.md`. Nothing in this document is "done" until that plan marks it
+are in `docs/BUILD_PLAN.md`. Nothing in this document is "done" until that plan marks it
 so.
