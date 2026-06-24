@@ -72,7 +72,7 @@ current work. _(2026-06-22)_
 
 The following decisions re-found LienGuard from a "standalone-but-integrated app" into the
 first **module** on the **Tower** platform. Full rationale and target architecture:
-`docs/ARCHITECTURE.md`. Migration sequence + checkpoints: `docs/MIGRATION_PLAN.md`.
+`docs/ARCHITECTURE.md`. Migration sequence + checkpoints: `docs/BUILD_PLAN.md`.
 
 ## ED-08 — Tower platform model; DD-01/DD-06 retired ✅
 LienGuard is **not a standalone app**. A product = `Tower (platform) + activated modules +
@@ -116,7 +116,7 @@ contract. _(2026-06-24)_
 Authorized scope is **Horizon H1**: move LienGuard onto the new foundation, lifted into the
 new monorepo, against a **Tower stub** (real Tower extraction from Helm is a later horizon).
 Phased, one PR per phase, green typecheck at every checkpoint, with credential and
-irreversible-cutover gates called out in `docs/MIGRATION_PLAN.md`. _(2026-06-24)_
+irreversible-cutover gates called out in `docs/BUILD_PLAN.md`. _(2026-06-24)_
 
 ## ED-14 — Work in cloud sessions; commit to a branch regularly ✅
 **Default way of working, every time.** Development runs in **cloud sessions** (Claude Code on

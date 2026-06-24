@@ -77,7 +77,7 @@ Added this session:
 ## Notes for the next session
 
 - The architecture is being re-founded (Tower module: Prisma, Supabase + RLS, Clerk org as `orgId`,
-  one design system, H1 migration). Work from `docs/ARCHITECTURE.md`, `docs/MIGRATION_PLAN.md`,
+  one design system, H1 migration). Work from `docs/ARCHITECTURE.md`, `docs/BUILD_PLAN.md`,
   `docs/DECISIONS.md` (ED-08…ED-15), and `docs/USER_INSTRUCTIONS.md`.
 - Much of this session's code (Drizzle schema, Express routes, `DEFAULT_ORG_ID`, Replit OIDC) is
   superseded by that migration. The **domain engines** (deadline/hold/risk/legal-review/state

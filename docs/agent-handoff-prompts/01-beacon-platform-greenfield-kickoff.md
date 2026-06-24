@@ -40,7 +40,7 @@ lienguard to scope or paste them:
 
 FIRST COMMIT (once you can read the docs, before any build work): copy the reference docs from
 lienguard into THIS repo's docs/ (docs/USER_INSTRUCTIONS.md, docs/agent-handoff-prompts/,
-docs/lessons-learned/, and ARCHITECTURE.md / DECISIONS.md / MIGRATION_PLAN.md) so beacon-platform
+docs/lessons-learned/, and ARCHITECTURE.md / DECISIONS.md / BUILD_PLAN.md) so beacon-platform
 is self-documenting. Add a root CLAUDE.md pointing to docs/USER_INSTRUCTIONS.md (read and follow
 first) and docs/lessons-learned/. Commit and push that as the first commit, then proceed.
 
