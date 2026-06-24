@@ -1,4 +1,4 @@
-# Kickoff 01: Helm Platform (Tower), Greenfield Build
+# Kickoff 01: Helm Greenfield Build (Helm = the platform; Tower = its internal foundation layer)
 
 > Paste the block below into a fresh Claude Code session scoped to `beaconfirepro/beacon-platform`.
 > The referenced docs currently live in **`beaconfirepro/lienguard`** under `docs/` (on the PR #18
@@ -9,8 +9,10 @@
 ---
 
 ```
-You are starting a GREENFIELD build of the Helm platform (internal name: Tower) in
-beaconfirepro/beacon-platform (the repo name is internal; the public product is Helm).
+You are starting a GREENFIELD build of Helm, the platform product. Internally, Helm has a
+foundation layer named Tower (not public; owns auth, the design system, the database, and module
+gating) that the modules run on. Build in beaconfirepro/beacon-platform (the repo name is internal;
+the public product is Helm).
 
 REPOS IN THIS SESSION (know their roles; several are attached):
 - beaconfirepro/beacon-platform: THE BUILD TARGET. All new code goes here.

@@ -1,7 +1,8 @@
-# Brief 01: Helm Platform (internal name: Tower), Greenfield Build
+# Brief 01: Helm Greenfield Build (Helm = the platform; Tower = its internal foundation layer)
 
-**Audience:** a fresh Claude Code session (or agent) that will build the Helm platform (internally
-Tower) from scratch in `beaconfirepro/beacon-platform` (repo name is internal; the product is Helm). **Self-contained** — you should not need the
+**Audience:** a fresh Claude Code session (or agent) that will build Helm, the platform product,
+from scratch in `beaconfirepro/beacon-platform` (repo name is internal; the public product is Helm).
+Internally, Tower is Helm's foundation layer and the modules plug into it. **Self-contained** — you should not need the
 originating chat. Fuller detail (if reachable) is in `beaconfirepro/lienguard` →
 `docs/ARCHITECTURE.md` and `docs/DECISIONS.md`; the old app there is a **requirements
 reference only**.
