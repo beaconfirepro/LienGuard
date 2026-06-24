@@ -137,6 +137,20 @@ HTTP reporter (POST envelopes to Sentry's ingest/envelope endpoint derived from 
 deps), or a deliberate dependency-pinning pass before the SDK. Deferred while the module/architecture
 rework is in progress. _(2026-06-24)_
 
+## ED-16 — Naming: Helm (product/company), Tower (internal platform); no "Beacon" in product names ✅
+Public naming is **Helm**: Helm is the company and the public product name of the platform (what
+customers see). **Tower** is the internal, non-public name for the platform foundation layer, used
+to distinguish it from the modules. Modules are named individually (e.g. `lien-collections`).
+**"Beacon" is used in no product, platform, or database name.** Private infrastructure names are
+exempt and stay: the GitHub org `beaconfirepro` and the build repo `beacon-platform` (a repo name is
+internal/private and need not match the product). Data home (with ED-10/ED-12): one shared
+multi-tenant database in Supabase **org `Helm`, project `tower`** (the Tower DB; greenfield/empty).
+A **table-naming convention separates Tower tables from module tables** in that one database
+(recommended: a Postgres schema per layer/module, for example a `tower` schema plus one schema per
+module such as `lien`; final convention owned by Deb). `helm-dev` is the **legacy** Helm app
+database, not the platform DB, and stays separate until Helm migrates onto Tower (later horizon).
+Open sub-items below. _(2026-06-24)_
+
 ---
 
 ## Open / upcoming decisions ❓
@@ -151,3 +165,9 @@ These are flagged for an explicit decision in their phase (see `docs/PRODUCTION_
   framing)_
 - **Credentials (gate before foundation swap).** Clerk app (Organizations), Supabase
   project, Chromatic token — provisioned before the Prisma/Clerk phase. _(owner: Deb)_
+- **Lien module public brand (ED-16 open).** Whether the lien-collections module keeps a public
+  sub-brand ("LiensEasy") or is presented as part of Helm. Affects product framing in
+  ED-08/ARCHITECTURE. _(owner: Deb)_
+- **Legacy "Beacon" prose (ED-16 open).** Domain text (`CLAUDE.md`, the spec) describes protecting
+  "Beacon's money" (the fire-protection contractor). Decide whether to rebrand those to Helm or
+  leave as the real company. _(owner: Deb)_
