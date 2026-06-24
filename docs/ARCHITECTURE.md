@@ -47,7 +47,7 @@ modules); each module renders its own **horizontal** bar (sections within it).
 
 ## 4. The module contract (what makes a module portable)
 
-Every module — and the `create-beacon-module` generator that scaffolds one — must satisfy:
+Every module — and the `create-tower-module` generator that scaffolds one — must satisfy:
 
 1. **Structure** — the standard package shape.
 2. **Nav manifest** — declares its one entry in Tower's vertical bar and its own horizontal

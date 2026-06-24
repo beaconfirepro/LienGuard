@@ -1,7 +1,7 @@
-# Brief 01 — Beacon Platform, Greenfield Build
+# Brief 01: Helm Platform (internal name: Tower), Greenfield Build
 
-**Audience:** a fresh Claude Code session (or agent) that will build the Beacon platform from
-scratch in `beaconfirepro/beacon-platform`. **Self-contained** — you should not need the
+**Audience:** a fresh Claude Code session (or agent) that will build the Helm platform (internally
+Tower) from scratch in `beaconfirepro/beacon-platform` (repo name is internal; the product is Helm). **Self-contained** — you should not need the
 originating chat. Fuller detail (if reachable) is in `beaconfirepro/lienguard` →
 `docs/ARCHITECTURE.md` and `docs/DECISIONS.md`; the old app there is a **requirements
 reference only**.
@@ -16,17 +16,21 @@ are **references for requirements and domain logic only**. Build the new platfor
 
 ## 1. The product idea
 
-Beacon ships several apps that share one foundation and combine seamlessly:
+**Helm** is the company and the public product: one platform customers log into. Internally it is
+built in layers:
 
-- **Tower** — the platform/foundation. Owns **auth, one design system, one multi-tenant
-  database, and module gating**. It is **never sold or seen on its own** — always the substrate.
-- **Modules** — separable feature units (e.g. **lien-collections**). Each runs **standalone** or
-  alongside others, and **cannot import another module**.
-- **Products** — thin shells = `Tower + a set of modules + the brand`. **LiensEasy** = Tower +
-  the lien-collections module. **Helm** = Tower + its modules.
+- **Tower**: the internal, non-public name for the platform foundation. Owns **auth, one design
+  system, one multi-tenant database, and module gating**. Never sold or seen on its own; it is the
+  substrate every module runs on.
+- **Modules**: separable feature units (for example **lien-collections**). Each runs **standalone**
+  or alongside others, and **cannot import another module**.
 
-Buying a second product later just **activates more modules on the same Tower tenant** — no
-second app, no second database. Result: **one brand, one front door, zero drift.**
+A customer enables the **modules** they buy, on **one Helm tenant, one database**. Buying more later
+just activates more modules on the same tenant: no second app, no second database. Result: **one
+product (Helm), one front door, zero drift.**
+
+> Open (ED-16): whether the lien-collections module keeps a public sub-brand such as "LiensEasy", or
+> is presented purely as part of Helm, is not yet decided. Build the module the same either way.
 
 ## 2. Locked stack (do not relitigate)
 
@@ -68,7 +72,7 @@ second app, no second database. Result: **one brand, one front door, zero drift.
 6. **Gating** — a gating key to switch it on/off per tenant.
 7. **Standalone harness** — runs against a minimal Tower when sold alone.
 
-A `create-beacon-module` generator should scaffold a compliant module so an agent can be
+A `create-tower-module` generator should scaffold a compliant module so an agent can be
 pointed at "one thing" and produce a module that works in any product.
 
 ## 6. The first module: lien-collections (requirements only)
@@ -89,9 +93,13 @@ as a *spec*: deadline engine (business-day/holiday roll-forward), risk scoring, 
   scope** — a session's scope is fixed at creation, so a repo added to GitHub later is NOT
   reachable until a **new session** includes it. Confirm reachability first (try to read it);
   if denied, stop and tell the user to add it to the environment's repo scope.
-- **Credentials:** Clerk (with Organizations) and Supabase are provisioned — their keys/connection
-  string must be **wired into the environment** before the auth/DB work. Chromatic is optional
-  and deferred to the design-system phase.
+- **Database target (ED-16):** the one shared multi-tenant DB is Supabase **org `Helm`, project
+  `tower`** (greenfield/empty). Run Prisma migrations into it. Use a **table-naming convention that
+  separates Tower tables from module tables** (recommended: a Postgres schema per layer/module, for
+  example `tower` plus `lien`). Do **not** use `helm-dev` (that is the legacy Helm app DB).
+- **Credentials:** Clerk (with Organizations) and Supabase are provisioned; their keys/connection
+  strings must be **wired into the environment** before the auth/DB work. Chromatic is optional and
+  deferred to the design-system phase.
 - The interim repo `beaconfirepro/helm-itm` was used earlier and reset to empty; ignore it unless
   told otherwise.
 
@@ -109,7 +117,7 @@ Greenfield order, smallest-useful-first:
 2. **Design system** package in Storybook (tokens + the two-level nav shells) — the single look.
 3. **Tower foundation**: Clerk auth (Orgs = tenant) + Supabase/Prisma + RLS + the app shell.
 4. **First module** `lien-collections` built fresh against the module contract + ports.
-5. **Product** `lienseasy` shell wiring Tower + the module.
+5. **Product shell** (the Helm app) wiring Tower + the module.
 
 **Do not assume the order — confirm step 1's scope with the user before building.**
 Follow the operating rules in `docs/lessons-learned/` (the latest `LL-*.md`) — confirm before big
