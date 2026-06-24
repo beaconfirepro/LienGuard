@@ -11,6 +11,16 @@
 ```
 You are starting a GREENFIELD build of the Beacon platform in beaconfirepro/beacon-platform.
 
+REPOS IN THIS SESSION (know their roles — several are attached):
+- beaconfirepro/beacon-platform — THE BUILD TARGET. All new code goes here.
+- beaconfirepro/lienguard — requirements + canon docs (ARCHITECTURE / DECISIONS / the brief /
+  lessons-learned). REFERENCE ONLY: read it, never modify it, do NOT port its code.
+- beacon-fire-protection/helm — the existing Helm app; the future source for the Tower
+  extraction (a later horizon). REFERENCE ONLY for now: read for patterns, do not modify.
+- beaconfirepro/helm-itm — empty/interim scratch repo. Ignore unless I say otherwise.
+(If lienguard is NOT attached, you can't read the canon docs — STOP and ask me to attach it or
+paste them.)
+
 READ FIRST (in this order), then follow them. These docs live in the beaconfirepro/lienguard repo
 (under docs/, currently on the PR #18 branch; on main once merged) — read them from there (ensure
 lienguard is in THIS session's repo scope), or from this repo if they have been copied in. If you
@@ -18,6 +28,11 @@ can reach neither, STOP and ask me to add lienguard to scope or paste them:
 1. (lienguard) docs/agent-handoff-prompts/01-beacon-platform-greenfield-brief.md  — full context + locked stack.
 2. (lienguard) docs/lessons-learned/ (latest LL-*.md)  — operating rules. Follow them, especially: confirm
    before big moves; verify access/credentials FIRST; smallest reversible step; stay concise; friction = stop.
+
+FIRST COMMIT (once you can read the docs, before any build work): copy the reference docs from
+lienguard into THIS repo's docs/ — docs/agent-handoff-prompts/, docs/lessons-learned/, and
+ARCHITECTURE.md / DECISIONS.md / MIGRATION_PLAN.md — so beacon-platform is self-documenting. Add
+the lessons pointer to a root CLAUDE.md. Commit and push that as the first commit, then proceed.
 
 THE ONE RULE THAT OVERRIDES EVERYTHING:
 This is greenfield. Do NOT port, copy, or refactor the old LienGuard code. The old app
