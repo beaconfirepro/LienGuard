@@ -28,7 +28,7 @@ database. Helm Core is a *consumer* of this app (reference layer + hold flags), 
 > "standalone app" into the first **module** on the **Tower** platform. The target architecture
 > and locked stack (Prisma · Supabase/RLS · Clerk · one design system in Storybook · pnpm
 > monorepo) are canon in **`docs/ARCHITECTURE.md`**; decisions in `docs/DECISIONS.md` (ED-08…ED-13,
-> superseding DD-01/06); sequence in `docs/BUILD_PLAN.md`. **The Stack / Architecture-decisions
+> superseding DD-01/06, through ED-17); sequence in `docs/BUILD_PLAN.md`. **The Stack / Architecture-decisions
 > sections below describe the CURRENT code (pre-migration) and are accurate until each migration
 > phase changes them.**
 
