@@ -113,6 +113,7 @@ alongside the engine tests, against an ephemeral Postgres in CI.
 | E3 | Add ESLint config + lint step in CI | ⬜ |
 | E4 | Formalize production migrations (vs dev-only `drizzle-kit push`) + DB backup/restore policy | ⬜ |
 | E5 | Refresh the spec/status docs to match reality (Drizzle, SOVs, built phases) | ⬜ |
+| E7 | API naming inconsistency: `GET /projects` (list) returns `sovs` but project detail/overview returns `streams` — unify on `sovs` (touches web + harness) | ⬜ |
 | E6 | HELM integration: verify `/external/*` contract shapes against HELM canon (see HELM_INTEGRATION_REVIEW) | ⬜ |
 
 **Exit criteria:** contract-drift class of bugs closed; docs match reality; ops basics in place.

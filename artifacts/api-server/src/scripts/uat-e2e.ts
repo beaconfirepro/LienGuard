@@ -128,7 +128,7 @@ test("DASH-A1 dashboard data loads with non-zero seed numbers", async () => {
 
 test("DASH-A2 at-risk and lapsed items are surfaced", async () => {
   const { json } = await req("GET", "/api/projects", { role: "admin" });
-  const statuses = json.projects.flatMap((p: any) => p.streams.map((s: any) => s.status));
+  const statuses = json.projects.flatMap((p: any) => p.sovs.map((s: any) => s.status));
   assert(statuses.includes("at_risk"), "expected an at_risk stream");
   assert(statuses.includes("lapsed"), "expected a lapsed stream");
 });
@@ -168,9 +168,9 @@ test("LIEN-A2 risk badges reflect stream statuses", async () => {
   const healthy: any = byId.get("proj_healthy");
   const comm: any = byId.get("proj_comm");
   const released: any = byId.get("proj_released");
-  assert(healthy && healthy.streams.every((s: any) => s.status === "open"), "Riverside healthy/open");
-  assert(comm && comm.streams.some((s: any) => s.status === "at_risk"), "proj_comm has at_risk");
-  assert(released && released.streams.some((s: any) => s.status === "released"), "proj_released released");
+  assert(healthy && healthy.sovs.every((s: any) => s.status === "open"), "Riverside healthy/open");
+  assert(comm && comm.sovs.some((s: any) => s.status === "at_risk"), "proj_comm has at_risk");
+  assert(released && released.sovs.some((s: any) => s.status === "released"), "proj_released released");
 });
 
 test("LIEN-A3 high-risk filter returns only high-risk projects", async () => {
@@ -180,7 +180,7 @@ test("LIEN-A3 high-risk filter returns only high-risk projects", async () => {
   assert(!ids.includes("proj_healthy"), "proj_healthy should not be high risk");
   for (const p of json.projects) {
     assert(
-      p.streams.some((s: any) => ["at_risk", "filing", "lapsed"].includes(s.status)),
+      p.sovs.some((s: any) => ["at_risk", "filing", "lapsed"].includes(s.status)),
       `project ${p.id} returned by high filter but has no high stream`,
     );
   }
