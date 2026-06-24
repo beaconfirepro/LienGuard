@@ -30,6 +30,19 @@ database. Helm Core is a *consumer* of this app (reference layer + hold flags), 
 > sections below describe the CURRENT code (pre-migration) and are accurate until each migration
 > phase changes them.**
 
+## Ways of working (binding — ED-14)
+
+- **Work in cloud sessions, every time.** Development runs in **Claude Code cloud sessions**
+  (web/mobile, Anthropic-managed remote containers) — not a local laptop. This very repo is
+  worked on that way.
+- **The container is ephemeral → commit to a branch regularly.** It's cloned fresh per session
+  and reclaimed on inactivity/end, so nothing in the container is durable. Make **small, green
+  commits and push them often**; never end a turn with meaningful progress un-pushed. Un-pushed
+  work is lost when the container is reclaimed.
+- **Set the environment up front:** the cloud environment's **repo scope** and **secrets**
+  (Clerk, Supabase) so a fresh session starts ready (you can't add a repo to a running session
+  here). See `docs/DECISIONS.md` ED-14.
+
 ## Run & Operate
 
 - `pnpm install` — install (enforces a 1-day `minimumReleaseAge` on npm packages; see `pnpm-workspace.yaml`)

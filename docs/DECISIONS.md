@@ -118,6 +118,15 @@ new monorepo, against a **Tower stub** (real Tower extraction from Helm is a lat
 Phased, one PR per phase, green typecheck at every checkpoint, with credential and
 irreversible-cutover gates called out in `docs/MIGRATION_PLAN.md`. _(2026-06-24)_
 
+## ED-14 — Work in cloud sessions; commit to a branch regularly ✅
+**Default way of working, every time.** Development runs in **cloud sessions** (Claude Code on
+the web/mobile — Anthropic-managed remote containers), **not** a local laptop. The container is
+**ephemeral**: cloned fresh at session start, reclaimed on inactivity/end — so **nothing in the
+container is durable**. Therefore: **commit work to a branch frequently** (small, green commits;
+push so it survives the container) and never leave meaningful progress un-pushed at the end of a
+turn. Set the cloud environment's **repo scope** and **secrets** (Clerk, Supabase) up front so a
+fresh session starts ready. _(2026-06-24)_
+
 ---
 
 ## Open / upcoming decisions ❓

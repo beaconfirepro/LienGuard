@@ -38,6 +38,9 @@ FIRST ACTIONS (do these before building anything):
    contract) → lienseasy product shell. Do not assume — get my "go" on step 1's scope first.
 
 WORKING STYLE:
+- This is a cloud session on an ephemeral container: commit to a branch and PUSH frequently —
+  never end a turn with meaningful work un-pushed (un-pushed work is lost when the container is
+  reclaimed).
 - One concern per PR, green at each checkpoint; never leave the build red across a merge.
 - Restate the plan in one line and get a go before any large or destructive action.
 - Be concise. Long write-ups only when I ask for a deep dive.
