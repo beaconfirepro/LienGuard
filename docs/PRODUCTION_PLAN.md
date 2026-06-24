@@ -54,7 +54,7 @@ alongside the engine tests, against an ephemeral Postgres in CI.
 | B3 | Unit tests for `deadlineEngine` against the documented Ch. 53 worked examples (incl. weekend/holiday roll-forward) | ✅ |
 | B4 | Unit tests for `holdEngine` and `riskScore` | ✅ |
 | B5 | State-machine rules for notice/waiver/filing + unconditional-waiver cleared-gate | ✅ logic locked (pure); DB integration pending |
-| B6 | Wire `uat-e2e.ts` into CI against an ephemeral Postgres service | ⬜ |
+| B6 | Wire `uat-e2e.ts` into CI against an ephemeral Postgres service | 🔨 added as a separate `uat-e2e` job; validating in CI, then promote to required |
 
 **Exit criteria:** engines test-locked; sending blocked on unreviewed rule sets; UAT e2e in CI.
 
@@ -113,6 +113,7 @@ alongside the engine tests, against an ephemeral Postgres in CI.
 | E3 | Add ESLint config + lint step in CI | ⬜ |
 | E4 | Formalize production migrations (vs dev-only `drizzle-kit push`) + DB backup/restore policy | ⬜ |
 | E5 | Refresh the spec/status docs to match reality (Drizzle, SOVs, built phases) | ⬜ |
+| E7 | API naming inconsistency: `GET /projects` (list) returns `sovs` but project detail/overview returns `streams` — unify on `sovs` (touches web + harness) | ⬜ |
 | E6 | HELM integration: verify `/external/*` contract shapes against HELM canon (see HELM_INTEGRATION_REVIEW) | ⬜ |
 
 **Exit criteria:** contract-drift class of bugs closed; docs match reality; ops basics in place.
