@@ -127,6 +127,16 @@ push so it survives the container) and never leave meaningful progress un-pushed
 turn. Set the cloud environment's **repo scope** and **secrets** (Clerk, Supabase) up front so a
 fresh session starts ready. _(2026-06-24)_
 
+## ED-15 — API error tracking (Sentry) deferred; do not add the `@sentry/node` SDK naively 🔄
+Sentry is wanted, but on the current (pre-migration) workspace, adding `@sentry/node` pulled in
+OpenTelemetry, which forked `drizzle-orm` into two peer-keyed instances and, on reinstall, also
+reshuffled `vite`/`rollup`/`rolldown` and broke the unrelated `mockup-sandbox` typecheck. Decision:
+do not add the SDK directly on this stack. Re-evaluate after the Prisma + monorepo foundation lands
+(ED-09, ED-12), since the dependency graph changes then. Preferred options when we resume: a no-SDK
+HTTP reporter (POST envelopes to Sentry's ingest/envelope endpoint derived from the DSN, zero new
+deps), or a deliberate dependency-pinning pass before the SDK. Deferred while the module/architecture
+rework is in progress. _(2026-06-24)_
+
 ---
 
 ## Open / upcoming decisions ❓
