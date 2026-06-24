@@ -1,18 +1,23 @@
 # Kickoff 01 — Beacon Platform, Greenfield Build
 
 > Paste the block below into a fresh Claude Code session scoped to `beaconfirepro/beacon-platform`.
-> Make sure `01-beacon-platform-greenfield-brief.md` and `docs/LESSONS_LEARNED.md` are in the repo
-> (or paste the brief too). Don't start coding before the checks in step 1 pass.
+> The referenced docs currently live in **`beaconfirepro/lienguard`** under `docs/` (on the PR #18
+> branch; on `main` once merged) — NOT in the empty `beacon-platform`. So do one of: add
+> `lienguard` to the session's repo scope, copy those `docs/` files into `beacon-platform` first,
+> or paste the brief inline. Don't start coding before the checks in step 1 pass.
 
 ---
 
 ```
 You are starting a GREENFIELD build of the Beacon platform in beaconfirepro/beacon-platform.
 
-READ FIRST (in this order), then follow them:
-1. docs/agent-handoff-prompts/01-beacon-platform-greenfield-brief.md  — full context + locked stack.
-2. docs/lessons-learned/ (latest LL-*.md)  — operating rules. Follow them, especially: confirm before big moves;
-   verify access/credentials FIRST; smallest reversible step; stay concise; friction = stop.
+READ FIRST (in this order), then follow them. These docs live in the beaconfirepro/lienguard repo
+(under docs/, currently on the PR #18 branch; on main once merged) — read them from there (ensure
+lienguard is in THIS session's repo scope), or from this repo if they have been copied in. If you
+can reach neither, STOP and ask me to add lienguard to scope or paste them:
+1. (lienguard) docs/agent-handoff-prompts/01-beacon-platform-greenfield-brief.md  — full context + locked stack.
+2. (lienguard) docs/lessons-learned/ (latest LL-*.md)  — operating rules. Follow them, especially: confirm
+   before big moves; verify access/credentials FIRST; smallest reversible step; stay concise; friction = stop.
 
 THE ONE RULE THAT OVERRIDES EVERYTHING:
 This is greenfield. Do NOT port, copy, or refactor the old LienGuard code. The old app
