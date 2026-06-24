@@ -31,3 +31,4 @@ LL-2026-06-24-architecture-greenfield-pivot.md
 | Date | Topic | File |
 |------|-------|------|
 | 2026-06-24 | Architecture — greenfield pivot | `LL-2026-06-24-architecture-greenfield-pivot.md` |
+| 2026-06-24 | Stabilization — green build, CI gate, Phase A/B | `LL-2026-06-24-stabilization-green-and-gated.md` |
