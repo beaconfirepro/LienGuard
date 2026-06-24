@@ -30,9 +30,10 @@ can reach neither, STOP and ask me to add lienguard to scope or paste them:
    before big moves; verify access/credentials FIRST; smallest reversible step; stay concise; friction = stop.
 
 FIRST COMMIT (once you can read the docs, before any build work): copy the reference docs from
-lienguard into THIS repo's docs/ — docs/agent-handoff-prompts/, docs/lessons-learned/, and
-ARCHITECTURE.md / DECISIONS.md / MIGRATION_PLAN.md — so beacon-platform is self-documenting. Add
-the lessons pointer to a root CLAUDE.md. Commit and push that as the first commit, then proceed.
+lienguard into THIS repo's docs/ (docs/USER_INSTRUCTIONS.md, docs/agent-handoff-prompts/,
+docs/lessons-learned/, and ARCHITECTURE.md / DECISIONS.md / MIGRATION_PLAN.md) so beacon-platform
+is self-documenting. Add a root CLAUDE.md pointing to docs/USER_INSTRUCTIONS.md (read and follow
+first) and docs/lessons-learned/. Commit and push that as the first commit, then proceed.
 
 THE ONE RULE THAT OVERRIDES EVERYTHING:
 This is greenfield. Do NOT port, copy, or refactor the old LienGuard code. The old app
