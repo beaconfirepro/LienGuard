@@ -49,7 +49,7 @@ This is greenfield. Do NOT port, copy, or refactor the old LienGuard code. The o
 (beaconfirepro/lienguard) and its product spec are a REQUIREMENTS REFERENCE ONLY. Build clean.
 
 LOCKED STACK (do not relitigate; rationale is in the brief):
-- pnpm-workspaces monorepo (no task runner yet; Nx-leaning later).
+- pnpm-workspaces monorepo with Nx (task runner: orchestration, caching, affected runs, module-boundary lint).
 - Prisma, Supabase Postgres + RLS, Clerk (Organizations = tenant; org id == orgId) via Supabase
   Third-Party Auth, Clerk verified end-to-end.
 - OpenAPI-first + Orval (generated Zod + TanStack Query).
