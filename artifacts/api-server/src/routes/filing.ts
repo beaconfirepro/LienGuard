@@ -39,6 +39,7 @@ import {
 } from "../lib/documentTemplates";
 import { renderRichText } from "../lib/pdfRichText";
 import { legalReviewBlockReason } from "../lib/legalReview";
+import { filingExportError, filingRecordError } from "../lib/stateMachines";
 
 const router = Router();
 
@@ -513,10 +514,9 @@ router.post("/filing/:id/export", requireSession, async (req, res) => {
   const filing = await getFilingById(filingId, orgId);
   if (!filing) { res.status(404).json({ error: "Filing not found" }); return; }
 
-  if (filing.status !== "affidavit_draft") {
-    res.status(409).json({
-      error: `Export requires status affidavit_draft; current: ${filing.status}`,
-    });
+  const exportErr = filingExportError(filing.status);
+  if (exportErr) {
+    res.status(409).json({ error: exportErr });
     return;
   }
 
@@ -559,10 +559,9 @@ router.post("/filing/:id/record", requireSession, async (req, res) => {
     return;
   }
 
-  if (!["affidavit_draft", "exported", "compliance_check"].includes(filing.status)) {
-    res.status(409).json({
-      error: `Record requires status affidavit_draft, exported, or compliance_check; current: ${filing.status}`,
-    });
+  const recordErr = filingRecordError(filing.status);
+  if (recordErr) {
+    res.status(409).json({ error: recordErr });
     return;
   }
 
