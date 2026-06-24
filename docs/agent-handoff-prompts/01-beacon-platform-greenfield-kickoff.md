@@ -1,10 +1,10 @@
 # Kickoff 01: Helm Greenfield Build (Helm = the platform; Tower = its internal foundation layer)
 
 > Paste the block below into a fresh Claude Code session scoped to `beaconfirepro/beacon-platform`.
-> The referenced docs currently live in **`beaconfirepro/lienguard`** under `docs/` (on the PR #18
-> branch; on `main` once merged), NOT in the empty `beacon-platform`. So do one of: add `lienguard`
-> to the session's repo scope, copy those `docs/` files into `beacon-platform` first, or paste the
-> brief inline. Don't start coding before the checks in step 1 pass.
+> The referenced docs live in **`beaconfirepro/lienguard`** under `docs/` (on `main`), NOT in the
+> empty `beacon-platform`. So do one of: add `lienguard` to the session's repo scope, copy those
+> `docs/` files into `beacon-platform` first, or paste the brief inline. Don't start coding before
+> the checks in step 1 pass.
 
 ---
 
@@ -26,9 +26,9 @@ REPOS IN THIS SESSION (know their roles; several are attached):
 or paste them.)
 
 READ FIRST (in this order), then follow them. These docs live in the beaconfirepro/lienguard repo
-(under docs/, currently on the PR #18 branch; on main once merged): read them from there (ensure
-lienguard is in THIS session's repo scope), or from this repo if they have been copied in. If you
-can reach neither, STOP and ask me to add lienguard to scope or paste them:
+(under docs/ on main): read them from there (ensure lienguard is in THIS session's repo scope), or
+from this repo if they have been copied in. If you can reach neither, STOP and ask me to add
+lienguard to scope or paste them:
 1. (lienguard) docs/USER_INSTRUCTIONS.md: Deb's binding operating instructions. Follow them
    exactly, including: NEVER use em dashes unless grammatically called for; never comment on
    eating, sleeping, stopping, time of day, or how long we have worked.
