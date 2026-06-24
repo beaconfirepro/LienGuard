@@ -34,6 +34,14 @@ import { eq, and, inArray, isNull, not } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { createNotarySession, getNotaryOrderStatus } from "../lib/notarylive";
 import {
+  waiverRequiresClearedPayment,
+  initialWaiverApprovalStatus,
+  pmApprovalError,
+  pmApprovalNextStatus,
+  financeApprovalError,
+  type WaiverType,
+} from "../lib/stateMachines";
+import {
   resolveDocument,
   formatCurrency,
   formatMonthYear,
@@ -92,7 +100,7 @@ router.post("/waivers", requireSession, async (req, res) => {
   }
 
   // L33: Unconditional waivers require coordinator-cleared payment.
-  const isUnconditional = waiverType === "unconditional_progress" || waiverType === "unconditional_final";
+  const isUnconditional = waiverRequiresClearedPayment(waiverType as WaiverType);
 
   if (isUnconditional) {
     if (!invoiceLinkId) {
@@ -123,9 +131,7 @@ router.post("/waivers", requireSession, async (req, res) => {
   }
 
   // Determine initial approval status.
-  let approvalStatus: "not_required" | "pending_pm" | "pending_pm_finance" = "not_required";
-  if (waiverType === "unconditional_progress") approvalStatus = "pending_pm";
-  if (waiverType === "unconditional_final") approvalStatus = "pending_pm_finance";
+  const approvalStatus = initialWaiverApprovalStatus(waiverType as WaiverType);
 
   const [waiver] = await db
     .insert(waiversTable)
@@ -309,15 +315,9 @@ router.post("/waivers/:id/approve-pm", requireSession, async (req, res) => {
     return;
   }
 
-  if (waiver.approvalStatus !== "pending_pm" && waiver.approvalStatus !== "pending_pm_finance") {
-    res.status(409).json({
-      error: `PM approval is not required for a waiver in '${waiver.approvalStatus}' status`,
-    });
-    return;
-  }
-
-  if (waiver.pmApprovedAt) {
-    res.status(409).json({ error: "PM has already approved this waiver" });
+  const pmErr = pmApprovalError(waiver.approvalStatus, !!waiver.pmApprovedAt);
+  if (pmErr) {
+    res.status(409).json({ error: pmErr });
     return;
   }
 
@@ -334,10 +334,7 @@ router.post("/waivers/:id/approve-pm", requireSession, async (req, res) => {
 
   const userId = session.userId ?? "user_unknown";
 
-  const newStatus =
-    waiver.waiverType === "unconditional_progress"
-      ? "approved"
-      : "pending_pm_finance"; // unconditional_final still needs finance
+  const newStatus = pmApprovalNextStatus(waiver.waiverType);
 
   const [updated] = await db
     .update(waiversTable)
@@ -372,25 +369,14 @@ router.post("/waivers/:id/approve-finance", requireSession, async (req, res) => 
     return;
   }
 
-  if (waiver.waiverType !== "unconditional_final") {
-    res.status(409).json({ error: "Finance approval is only required for unconditional_final waivers" });
-    return;
-  }
-
-  if (waiver.approvalStatus !== "pending_pm_finance") {
-    res.status(409).json({
-      error: `Finance approval is not applicable for a waiver in '${waiver.approvalStatus}' status`,
-    });
-    return;
-  }
-
-  if (!waiver.pmApprovedAt) {
-    res.status(409).json({ error: "PM must approve before Finance approval can be granted" });
-    return;
-  }
-
-  if (waiver.financeApprovedAt) {
-    res.status(409).json({ error: "Finance has already approved this waiver" });
+  const financeErr = financeApprovalError(
+    waiver.waiverType,
+    waiver.approvalStatus,
+    !!waiver.pmApprovedAt,
+    !!waiver.financeApprovedAt,
+  );
+  if (financeErr) {
+    res.status(409).json({ error: financeErr });
     return;
   }
 

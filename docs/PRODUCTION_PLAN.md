@@ -52,8 +52,8 @@ alongside the engine tests, against an ephemeral Postgres in CI.
 | B1 | Legal review of the seeded Texas Ch. 53 rule set (notice/filing/retainage/post-filing) — **human/legal task, not code** | ⬜ |
 | B2 | Enforce the `lien_rule_sets.legalReviewed` gate in the notice-send + filing export/record paths | ✅ |
 | B3 | Unit tests for `deadlineEngine` against the documented Ch. 53 worked examples (incl. weekend/holiday roll-forward) | ✅ |
-| B4 | Unit tests for `holdEngine` and `riskScore` | 🔨 |
-| B5 | Integration tests for notice/waiver/filing state machines + unconditional-waiver cleared-gate | ⬜ |
+| B4 | Unit tests for `holdEngine` and `riskScore` | ✅ |
+| B5 | State-machine rules for notice/waiver/filing + unconditional-waiver cleared-gate | ✅ logic locked (pure); DB integration pending |
 | B6 | Wire `uat-e2e.ts` into CI against an ephemeral Postgres service | ⬜ |
 
 **Exit criteria:** engines test-locked; sending blocked on unreviewed rule sets; UAT e2e in CI.

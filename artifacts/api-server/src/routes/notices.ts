@@ -39,6 +39,7 @@ import {
 } from "../lib/documentTemplates";
 import { renderRichText } from "../lib/pdfRichText";
 import { legalReviewBlockReason } from "../lib/legalReview";
+import { noticeEditError, noticeApproveError, noticeSendError } from "../lib/stateMachines";
 
 const router = Router();
 router.use(requireSession);
@@ -289,8 +290,9 @@ router.patch("/notices/:id", async (req, res) => {
     return;
   }
 
-  if (existing.status === "sent" || existing.status === "delivered") {
-    res.status(409).json({ error: "Cannot edit a sent or delivered notice" });
+  const editErr = noticeEditError(existing.status);
+  if (editErr) {
+    res.status(409).json({ error: editErr });
     return;
   }
 
@@ -349,8 +351,9 @@ router.post("/notices/:id/approve", async (req, res) => {
     return;
   }
 
-  if (existing.status !== "draft") {
-    res.status(409).json({ error: `Cannot approve a notice in '${existing.status}' status` });
+  const approveErr = noticeApproveError(existing.status);
+  if (approveErr) {
+    res.status(409).json({ error: approveErr });
     return;
   }
 
@@ -665,8 +668,9 @@ router.post("/notices/:id/send", async (req, res) => {
     return;
   }
 
-  if (notice.status !== "approved") {
-    res.status(409).json({ error: `Notice must be in 'approved' status to send (current: '${notice.status}')` });
+  const sendErr = noticeSendError(notice.status);
+  if (sendErr) {
+    res.status(409).json({ error: sendErr });
     return;
   }
 
