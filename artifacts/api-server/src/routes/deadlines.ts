@@ -15,6 +15,7 @@ import {
 import { eq, and } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
 import { requireAdminOrPm } from "../lib/admin";
+import { recordAudit } from "../lib/audit";
 
 const router = Router();
 router.use(requireSession);
@@ -80,7 +81,7 @@ router.get("/deadlines/:workMonthId", async (req, res) => {
  * Body to clear: { overrideDate: null }
  */
 router.patch("/deadlines/:id/override", requireAdminOrPm, async (req, res) => {
-  const { orgId, userId } = getSession(req);
+  const { orgId, userId, role } = getSession(req);
   const id = req.params["id"] as string;
   const { overrideDate } = req.body as { overrideDate?: unknown };
 
@@ -107,6 +108,21 @@ router.patch("/deadlines/:id/override", requireAdminOrPm, async (req, res) => {
       })
       .where(and(eq(lienDeadlinesTable.id, id), eq(lienDeadlinesTable.orgId, orgId)))
       .returning();
+    await recordAudit({
+      orgId,
+      actor: { userId, role },
+      action: "deadline.override_clear",
+      entityType: "deadline",
+      entityId: id,
+      summary: "Manual deadline override cleared (reverted to computed date)",
+      before: {
+        isOverridden: existing.isOverridden,
+        overrideDate: existing.overrideDate
+          ? new Date(existing.overrideDate).toISOString().slice(0, 10)
+          : null,
+      },
+      after: { isOverridden: false, overrideDate: null },
+    });
     return res.json({ deadline: updated });
   }
 
@@ -133,6 +149,22 @@ router.patch("/deadlines/:id/override", requireAdminOrPm, async (req, res) => {
     })
     .where(and(eq(lienDeadlinesTable.id, id), eq(lienDeadlinesTable.orgId, orgId)))
     .returning();
+
+  await recordAudit({
+    orgId,
+    actor: { userId, role },
+    action: "deadline.override_set",
+    entityType: "deadline",
+    entityId: id,
+    summary: `Manual deadline override set to ${parsed.toISOString().slice(0, 10)}`,
+    before: {
+      isOverridden: existing.isOverridden,
+      adjustedDate: existing.adjustedDate
+        ? new Date(existing.adjustedDate).toISOString().slice(0, 10)
+        : null,
+    },
+    after: { isOverridden: true, overrideDate: parsed.toISOString().slice(0, 10) },
+  });
 
   return res.json({ deadline: updated });
 });

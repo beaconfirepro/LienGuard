@@ -41,6 +41,7 @@ import {
   financeApprovalError,
   type WaiverType,
 } from "../lib/stateMachines";
+import { recordAudit } from "../lib/audit";
 import {
   resolveDocument,
   formatCurrency,
@@ -347,6 +348,17 @@ router.post("/waivers/:id/approve-pm", requireSession, async (req, res) => {
     .where(and(eq(waiversTable.id, id), eq(waiversTable.orgId, orgId)))
     .returning();
 
+  await recordAudit({
+    orgId,
+    actor: { userId: session.userId, role: session.role },
+    action: "waiver.approve_pm",
+    entityType: "waiver",
+    entityId: id,
+    summary: `PM approved waiver (${waiver.waiverType})`,
+    before: { approvalStatus: waiver.approvalStatus },
+    after: { approvalStatus: updated.approvalStatus },
+  });
+
   res.json({ waiver: updated });
 });
 
@@ -403,6 +415,17 @@ router.post("/waivers/:id/approve-finance", requireSession, async (req, res) => 
     })
     .where(and(eq(waiversTable.id, id), eq(waiversTable.orgId, orgId)))
     .returning();
+
+  await recordAudit({
+    orgId,
+    actor: { userId: session.userId, role: session.role },
+    action: "waiver.approve_finance",
+    entityType: "waiver",
+    entityId: id,
+    summary: `Finance approved waiver (${waiver.waiverType}) — fully approved`,
+    before: { approvalStatus: waiver.approvalStatus },
+    after: { approvalStatus: updated.approvalStatus },
+  });
 
   res.json({ waiver: updated });
 });

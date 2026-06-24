@@ -15,6 +15,7 @@ import {
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireSession, getSession } from "../lib/session";
+import { recordAudit } from "../lib/audit";
 import { qboSyncClient } from "../lib/clients/qbo";
 import { computeAccountRiskMetrics } from "../lib/riskScore";
 
@@ -135,6 +136,18 @@ router.post("/invoices/:id/clear", async (req, res) => {
       await recomputeRiskScoreForAccount(account, orgId);
     }
   }
+
+  const clearSession = getSession(req);
+  await recordAudit({
+    orgId,
+    actor: { userId: clearSession.userId, role: clearSession.role },
+    action: "invoice.clear",
+    entityType: "invoice",
+    entityId: id,
+    summary: `Invoice marked ${clearedFlag ? "cleared" : "uncleared"} (amount ${invoice.amount})`,
+    before: { clearedFlag: invoice.clearedFlag },
+    after: { clearedFlag: updated.clearedFlag },
+  });
 
   return res.json({ invoice: updated });
 });

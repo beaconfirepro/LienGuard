@@ -40,6 +40,7 @@ import {
 import { renderRichText } from "../lib/pdfRichText";
 import { legalReviewBlockReason } from "../lib/legalReview";
 import { filingExportError, filingRecordError } from "../lib/stateMachines";
+import { recordAudit } from "../lib/audit";
 
 const router = Router();
 
@@ -533,6 +534,18 @@ router.post("/filing/:id/export", requireSession, async (req, res) => {
     .where(eq(lienFilingsTable.id, filingId))
     .returning();
 
+  const exportSession = getSession(req);
+  await recordAudit({
+    orgId,
+    actor: { userId: exportSession.userId, role: exportSession.role },
+    action: "filing.export",
+    entityType: "filing",
+    entityId: filingId,
+    summary: "Lien filing exported to county-filing handoff (Texas Easy Lien)",
+    before: { status: filing.status },
+    after: { status: updated.status },
+  });
+
   res.json({ filing: updated });
 });
 
@@ -603,6 +616,25 @@ router.post("/filing/:id/record", requireSession, async (req, res) => {
     .update(lienScheduleOfValuesTable)
     .set({ status: "filed", updatedAt: new Date() })
     .where(eq(lienScheduleOfValuesTable.id, filing.lienScheduleOfValuesId));
+
+  const recordSession = getSession(req);
+  await recordAudit({
+    orgId,
+    actor: { userId: recordSession.userId, role: recordSession.role },
+    action: "filing.record",
+    entityType: "filing",
+    entityId: filingId,
+    summary: `Lien recorded in ${county} (ref ${recordingRef})`,
+    before: { status: filing.status },
+    after: {
+      status: updated.status,
+      county,
+      recordingRef,
+      filingDate: filingDateObj.toISOString().slice(0, 10),
+      postFilingNoticeDeadline: postFilingNoticeDeadline.toISOString().slice(0, 10),
+      enforcementDeadline: enforcementDeadline.toISOString().slice(0, 10),
+    },
+  });
 
   res.json({
     filing: updated,
@@ -813,6 +845,18 @@ router.post("/filing/:id/release", requireSession, async (req, res) => {
       .set({ status: "released", updatedAt: new Date() })
       .where(eq(lienScheduleOfValuesTable.id, filing.lienScheduleOfValuesId));
   }
+
+  const releaseSession = getSession(req);
+  await recordAudit({
+    orgId,
+    actor: { userId: releaseSession.userId, role: releaseSession.role },
+    action: "filing.release",
+    entityType: "filing",
+    entityId: filingId,
+    summary: `Lien release ${releaseStatus}${existing ? "" : " (created)"}`,
+    before: { releaseStatus: existing?.status ?? null },
+    after: { releaseStatus, filingConfirmation: release.filingConfirmation ?? null },
+  });
 
   res.json({ release, filing });
 });

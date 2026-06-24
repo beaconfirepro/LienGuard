@@ -97,7 +97,7 @@ alongside the engine tests, against an ephemeral Postgres in CI.
 |---|------|--------|
 | D1 | Exercise HubSpot, QBO, Connecteam, Shippo, NotaryLive, Texas Easy Lien against real sandbox/live creds; document results | ⬜ |
 | D2 | Replace the affidavit `generated://` PDF stub with real generation + object-storage persistence | ⬜ |
-| D3 | Add error tracking (Sentry) + structured audit logging for statutory actions | ⬜ |
+| D3 | Detailed audit log (persisted `audit_logs` table + recorder wired into statutory/financial actions + read API) | 🔨 audit log built; Sentry error tracking still ⬜; legal must-have fields TBD |
 | D4 | Add a scheduler for monthly-run / hold-recompute / sync / dunning cadences (idempotent + alerting) | ⬜ |
 
 **Exit criteria:** connectors proven; cadences fire automatically; failures visible.
