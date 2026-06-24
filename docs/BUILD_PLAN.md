@@ -3,7 +3,7 @@
 **Status: DRAFT for review.** Whole-task plan for **Helm** (the platform product; internally
 **Tower** is the foundation layer, with separable **modules**, first `lien-collections`). Greenfield:
 the old LienGuard app is a requirements reference only, not code to port. Canon: `docs/ARCHITECTURE.md`,
-`docs/DECISIONS.md` (through ED-16), and the handoff brief/kickoff.
+`docs/DECISIONS.md` (through ED-17), and the handoff brief/kickoff.
 
 ## Project tracking (adopt helm's system)
 
