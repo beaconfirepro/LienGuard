@@ -5,19 +5,35 @@
 the old LienGuard app is a requirements reference only, not code to port. Canon: `docs/ARCHITECTURE.md`,
 `docs/DECISIONS.md` (through ED-16), and the handoff brief/kickoff.
 
-## The board (Kanban)
+## Project tracking (adopt helm's system)
 
-One **GitHub Project (Kanban) in `beaconfirepro/beacon-platform`**. The **epics below are the cards**,
-listed in **ship order** (top = next). That order is the priority.
+We reuse Beacon's existing issue/project/board system from `beacon-fire-protection/helm` rather than
+inventing one. The build session ports it into `beacon-platform` and adapts it. It gives us:
 
-- Columns: **Backlog → In progress → In review → Done.**
-- An agent picks the top Backlog card it owns, moves it to In progress, opens a PR (`Closes #`), moves
-  to In review, and the card closes to Done when the PR merges.
-- **Bugs and tech debt are cards too**, labelled `bug` / `tech-debt`, and slotted into the column and
-  priority they deserve.
-- Owner per card: `agent:build` or `agent:deploy`. Nx handles task detail below the card.
+- **Hierarchy via templates + labels:** `type/epic` (the cards below) → `type/story` (the units of
+  work; one story = one branch = one PR = one agent, created from `story.yml` with a parent-epic link
+  so it is a real sub-issue) → `type/bug` / `type/tech-debt`. Filter the board by `type/*`.
+- **Named agent personas** (`agent/gary` backend, `agent/terry` frontend, `agent/claude` UI/UX,
+  `agent/claudette` integrations, `agent/cody` architecture + infra, `agent/alex` QA/breakfix), ported
+  from helm `.github/agents/`, so you can see who owns what.
+- **GitHub Project #9** (org `beaconfirepro`), helm's fuller columns: 📦 Backlog → 🎯 Target Stories →
+  🔍 Needs Scoping → ✅ Ready to Build → 🚀 In Progress → 👀 In Review → 🧪 In Testing → ✨ Done. Lets
+  you scope separately in the same place.
+- **Board automation:** agents cannot click the board, so they add a `board/*` label and the
+  `label-to-board` / `board-to-label` workflows move the card via the Projects API. Issue ↔ PR ↔ CI ↔
+  board.
 
-Labels to create: `epic`, `agent:build`, `agent:deploy`, `bug`, `tech-debt`.
+### Port list (build session, early task) from `beacon-fire-protection/helm`
+- `.github/ISSUE_TEMPLATE/*` (epic, story, bug-report, tech-debt, feature, module, config)
+- `.github/scripts/setup-labels.sh`
+- `.github/workflows/label-to-board.yml`, `board-to-label.yml`, `agent-sub-issue-lifecycle.yml`
+- `.github/agents/*` (the personas) + process docs `docs/ops/GITHUB_PROJECTS.md`, `docs/SDLC_PROCESS.md`,
+  `docs/canonical/AGENT_GUIDE.md`
+
+**Adaptations:** in the workflows, org `Beacon-Fire-Protection` → `beaconfirepro` and `PROJECT_NUMBER`
+→ **9**; set the `PROJECT_TOKEN` secret. Replace `module/*` labels with our set (`module/tower`,
+`module/lien-collections`, `module/design`, `module/infra`, `module/integrations`). Rewrite the
+`story.yml` pre-PR checklist to Nx commands (`nx affected -t lint typecheck test`).
 
 ## Epics in ship order
 
@@ -58,9 +74,12 @@ Labels to create: `epic`, `agent:build`, `agent:deploy`, `bug`, `tech-debt`.
 - **Lien module public brand** (ED-16): "LiensEasy" or folded into Helm.
 - Credential gates: Clerk + Supabase `tower` + Third-Party Auth (card 1), Chromatic (card 3).
 
-## Bootstrap
+## Bootstrap order
 
-1. Agent runs `docs/agent-handoff-prompts/seed-issues.sh` against `beaconfirepro/beacon-platform` to
-   create the labels and the 12 epic cards (in ship order).
-2. You (one-time, ~1 min): create a Project on `beacon-platform`, Board layout, turn on **auto-add**
-   for new repo issues. Drag the cards into priority order if needed.
+1. **Build session** ports the files above from helm, applies the adaptations, and runs the adapted
+   `setup-labels.sh` against `beaconfirepro/beacon-platform`.
+2. **Build session** runs `docs/agent-handoff-prompts/seed-issues.sh` to create the 12 `type/epic`
+   cards (in ship order, with module + suggested lead-persona labels).
+3. **You (one-time):** create **Project #9** (Board) on `beaconfirepro`, add the 8 columns above as the
+   Status field, enable **auto-add** for new repo issues, and add the **`PROJECT_TOKEN`** secret so the
+   board-sync workflows can move cards.

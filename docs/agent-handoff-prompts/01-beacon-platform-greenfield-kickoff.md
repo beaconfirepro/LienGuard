@@ -71,14 +71,19 @@ FIRST ACTIONS (do these before building anything):
    module contract), then the Helm product shell (app). Do not assume; get my "go" on step 1's scope
    first.
 
-PROJECT TRACKING (Kanban Project on beacon-platform; full model in docs/BUILD_PLAN.md):
-- Bootstrap once: run docs/agent-handoff-prompts/seed-issues.sh to create the labels and the 12 epic
-  cards (in ship order) in beaconfirepro/beacon-platform.
-- Work the board top-down: take the top Backlog card you own (agent:build; the deploy session uses
-  agent:deploy), move it to In progress, open a PR ("Closes #"), then In review; it closes to Done on
-  merge.
-- Log defects as `bug` cards and deliberate shortcuts as `tech-debt` cards. Nx handles task detail
-  below the card.
+PROJECT TRACKING (GitHub Project #9 on beaconfirepro; full model in docs/BUILD_PLAN.md):
+- REUSE helm's issue/project/board system. Early task: port from beacon-fire-protection/helm into this
+  repo: .github/ISSUE_TEMPLATE/* (epic, story, bug, tech-debt, ...), .github/scripts/setup-labels.sh,
+  the label-to-board / board-to-label / agent-sub-issue-lifecycle workflows, .github/agents/* personas,
+  and the process docs. Adapt: org -> beaconfirepro, PROJECT_NUMBER -> 9, module/* relabelled
+  (tower, lien-collections, design, infra, integrations), story.yml pre-PR checklist -> Nx commands.
+  Then run the adapted setup-labels.sh and docs/agent-handoff-prompts/seed-issues.sh (the 12 type/epic
+  cards).
+- Hierarchy: type/epic -> type/story (a unit of work: one story = one branch = one PR = one agent, via
+  story.yml linked to its parent epic) -> type/bug / type/tech-debt. Personas via agent/* labels.
+- Drive the board by labels: add board/* (board/in_progress, board/in_review, ...) and the workflow
+  moves the card; open a PR ("Closes #"); on merge the story closes to Done. Nx handles task detail
+  below the story.
 
 WORKING STYLE:
 - This is a cloud session on an ephemeral container: commit to a branch and PUSH frequently;
