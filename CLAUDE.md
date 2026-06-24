@@ -1,5 +1,11 @@
 # LienGuard (Lien & Collections)
 
+> **🟢 EVERY SESSION, READ FIRST: [`docs/USER_INSTRUCTIONS.md`](docs/USER_INSTRUCTIONS.md)** (Deb's
+> binding operating instructions for AI; follow them exactly, including: no em dashes; never comment
+> on eating/sleeping/stopping/time), then [`docs/lessons-learned/`](docs/lessons-learned/)
+> (per-session retrospectives `LL-<date>-<topic>-<slug>.md`; read at least the most recent and
+> follow its operating rules). Handoff briefs/prompts live in `docs/agent-handoff-prompts/`.
+
 A standalone web app that protects Beacon's money on construction projects. It does two
 jobs over the same data (an invoice that hasn't cleared): runs the **collections** process
 (escalating client contact to recover overdue invoices) and the **lien rights** process
@@ -17,6 +23,27 @@ database. Helm Core is a *consumer* of this app (reference layer + hold flags), 
 > (SCOPE, DATA_MODEL, SEED_DATA, AGENT_PROMPTS). Read SCOPE before non-trivial changes.
 > Note: those docs describe the model in **Prisma**; the actual implementation uses
 > **Drizzle** (see Architecture decisions).
+
+> **⚠ Architecture re-founding in progress (2026-06-24).** LienGuard is being re-founded from a
+> "standalone app" into the first **module** on the **Tower** platform. The target architecture
+> and locked stack (Prisma · Supabase/RLS · Clerk · one design system in Storybook · pnpm
+> monorepo) are canon in **`docs/ARCHITECTURE.md`**; decisions in `docs/DECISIONS.md` (ED-08…ED-13,
+> superseding DD-01/06); sequence in `docs/MIGRATION_PLAN.md`. **The Stack / Architecture-decisions
+> sections below describe the CURRENT code (pre-migration) and are accurate until each migration
+> phase changes them.**
+
+## Ways of working (binding — ED-14)
+
+- **Work in cloud sessions, every time.** Development runs in **Claude Code cloud sessions**
+  (web/mobile, Anthropic-managed remote containers) — not a local laptop. This very repo is
+  worked on that way.
+- **The container is ephemeral → commit to a branch regularly.** It's cloned fresh per session
+  and reclaimed on inactivity/end, so nothing in the container is durable. Make **small, green
+  commits and push them often**; never end a turn with meaningful progress un-pushed. Un-pushed
+  work is lost when the container is reclaimed.
+- **Set the environment up front:** the cloud environment's **repo scope** and **secrets**
+  (Clerk, Supabase) so a fresh session starts ready (you can't add a repo to a running session
+  here). See `docs/DECISIONS.md` ED-14.
 
 ## Run & Operate
 
@@ -104,13 +131,11 @@ notarization gates) → filing/release on escalation → collections dunning lad
 
 ## Gotchas
 
-- **The build is currently RED.** An incomplete `LienStream → ScheduleOfValues` rename left
-  dangling `stream`/`sov`/`streamMap`/`sovMap`/`streamIds` references in
-  `api-server/src/routes/{monthly,filing,reports}.ts` and `.streams` access in the web app's
-  `dashboard.tsx`/`project-detail.tsx`. `monthly.ts` also has a real runtime bug
-  (`lienScheduleOfValuesId: stream.id` where `stream` is undefined in scope). Vite/esbuild skip
-  type-checking, which is why this shipped — **always run `pnpm run typecheck` before relying on
-  a build.** Finishing this rename is the top priority (see `docs/CODE_REVIEW_AND_PRODUCTION_PLAN.md`).
+- **The build is GREEN** as of Phase A (PR #10): the `LienStream → ScheduleOfValues` rename is
+  finished and `pnpm run typecheck` + `pnpm run build` pass across the workspace (verified
+  2026-06-24). Note that `stream`/`sov`/`streamMap`/`workStream` still appear as *legitimate*
+  local names and a real schema column — do **not** blanket-rename them. Vite/esbuild still skip
+  type-checking, so **always run `pnpm run typecheck` before relying on a build.**
 - **No CI.** The only GitHub workflow auto-assigns issues to Copilot; nothing gates
   typecheck/build/test/lint on PRs. Add this before trusting green.
 - **Read `.agents/memory/MEMORY.md`** — it indexes ~25 specific gotchas (Replit proxy keeps the
