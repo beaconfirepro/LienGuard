@@ -71,6 +71,15 @@ FIRST ACTIONS (do these before building anything):
    module contract), then the Helm product shell (app). Do not assume; get my "go" on step 1's scope
    first.
 
+PROJECT TRACKING (the beacon-platform GitHub Project; full model in docs/BUILD_PLAN.md):
+- Bootstrap once: run docs/agent-handoff-prompts/seed-issues.sh against beaconfirepro/beacon-platform
+  to create the labels (epic, agent:*, role:*, bug, tech-debt, enhancement) and the 12 epic issues.
+- As you work, open a SUB-ISSUE under the relevant epic for each discrete work or test item, cut by
+  user role where the flow differs. Label it agent:build (the deploy session uses agent:deploy) and,
+  when role-specific, role:<type>. Set Status and link your PR with "Closes #".
+- Log defects found in UAT or after merge as `bug`, deliberate shortcuts as `tech-debt`. Nx handles
+  task granularity below the issue level.
+
 WORKING STYLE:
 - This is a cloud session on an ephemeral container: commit to a branch and PUSH frequently;
   never end a turn with meaningful work un-pushed (un-pushed work is lost when the container is
