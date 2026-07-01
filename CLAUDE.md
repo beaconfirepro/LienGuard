@@ -1,3 +1,8 @@
+> [!WARNING]
+> **READ ONLY REFERENCE ARCHIVE** -- This repository is a requirements and historical reference only.
+> All active development for the lien-collections module happens in [`beaconfirepro/beacon-platform`](https://github.com/beaconfirepro/beacon-platform).
+> Do not push feature code here. Agents: read this file for context, then work in beacon-platform.
+
 # LienGuard (Lien & Collections)
 
 > **🟢 EVERY SESSION, READ FIRST: [`docs/USER_INSTRUCTIONS.md`](docs/USER_INSTRUCTIONS.md)** (Deb's
